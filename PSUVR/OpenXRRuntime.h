@@ -79,9 +79,11 @@ namespace PSUVR
 		bool m_ready = false;
 
 		ID3D11VertexShader *m_blitVS = nullptr;
-		ID3D11PixelShader *m_blitPS = nullptr;
+		ID3D11PixelShader *m_blitPS = nullptr;           // passthrough (UNORM RTV)
+		ID3D11PixelShader *m_blitPSLinearize = nullptr;  // sRGB→linear before sRGB RTV write
 		ID3D11SamplerState *m_blitSampler = nullptr;
 		ID3D11RasterizerState *m_blitRS = nullptr;
+		bool m_loggedBlitRtv = false;
 
 		// Opaque OpenXR handles stored as uint64 to avoid requiring headers at
 		// every include site; implementation uses real Xr* types.

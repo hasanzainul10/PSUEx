@@ -392,8 +392,10 @@ namespace PSUVR
 		DestroySwapchains();
 		if( m_blitRS ) { m_blitRS->Release(); m_blitRS = nullptr; }
 		if( m_blitSampler ) { m_blitSampler->Release(); m_blitSampler = nullptr; }
+		if( m_blitPSLinearize ) { m_blitPSLinearize->Release(); m_blitPSLinearize = nullptr; }
 		if( m_blitPS ) { m_blitPS->Release(); m_blitPS = nullptr; }
 		if( m_blitVS ) { m_blitVS->Release(); m_blitVS = nullptr; }
+		m_loggedBlitRtv = false;
 		if( m_viewSpace )
 		{
 			xrDestroySpace( static_cast< XrSpace >( m_viewSpace ) );
@@ -560,23 +562,16 @@ namespace PSUVR
 		return true;
 	}
 
-	static DXGI_FORMAT RtvFormatForClear( DXGI_FORMAT fmt, int64_t swapchainFmt )
+	static DXGI_FORMAT RtvFormatForClear( DXGI_FORMAT fmt, int64_t /*swapchainFmt*/ )
 	{
+		// D3D9 content is already gamma-encoded. Prefer UNORM views on typeless
+		// images so clears/blits are not double-encoded through an sRGB RTV.
 		switch( fmt )
 		{
-			case DXGI_FORMAT_R8G8B8A8_TYPELESS:
-				return ( swapchainFmt == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB )
-					? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB
-					: DXGI_FORMAT_R8G8B8A8_UNORM;
-			case DXGI_FORMAT_B8G8R8A8_TYPELESS:
-				return ( swapchainFmt == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB )
-					? DXGI_FORMAT_B8G8R8A8_UNORM_SRGB
-					: DXGI_FORMAT_B8G8R8A8_UNORM;
-			case DXGI_FORMAT_UNKNOWN:
-				return static_cast< DXGI_FORMAT >( swapchainFmt );
-			default:
-				// SteamVR often returns the typed sRGB format on the texture itself.
-				return fmt;
+			case DXGI_FORMAT_R8G8B8A8_TYPELESS: return DXGI_FORMAT_R8G8B8A8_UNORM;
+			case DXGI_FORMAT_B8G8R8A8_TYPELESS: return DXGI_FORMAT_B8G8R8A8_UNORM;
+			case DXGI_FORMAT_UNKNOWN: return DXGI_FORMAT_B8G8R8A8_UNORM;
+			default: return fmt;
 		}
 	}
 
@@ -641,7 +636,7 @@ namespace PSUVR
 
 	bool OpenXRRuntime::EnsureBlitPipeline()
 	{
-		if( m_blitVS && m_blitPS && m_blitSampler && m_blitRS )
+		if( m_blitVS && m_blitPS && m_blitPSLinearize && m_blitSampler && m_blitRS )
 		{
 			return true;
 		}
@@ -659,6 +654,7 @@ namespace PSUVR
 				return o;
 			}
 		)";
+		// Passthrough: D3D9 pixels are already display-encoded; write via UNORM RTV.
 		static const char *kPS = R"(
 			Texture2D tex : register(t0);
 			SamplerState samp : register(s0);
@@ -666,9 +662,24 @@ namespace PSUVR
 				return tex.Sample(samp, uv);
 			}
 		)";
+		// Typed sRGB RTV path: linearize so hardware sRGB encode restores game look.
+		static const char *kPSLinearize = R"(
+			Texture2D tex : register(t0);
+			SamplerState samp : register(s0);
+			float3 SrgbToLinear( float3 c ) {
+				float3 lo = c / 12.92;
+				float3 hi = pow(abs((c + 0.055) / 1.055), 2.4);
+				return lerp(hi, lo, step(c, 0.04045));
+			}
+			float4 main( float4 pos : SV_POSITION, float2 uv : TEXCOORD0 ) : SV_TARGET {
+				float4 c = tex.Sample(samp, uv);
+				return float4(SrgbToLinear(c.rgb), c.a);
+			}
+		)";
 
 		ID3DBlob *vsBlob = nullptr;
 		ID3DBlob *psBlob = nullptr;
+		ID3DBlob *psLinBlob = nullptr;
 		ID3DBlob *err = nullptr;
 		HRESULT hr = D3DCompile( kVS, strlen( kVS ), nullptr, nullptr, nullptr, "main", "vs_4_0", 0, 0, &vsBlob, &err );
 		if( FAILED( hr ) )
@@ -685,11 +696,22 @@ namespace PSUVR
 			vsBlob->Release();
 			return false;
 		}
+		hr = D3DCompile( kPSLinearize, strlen( kPSLinearize ), nullptr, nullptr, nullptr, "main", "ps_4_0", 0, 0, &psLinBlob, &err );
+		if( FAILED( hr ) )
+		{
+			PSU_LOG( "OpenXR: blit linearize PS compile failed 0x%08X\n", hr );
+			if( err ) { PSU_LOG( "%s\n", ( char * )err->GetBufferPointer() ); err->Release(); }
+			vsBlob->Release();
+			psBlob->Release();
+			return false;
+		}
 
 		m_device->CreateVertexShader( vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &m_blitVS );
 		m_device->CreatePixelShader( psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &m_blitPS );
+		m_device->CreatePixelShader( psLinBlob->GetBufferPointer(), psLinBlob->GetBufferSize(), nullptr, &m_blitPSLinearize );
 		vsBlob->Release();
 		psBlob->Release();
+		psLinBlob->Release();
 
 		D3D11_SAMPLER_DESC samp{};
 		samp.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
@@ -701,22 +723,25 @@ namespace PSUVR
 		rs.CullMode = D3D11_CULL_NONE;
 		m_device->CreateRasterizerState( &rs, &m_blitRS );
 
-		PSU_LOG( "OpenXR: blit pipeline ready\n" );
-		return m_blitVS && m_blitPS && m_blitSampler && m_blitRS;
+		PSU_LOG( "OpenXR: blit pipeline ready (passthrough + linearize)\n" );
+		return m_blitVS && m_blitPS && m_blitPSLinearize && m_blitSampler && m_blitRS;
 	}
 
 	static DXGI_FORMAT
-	RtvFormatFor( DXGI_FORMAT fmt, int64_t swapchainFmt )
+	RtvFormatForBlit( DXGI_FORMAT fmt )
 	{
 		switch( fmt )
 		{
 			case DXGI_FORMAT_R8G8B8A8_TYPELESS: return DXGI_FORMAT_R8G8B8A8_UNORM;
 			case DXGI_FORMAT_B8G8R8A8_TYPELESS: return DXGI_FORMAT_B8G8R8A8_UNORM;
-			case DXGI_FORMAT_UNKNOWN:
-				return static_cast< DXGI_FORMAT >( swapchainFmt );
-			default:
-				return fmt;
+			case DXGI_FORMAT_UNKNOWN: return DXGI_FORMAT_B8G8R8A8_UNORM;
+			default: return fmt;
 		}
+	}
+
+	static bool IsSrgbFormat( DXGI_FORMAT fmt )
+	{
+		return fmt == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB || fmt == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 	}
 
 	bool OpenXRRuntime::BlitTexture( ID3D11Texture2D *src, ID3D11Texture2D *dst )
@@ -734,18 +759,20 @@ namespace PSUVR
 		DXGI_FORMAT srvFmt = srcDesc.Format;
 		if( srvFmt == DXGI_FORMAT_B8G8R8A8_TYPELESS ) srvFmt = DXGI_FORMAT_B8G8R8A8_UNORM;
 		if( srvFmt == DXGI_FORMAT_R8G8B8A8_TYPELESS ) srvFmt = DXGI_FORMAT_R8G8B8A8_UNORM;
+		// Sample typed sRGB sources as UNORM so we read the stored gamma bytes.
+		if( srvFmt == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ) srvFmt = DXGI_FORMAT_B8G8R8A8_UNORM;
+		if( srvFmt == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB ) srvFmt = DXGI_FORMAT_R8G8B8A8_UNORM;
 
-		DXGI_FORMAT rtvFmt = RtvFormatFor( dstDesc.Format, m_swapchainFormat );
-		// If OpenXR created sRGB swapchain, prefer sRGB RTV when typeless.
-		if( dstDesc.Format == DXGI_FORMAT_R8G8B8A8_TYPELESS &&
-			( m_swapchainFormat == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB ) )
+		DXGI_FORMAT rtvFmt = RtvFormatForBlit( dstDesc.Format );
+		const bool typedSrgbDst = IsSrgbFormat( dstDesc.Format );
+		// Typeless: always UNORM passthrough (avoids double-encode when OpenXR
+		// created the swapchain as *_SRGB but exposed typeless images).
+		// Typed sRGB: must use matching sRGB RTV + linearize PS.
+		ID3D11PixelShader *ps = m_blitPS;
+		if( typedSrgbDst )
 		{
-			rtvFmt = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-		}
-		if( dstDesc.Format == DXGI_FORMAT_B8G8R8A8_TYPELESS &&
-			( m_swapchainFormat == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ) )
-		{
-			rtvFmt = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+			rtvFmt = dstDesc.Format;
+			ps = m_blitPSLinearize;
 		}
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
@@ -761,8 +788,13 @@ namespace PSUVR
 		ID3D11RenderTargetView *rtv = nullptr;
 		if( FAILED( m_device->CreateShaderResourceView( src, &srvDesc, &srv ) ) || !srv )
 		{
-			PSU_LOG( "OpenXR: CreateSRV failed srcFmt=%u\n", ( unsigned )srcDesc.Format );
-			return false;
+			// Typed sRGB source cannot take a UNORM SRV — fall back to native format.
+			srvDesc.Format = srcDesc.Format;
+			if( FAILED( m_device->CreateShaderResourceView( src, &srvDesc, &srv ) ) || !srv )
+			{
+				PSU_LOG( "OpenXR: CreateSRV failed srcFmt=%u\n", ( unsigned )srcDesc.Format );
+				return false;
+			}
 		}
 		if( FAILED( m_device->CreateRenderTargetView( dst, &rtvDesc, &rtv ) ) || !rtv )
 		{
@@ -770,6 +802,14 @@ namespace PSUVR
 				( unsigned )dstDesc.Format, ( unsigned )rtvFmt );
 			srv->Release();
 			return false;
+		}
+
+		if( !m_loggedBlitRtv )
+		{
+			m_loggedBlitRtv = true;
+			PSU_LOG( "OpenXR: blit RTV fmt=%u dstTex=%u mode=%s (passthrough UNORM for D3D9)\n",
+				( unsigned )rtvFmt, ( unsigned )dstDesc.Format,
+				typedSrgbDst ? "linearize+sRGB" : "passthrough" );
 		}
 
 		const float clear[ 4 ] = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -785,7 +825,7 @@ namespace PSUVR
 		m_context->IASetInputLayout( nullptr );
 		m_context->IASetPrimitiveTopology( D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST );
 		m_context->VSSetShader( m_blitVS, nullptr, 0 );
-		m_context->PSSetShader( m_blitPS, nullptr, 0 );
+		m_context->PSSetShader( ps, nullptr, 0 );
 		m_context->PSSetShaderResources( 0, 1, &srv );
 		m_context->PSSetSamplers( 0, 1, &m_blitSampler );
 		m_context->Draw( 3, 0 );
@@ -896,7 +936,7 @@ namespace PSUVR
 
 		if( !BlitTexture( src, dst ) )
 		{
-			DXGI_FORMAT rtvFmt = RtvFormatFor( dstDesc.Format, m_swapchainFormat );
+			DXGI_FORMAT rtvFmt = RtvFormatForBlit( dstDesc.Format );
 			D3D11_RENDER_TARGET_VIEW_DESC rtvDesc{};
 			rtvDesc.Format = rtvFmt;
 			rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
