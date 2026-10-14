@@ -61,6 +61,9 @@ Config::Config()
 	vr.m_uiScale = 1.5f;
 	vr.m_hudWorldPanel = false;
 	vr.m_hudMapBlackAlpha = 0.15f;
+	vr.m_hudFollow = true;
+	vr.m_hudFollowAngle = 35.0f;
+	vr.m_hudDrop = 0.1f;
 	vr.m_fpEyeHeight = 1.6f;
 	vr.m_fpEyeForward = 0.12f;
 	vr.m_snapTurnDegrees = 30.0f;
@@ -71,8 +74,9 @@ Config::Config()
 	vr.m_fpLeanLimit = 0.15f;
 	vr.m_fpCrouchLimit = 0.2f;
 	vr.m_stereoMode = 5;
-	vr.m_snapTurn = false;
-	vr.m_comfortVignette = true;
+	vr.m_snapTurn = true;
+	vr.m_comfortVignette = false;
+	vr.m_vignetteStrength = 0.7f;
 }
 
 Config::~Config()
@@ -157,6 +161,9 @@ void Config::SaveToFile()
 	root[ "vr" ][ "uiScale" ] = vr.m_uiScale;
 	root[ "vr" ][ "hudWorldPanel" ] = vr.m_hudWorldPanel;
 	root[ "vr" ][ "hudMapBlackAlpha" ] = vr.m_hudMapBlackAlpha;
+	root[ "vr" ][ "hudFollow" ] = vr.m_hudFollow;
+	root[ "vr" ][ "hudFollowAngle" ] = vr.m_hudFollowAngle;
+	root[ "vr" ][ "hudDrop" ] = vr.m_hudDrop;
 	root[ "vr" ][ "fpEyeHeight" ] = vr.m_fpEyeHeight;
 	root[ "vr" ][ "fpEyeForward" ] = vr.m_fpEyeForward;
 	root[ "vr" ][ "snapTurnDegrees" ] = vr.m_snapTurnDegrees;
@@ -168,6 +175,7 @@ void Config::SaveToFile()
 	root[ "vr" ][ "fpCrouchLimit" ] = vr.m_fpCrouchLimit;
 	root[ "vr" ][ "snapTurn" ] = vr.m_snapTurn;
 	root[ "vr" ][ "comfortVignette" ] = vr.m_comfortVignette;
+	root[ "vr" ][ "vignetteStrength" ] = vr.m_vignetteStrength;
 	root[ "vr" ][ "stereo" ] = vr.m_stereo;
 	root[ "vr" ][ "stereoMode" ] = vr.m_stereoMode;
 	root[ "vr" ][ "stereoSkipScreenQuads" ] = vr.m_stereoSkipScreenQuads;
@@ -431,6 +439,12 @@ void Config::LoadFromFile()
 			vr.m_hudWorldPanel = vrNode[ "hudWorldPanel" ].get<bool>();
 		if( vrNode.contains( "hudMapBlackAlpha" ) && vrNode[ "hudMapBlackAlpha" ].is_number() )
 			vr.m_hudMapBlackAlpha = vrNode[ "hudMapBlackAlpha" ].get<float>();
+		if( vrNode.contains( "hudFollow" ) && vrNode[ "hudFollow" ].is_boolean() )
+			vr.m_hudFollow = vrNode[ "hudFollow" ].get<bool>();
+		if( vrNode.contains( "hudFollowAngle" ) && vrNode[ "hudFollowAngle" ].is_number() )
+			vr.m_hudFollowAngle = vrNode[ "hudFollowAngle" ].get<float>();
+		if( vrNode.contains( "hudDrop" ) && vrNode[ "hudDrop" ].is_number() )
+			vr.m_hudDrop = vrNode[ "hudDrop" ].get<float>();
 		if( vrNode.contains( "fpEyeHeight" ) && vrNode[ "fpEyeHeight" ].is_number() )
 			vr.m_fpEyeHeight = vrNode[ "fpEyeHeight" ].get<float>();
 		if( vrNode.contains( "fpEyeForward" ) && vrNode[ "fpEyeForward" ].is_number() )
@@ -453,6 +467,8 @@ void Config::LoadFromFile()
 			vr.m_snapTurn = vrNode[ "snapTurn" ].get<bool>();
 		if( vrNode.contains( "comfortVignette" ) && vrNode[ "comfortVignette" ].is_boolean() )
 			vr.m_comfortVignette = vrNode[ "comfortVignette" ].get<bool>();
+		if( vrNode.contains( "vignetteStrength" ) && vrNode[ "vignetteStrength" ].is_number() )
+			vr.m_vignetteStrength = vrNode[ "vignetteStrength" ].get<float>();
 		if( vrNode.contains( "stereo" ) && vrNode[ "stereo" ].is_boolean() )
 			vr.m_stereo = vrNode[ "stereo" ].get<bool>();
 		if( vrNode.contains( "stereoMode" ) && vrNode[ "stereoMode" ].is_number() )

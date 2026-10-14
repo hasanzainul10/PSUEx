@@ -71,20 +71,27 @@ Create (or edit) **`psuex_vr.json`** next to `PSUC.exe`:
 | `stereoMode` | Scene mode that gets stereo. **`5` = town**. `0` = every mode (old / experimental). Login and menus stay on a large head-locked virtual screen. |
 | `hudDistance` | Distance in meters for the virtual screen / HUD panels (~2.5 is a good start). |
 | `hudSize` | Scale of those floating panels. The town visor HUD is 1.4 m × `hudSize` tall; lower it (e.g. `0.85`) if corner UI sits too far out in your view. |
+| `hudFollow` | HUD and menus sit on a panel in front of your body instead of following your head (default **true**). Turn your head to read the corners; look away for a moment and the panel glides back in front. `false` = the old head-locked visor. |
+| `hudFollowAngle` | How far (degrees) you can look away before the panel follows (default **35**). |
+| `hudDrop` | How far below eye level the panel sits, in meters (default **0.1**). |
 | `hudMapBlackAlpha` | Opacity kept for the black backdrop around the mission map on the visor (default **0.15**; `0` = invisible, `1` = as in the flat game). |
 | `hudWorldPanel` | Default **false**: all town UI (HUD, menus, shop windows) sits on the head-locked visor exactly as the game lays it out. `true` enables the experimental world-locked kiosk panel for centered windows. |
 | `uiScale` | Enlarge HUD widgets / nameplates when capturing for VR (default **1.5**). Useful at high game resolutions. Try `1.3`–`2.0`. Does not change the flat monitor. |
 | `cameraMode` | `thirdPerson` (default) or `firstPerson` (town stereo only; other scenes stay on the virtual screen). |
 | `fpEyeHeight` | First person: eye height above the character's feet in meters (default **1.6**). |
 | `fpEyeForward` | First person: how far in front of the face the eyes sit, in meters (default **0.12**), so you don't see the inside of your own head. |
-| `snapTurn` | First person: `false` (default) = the right stick turns smoothly; `true` = 30° steps (comfort). |
+| `snapTurn` | First person: `true` (default, comfort) = the right stick turns in steps; `false` = smooth turning. |
 | `snapTurnDegrees` | Snap step size (default **30**). |
+| `comfortVignette` | Darken the edges of your view while you smooth-turn or move with the stick (default **false**, opt-in). |
+| `vignetteStrength` | How far the vignette closes in at full speed, 0-1 (default **0.7**). |
 | `fpTurnSpeed` | Smooth turn speed in degrees per second (default **120**). |
 | `fpMoveDirection` | `"head"` (default): left stick forward walks where you look. `"body"`: forward is where your body faces, and the head looks around without steering. |
 | `fpBody` | Your own character in first person: `"headless"` (default) cuts away the head and hair so arms, hands, torso and legs stay visible; `"hidden"` removes the whole body; `"full"` draws everything. |
 | `fpNeckDrop` | How far below your eyes the headless cut sits, in meters (default **0.22**). Raise it if hair or the head still shows; lower it if the shoulders disappear. |
 | `fpLeanLimit` | How far you can physically lean before your character's body follows, in meters (default **0.15**). Walking around your room no longer pulls the view out of the body. `0` locks the view to the body. |
 | `fpCrouchLimit` | The same for ducking and standing up, in meters (default **0.2**). |
+
+**Comfort:** the mod never moves your view on its own. Only the stick and your own head move it: game camera re-aims (NPC talk), smoothing and auto-follow are cancelled, and the horizon stays level, also in third person. If you get motion sick, use first person with snap turn (the defaults), keep `hudFollow` on, try `comfortVignette: true`, and press F9 whenever "forward" feels off.
 
 **First-person controls (gamepad):** the right stick turns your body and view. By default the left stick moves where you look, and the right stick adds turning on top. `fpMoveDirection: "body"` gives FPS-style body-relative movement instead. F9 recenters. Turning reads the right stick through XInput (Xbox-style pads). Without XInput it falls back to the game's own camera orbit.
 | `stereoPanel` | Leave **`false`**. Turning it on also shows a flat PiP of the monitor frame in stereo (usually worse). |

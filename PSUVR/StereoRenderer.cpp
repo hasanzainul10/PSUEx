@@ -7,6 +7,7 @@
 #include "VRSystem.h"
 #include "../Misc/Log.h"
 #include "../PSUExConfig.h"
+#include "../PSUStructs/PSUPlayerData.h"
 
 #include <d3d9.h>
 
@@ -19,6 +20,165 @@ namespace PSUVR
 {
 	namespace
 	{
+		// Comfort vignette (vr.comfortVignette): darken the periphery during artificial
+		// motion (smooth turning, stick locomotion). Strength eases in fast, out slower.
+		float s_vignette = 0.0f;
+		bool s_vignetteInit = false;
+		LARGE_INTEGER s_vignetteTime{};
+		float s_vignetteBodyYaw = 0.0f;
+		float s_vignettePlayer[ 3 ]{};
+
+		float UpdateVignetteStrength()
+		{
+			const auto &vr = Config::Get().vr;
+			LARGE_INTEGER now{};
+			LARGE_INTEGER frequency{};
+			QueryPerformanceCounter( &now );
+			QueryPerformanceFrequency( &frequency );
+			float dt = 0.0f;
+			if( s_vignetteTime.QuadPart != 0 && frequency.QuadPart > 0 )
+			{
+				dt = static_cast< float >( now.QuadPart - s_vignetteTime.QuadPart ) /
+					static_cast< float >( frequency.QuadPart );
+			}
+			s_vignetteTime = now;
+			if( dt <= 0.0f || dt > 0.25f )
+			{
+				dt = 0.0f;
+			}
+
+			const float bodyYaw = VRCamera::BodyYaw();
+			const PSUPlayer &player = PSUPlayer::Get();
+			const bool playerReady = PSUPlayer::IsReady();
+			float target = 0.0f;
+			if( s_vignetteInit && dt > 0.0f )
+			{
+				// Smooth turning only: a snap step (several degrees in one frame) isn't motion.
+				float yawStep = bodyYaw - s_vignetteBodyYaw;
+				while( yawStep > 3.14159265f ) yawStep -= 6.2831853f;
+				while( yawStep < -3.14159265f ) yawStep += 6.2831853f;
+				yawStep = yawStep < 0.0f ? -yawStep : yawStep;
+				const float turnRate = yawStep < 0.14f ? yawStep / dt : 0.0f;  // rad/s
+				float speed = 0.0f;  // m/s along the ground
+				if( playerReady )
+				{
+					const float dx = player.position.x - s_vignettePlayer[ 0 ];
+					const float dz = player.position.z - s_vignettePlayer[ 2 ];
+					speed = std::sqrt( dx * dx + dz * dz ) / VRCamera::kGameUnitsPerMeter / dt;
+					speed = speed > 20.0f ? 0.0f : speed;  // teleport / area change
+				}
+				const float fromTurn = turnRate / 1.05f;  // full at 60 deg/s
+				const float fromMove = speed / 3.0f;      // full at 3 m/s
+				target = fromTurn > fromMove ? fromTurn : fromMove;
+				target = target > 1.0f ? 1.0f : target;
+			}
+			s_vignetteInit = true;
+			s_vignetteBodyYaw = bodyYaw;
+			if( playerReady )
+			{
+				s_vignettePlayer[ 0 ] = player.position.x;
+				s_vignettePlayer[ 1 ] = player.position.y;
+				s_vignettePlayer[ 2 ] = player.position.z;
+			}
+			const float rate = target > s_vignette ? 10.0f : 3.0f;  // attack ~0.1 s, release ~0.3 s
+			const float blend = 1.0f - std::exp( -rate * dt );
+			s_vignette += ( target - s_vignette ) * blend;
+			return s_vignette * ( vr.m_vignetteStrength < 0.0f ? 0.0f : vr.m_vignetteStrength );
+		}
+
+		// Black ring over the bound eye RT: transparent inside, opaque at the corners.
+		void DrawVignette( IDirect3DDevice9 *device, unsigned width, unsigned height, float strength )
+		{
+			if( strength < 0.01f || width < 1 || height < 1 )
+			{
+				return;
+			}
+			struct Vertex { float x, y, z, rhw; DWORD color; };
+			constexpr unsigned kSegments = 48;
+			static Vertex s_ring[ ( kSegments + 1 ) * 2 ];
+			const float cx = width * 0.5f;
+			const float cy = height * 0.5f;
+			const float corner = std::sqrt( cx * cx + cy * cy );
+			const float k = strength > 1.0f ? 1.0f : strength;
+			const float inner = corner * ( 1.0f - 0.5f * k );
+			const float outer = corner * 1.02f;
+			for( unsigned i = 0; i <= kSegments; ++i )
+			{
+				const float a = 6.2831853f * static_cast< float >( i ) / kSegments;
+				const float c = std::cos( a ), s = std::sin( a );
+				s_ring[ i * 2 + 0 ] = { cx + c * inner, cy + s * inner, 0.0f, 1.0f, D3DCOLOR_ARGB( 0, 0, 0, 0 ) };
+				s_ring[ i * 2 + 1 ] = { cx + c * outer, cy + s * outer, 0.0f, 1.0f, D3DCOLOR_ARGB( 255, 0, 0, 0 ) };
+			}
+
+			DWORD fvf = 0, blend = 0, src = 0, dst = 0, zEnable = 0, zWrite = 0, cull = 0, alphaTest = 0, fog = 0, sepAlpha = 0;
+			DWORD colorOp = 0, colorArg = 0, alphaOp = 0, alphaArg = 0;
+			IDirect3DBaseTexture9 *texture = nullptr;
+			IDirect3DVertexShader9 *vs = nullptr;
+			IDirect3DPixelShader9 *ps = nullptr;
+			IDirect3DVertexBuffer9 *vb = nullptr;
+			UINT vbOffset = 0, vbStride = 0;
+			device->GetFVF( &fvf );
+			device->GetTexture( 0, &texture );
+			device->GetVertexShader( &vs );
+			device->GetPixelShader( &ps );
+			device->GetStreamSource( 0, &vb, &vbOffset, &vbStride );
+			device->GetRenderState( D3DRS_ALPHABLENDENABLE, &blend );
+			device->GetRenderState( D3DRS_SRCBLEND, &src );
+			device->GetRenderState( D3DRS_DESTBLEND, &dst );
+			device->GetRenderState( D3DRS_ZENABLE, &zEnable );
+			device->GetRenderState( D3DRS_ZWRITEENABLE, &zWrite );
+			device->GetRenderState( D3DRS_CULLMODE, &cull );
+			device->GetRenderState( D3DRS_ALPHATESTENABLE, &alphaTest );
+			device->GetRenderState( D3DRS_FOGENABLE, &fog );
+			device->GetRenderState( D3DRS_SEPARATEALPHABLENDENABLE, &sepAlpha );
+			device->GetTextureStageState( 0, D3DTSS_COLOROP, &colorOp );
+			device->GetTextureStageState( 0, D3DTSS_COLORARG1, &colorArg );
+			device->GetTextureStageState( 0, D3DTSS_ALPHAOP, &alphaOp );
+			device->GetTextureStageState( 0, D3DTSS_ALPHAARG1, &alphaArg );
+
+			device->SetVertexShader( nullptr );
+			device->SetPixelShader( nullptr );
+			device->SetTexture( 0, nullptr );
+			device->SetFVF( D3DFVF_XYZRHW | D3DFVF_DIFFUSE );
+			device->SetRenderState( D3DRS_ALPHABLENDENABLE, TRUE );
+			device->SetRenderState( D3DRS_SRCBLEND, D3DBLEND_SRCALPHA );
+			device->SetRenderState( D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA );
+			device->SetRenderState( D3DRS_SEPARATEALPHABLENDENABLE, FALSE );
+			device->SetRenderState( D3DRS_ZENABLE, FALSE );
+			device->SetRenderState( D3DRS_ZWRITEENABLE, FALSE );
+			device->SetRenderState( D3DRS_CULLMODE, D3DCULL_NONE );
+			device->SetRenderState( D3DRS_ALPHATESTENABLE, FALSE );
+			device->SetRenderState( D3DRS_FOGENABLE, FALSE );
+			device->SetTextureStageState( 0, D3DTSS_COLOROP, D3DTOP_SELECTARG1 );
+			device->SetTextureStageState( 0, D3DTSS_COLORARG1, D3DTA_DIFFUSE );
+			device->SetTextureStageState( 0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1 );
+			device->SetTextureStageState( 0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE );
+			device->DrawPrimitiveUP( D3DPT_TRIANGLESTRIP, kSegments * 2, s_ring, sizeof( Vertex ) );
+
+			device->SetTextureStageState( 0, D3DTSS_COLOROP, colorOp );
+			device->SetTextureStageState( 0, D3DTSS_COLORARG1, colorArg );
+			device->SetTextureStageState( 0, D3DTSS_ALPHAOP, alphaOp );
+			device->SetTextureStageState( 0, D3DTSS_ALPHAARG1, alphaArg );
+			device->SetRenderState( D3DRS_ALPHABLENDENABLE, blend );
+			device->SetRenderState( D3DRS_SRCBLEND, src );
+			device->SetRenderState( D3DRS_DESTBLEND, dst );
+			device->SetRenderState( D3DRS_SEPARATEALPHABLENDENABLE, sepAlpha );
+			device->SetRenderState( D3DRS_ZENABLE, zEnable );
+			device->SetRenderState( D3DRS_ZWRITEENABLE, zWrite );
+			device->SetRenderState( D3DRS_CULLMODE, cull );
+			device->SetRenderState( D3DRS_ALPHATESTENABLE, alphaTest );
+			device->SetRenderState( D3DRS_FOGENABLE, fog );
+			device->SetFVF( fvf );
+			device->SetStreamSource( 0, vb, vbOffset, vbStride );
+			device->SetTexture( 0, texture );
+			device->SetVertexShader( vs );
+			device->SetPixelShader( ps );
+			if( texture ) texture->Release();
+			if( vs ) vs->Release();
+			if( ps ) ps->Release();
+			if( vb ) vb->Release();
+		}
+
 		bool s_inEyePass = false;
 		bool s_inNameplateDraw = false;
 		IDirect3DSurface9 *s_eyeSurface = nullptr;
@@ -609,6 +769,7 @@ namespace PSUVR
 			device->GetTransform( D3DTS_PROJECTION, &gameProj );
 
 			const float unitsPerMeter = VRCamera::kGameUnitsPerMeter * ( vr.m_worldScale > 0.01f ? vr.m_worldScale : 1.0f );
+			VRCamera::CaptureRenderCamera();
 			const bool firstPerson = VRCamera::FirstPersonActive();
 			// Bracket the local player's draw callback so its head can be cut in the eyes.
 			VRPlayerDraw::Update( firstPerson );
@@ -620,6 +781,7 @@ namespace PSUVR
 
 			m_gameProj = gameProj;
 			m_haveEyeMatrices = InvertMatrix( gameProj, m_invGameProj );
+			const float vignette = vr.m_comfortVignette ? UpdateVignetteStrength() : 0.0f;
 
 			for( int eye = 0; eye < 2; ++eye )
 			{
@@ -648,6 +810,8 @@ namespace PSUVR
 				BeginEyePass( eyeSurface, eyeW, eyeH, targetDesc.Width, targetDesc.Height );
 				pass();
 				EndEyePass();
+				// After the eye pass, so the screen-quad hooks leave it alone.
+				DrawVignette( device, eyeW, eyeH, vignette );
 
 				m_poses[ eye ] = views[ eye ];
 				m_viewSpacePoses[ eye ] = viewSpace[ eye ];

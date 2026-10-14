@@ -176,19 +176,26 @@ namespace TCameraTaskPlay
 
 		const int result = pOriginal48DA90( thisPtr );
 
+		// Camera state byte (+0x20): 1 = follow, 3 = refocus, 5 = NPC talk.
+		const int cameraState = *reinterpret_cast< uint8_t * >( reinterpret_cast< uint8_t * >( camera ) + 0x20 );
+		uint8_t *renderCamera = RenderCameraObject( camera );
+		// The eyes are built from what the game actually renders (talk camera included).
+		PSUVR::VRCamera::NoteRenderCamera(
+			renderCamera ? renderCamera + kRenderCameraPosition : nullptr,
+			renderCamera ? renderCamera + kRenderCameraTarget : nullptr );
+
 		// First person: steer the orbit camera level behind the head so the game's
-		// camera-relative movement and culling follow the HMD.
+		// camera-relative movement and culling follow the player.
 		bool steered = false;
 		if( firstPerson )
 		{
 			// Get() refreshes the player pointer; it returns a zeroed dummy while not ready.
 			const PSUPlayer &player = PSUPlayer::Get();
-			uint8_t *renderCamera = RenderCameraObject( camera );
 			if( PSUPlayer::IsReady() && renderCamera )
 			{
 				const float playerPos[ 3 ] = { player.position.x, player.position.y, player.position.z };
 				steered = PSUVR::VRCamera::SteerFirstPerson(
-					&camera->m_position.x, &camera->m_focusPosition.x, playerPos );
+					&camera->m_position.x, &camera->m_focusPosition.x, playerPos, cameraState );
 				if( steered )
 				{
 					// m_position / m_focusPosition are mirrors; the view is built from the camera object.

@@ -22,7 +22,13 @@ namespace PSUVR
 		void Recenter( const EyePose views[ 2 ] );
 		bool HasReference();
 
-		// gameProj supplies the depth mapping; FOV terms come from the eye.
+		// Camera hook, every update: where the render camera object's position (+0xFC)
+		// and target (+0x108) live. Captured right before the eye passes.
+		void NoteRenderCamera( const void *cameraPosition, const void *cameraTarget );
+		void CaptureRenderCamera();
+
+		// Third person: HMD on top of the game camera, with the camera's pitch removed
+		// (level horizon). gameProj supplies the depth mapping; FOV comes from the eye.
 		void BuildEye( const EyePose &eye, float unitsPerMeter, const D3DMATRIX &gameProj,
 			D3DMATRIX &view, D3DMATRIX &proj );
 
@@ -31,9 +37,11 @@ namespace PSUVR
 		// "head" (default). With "body" the HMD looks around without steering.
 		bool FirstPersonMode();
 		// Camera task hook, after the game's update. Measures right-stick turn, then
-		// rewrites the camera position/focus (game world units). False = not applied.
+		// rewrites the camera position/focus (game world units). cameraState is the task
+		// state byte: 1/3 = normal play; others (5 = NPC talk) get no head steering or
+		// turning. False = not applied.
 		bool SteerFirstPerson( float cameraPosition[ 3 ], float focusPosition[ 3 ],
-			const float playerPosition[ 3 ] );
+			const float playerPosition[ 3 ], int cameraState );
 		// True once a steer happened for the current camera; eyes then use BuildEyeFirstPerson.
 		bool FirstPersonActive();
 		void ClearFirstPerson();
@@ -41,11 +49,19 @@ namespace PSUVR
 		bool TurnFromStick();
 		// Game units from the steered first-person camera to the head.
 		float FirstPersonCameraDistance();
+		// First-person body yaw (game convention, radians); changes only by stick turns.
+		float BodyYaw();
 		// Leash the first-person head to the body: physical lean/crouch beyond
 		// vr.fpLeanLimit / vr.fpCrouchLimit drags the anchor instead of the view.
 		void UpdateFirstPersonAnchor( const EyePose views[ 2 ] );
+		// Eye at the head, expressed in the camera the game actually renders from, so any
+		// game re-aim (NPC talk camera, smoothing) is cancelled out.
 		void BuildEyeFirstPerson( const EyePose &eye, float unitsPerMeter, const D3DMATRIX &gameProj,
 			D3DMATRIX &view, D3DMATRIX &proj );
+
+		// LOCAL-space pose of the body-locked HUD/menu panel (vr.hudFollow): in front of
+		// the body, lazily re-centred when the head looks away past vr.hudFollowAngle.
+		void HudPanelPose( const EyePose views[ 2 ], float distanceMeters, float position[ 3 ], float orientation[ 4 ] );
 
 		// LOCAL-space pose for a panel in front of the reference, dropped by dropMeters.
 		void PanelPose( float distanceMeters, float dropMeters, float position[ 3 ], float orientation[ 4 ] );

@@ -48,8 +48,16 @@ namespace PSUVR
 			return { 0.0f, std::sin( yaw * 0.5f ), 0.0f, std::cos( yaw * 0.5f ) };
 		}
 
+		// Rotation about +X; positive pitches -Z (forward) toward +Y (up).
+		Quat PitchQuat( float pitch )
+		{
+			return { std::sin( pitch * 0.5f ), 0.0f, 0.0f, std::cos( pitch * 0.5f ) };
+		}
+
 		Quat ToQuat( const float o[ 4 ] ) { return { o[ 0 ], o[ 1 ], o[ 2 ], o[ 3 ] }; }
 		Vec3 ToVec( const float p[ 3 ] ) { return { p[ 0 ], p[ 1 ], p[ 2 ] }; }
+		Vec3 Add( const Vec3 &a, const Vec3 &b ) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
+		Vec3 Scale( const Vec3 &a, float s ) { return { a.x * s, a.y * s, a.z * s }; }
 
 		float WrapAngle( float a )
 		{
@@ -72,8 +80,15 @@ namespace PSUVR
 		// once it leans further than fpLeanLimit / fpCrouchLimit).
 		Vec3 s_fpAnchor{};
 
-		// First person (game world yaw: forward = ( sin, 0, cos ); turning left increases it).
-		// The game camera follows the body only; the HMD looks around inside that frame.
+		// Body-locked HUD panel: tracking-space yaw it faces, eased toward the head
+		// only after the head has looked away by more than vr.hudFollowAngle.
+		float s_hudYaw = 0.0f;
+		bool s_hudFollowing = false;
+		LARGE_INTEGER s_hudLastTime{};
+
+		// First person (game world: forward = ( sin, 0, cos ), right = ( -cos, 0, sin ),
+		// turning left increases the yaw). The game camera is steered behind the head;
+		// the eyes are built from wherever the game actually renders from.
 		bool s_fpPrimed = false;
 		bool s_fpActive = false;
 		bool s_turnArmed = true;
@@ -83,7 +98,20 @@ namespace PSUVR
 		float s_lastWrittenYaw = 0.0f;
 		float s_camDistance = 0.0f;  // game units from steered camera to head
 		float s_steerHmdYaw = 0.0f;  // HMD yaw (relative to the reference) the camera was steered to
+		Vec3 s_headWorld{};          // game world head position at the last steer
 		LARGE_INTEGER s_lastSteerTime{};
+		// The play camera task can stop updating; first person must not keep stale state.
+		DWORD s_lastSteerTick = 0;
+		constexpr DWORD kSteerStaleMs = 250;
+
+		// Render camera object fields (position +0xFC, target +0x108), noted by the camera
+		// hook, and the values captured right before the eye passes.
+		const float *s_renderCamPos = nullptr;
+		const float *s_renderCamTarget = nullptr;
+		bool s_haveRenderCam = false;
+		Vec3 s_renderPos{};
+		Vec3 s_renderTarget{};
+
 		unsigned s_turnLogs = 0;
 
 		// Steered camera distance behind the head. Further back widens what the
@@ -96,20 +124,31 @@ namespace PSUVR
 		constexpr float kSnapPress = 0.6f;
 		constexpr float kSnapRelease = 0.3f;
 
-		// refPosition is the tracking-space origin of camera space; cameraOffset is added
-		// to the eye position in camera space (game units).
-		void BuildEyeWithYaw( const EyePose &eye, float unitsPerMeter, const D3DMATRIX &gameProj,
-			float frameYaw, const Vec3 &refPosition, const Vec3 &cameraOffset, D3DMATRIX &view, D3DMATRIX &proj )
+		// Captured render camera yaw (game convention) and pitch (positive = looking up).
+		bool RenderCameraAngles( float &yaw, float &pitch )
 		{
-			const Quat yawInverse = YawQuat( -frameYaw );
-			const Vec3 offset = ToVec( eye.position );
-			Vec3 p = Rotate( yawInverse, { offset.x - refPosition.x, offset.y - refPosition.y, offset.z - refPosition.z } );
-			p = {
-				p.x * unitsPerMeter + cameraOffset.x,
-				p.y * unitsPerMeter + cameraOffset.y,
-				p.z * unitsPerMeter + cameraOffset.z };
-			const Quat q = Multiply( yawInverse, ToQuat( eye.orientation ) );
+			if( !s_haveRenderCam )
+			{
+				return false;
+			}
+			const float dx = s_renderTarget.x - s_renderPos.x;
+			const float dy = s_renderTarget.y - s_renderPos.y;
+			const float dz = s_renderTarget.z - s_renderPos.z;
+			const float horizontal = std::sqrt( dx * dx + dz * dz );
+			if( horizontal < 1.0e-4f && std::fabs( dy ) < 1.0e-4f )
+			{
+				return false;
+			}
+			yaw = std::atan2( dx, dz );
+			pitch = std::atan2( dy, horizontal );
+			return true;
+		}
 
+		// View/projection for an eye at p with orientation q, both in game camera space
+		// (right-handed, +Y up, looking down -Z, game units).
+		void BuildViewProj( const EyePose &eye, const D3DMATRIX &gameProj, const Vec3 &p, const Quat &q,
+			D3DMATRIX &view, D3DMATRIX &proj )
+		{
 			// Column-vector rotation of the eye in camera space. D3D row vectors use
 			// v_eye = ( v_cam - p ) * R, i.e. VIEW = T(-p) * R.
 			const float xx = q.x * q.x, yy = q.y * q.y, zz = q.z * q.z;
@@ -238,6 +277,8 @@ namespace PSUVR
 			s_refYaw = PoseYaw( views[ 0 ].orientation );
 			s_haveReference = true;
 			s_fpAnchor = s_refPosition;
+			s_hudYaw = s_refYaw;
+			s_hudFollowing = false;
 			// First person re-derives body yaw from the camera on its next steer.
 			s_fpPrimed = false;
 			PSU_LOG( "VRCamera: recentered at (%.3f, %.3f, %.3f) yaw=%.1f deg\n",
@@ -249,10 +290,46 @@ namespace PSUVR
 			return s_haveReference;
 		}
 
+		void NoteRenderCamera( const void *cameraPosition, const void *cameraTarget )
+		{
+			s_renderCamPos = static_cast< const float * >( cameraPosition );
+			s_renderCamTarget = static_cast< const float * >( cameraTarget );
+		}
+
+		void CaptureRenderCamera()
+		{
+			s_haveRenderCam = false;
+			if( !s_renderCamPos || !s_renderCamTarget )
+			{
+				return;
+			}
+			__try
+			{
+				s_renderPos = { s_renderCamPos[ 0 ], s_renderCamPos[ 1 ], s_renderCamPos[ 2 ] };
+				s_renderTarget = { s_renderCamTarget[ 0 ], s_renderCamTarget[ 1 ], s_renderCamTarget[ 2 ] };
+				s_haveRenderCam = true;
+			}
+			__except( EXCEPTION_EXECUTE_HANDLER )
+			{
+				s_haveRenderCam = false;
+			}
+		}
+
 		void BuildEye( const EyePose &eye, float unitsPerMeter, const D3DMATRIX &gameProj,
 			D3DMATRIX &view, D3DMATRIX &proj )
 		{
-			BuildEyeWithYaw( eye, unitsPerMeter, gameProj, s_refYaw, s_refPosition, { 0.0f, 0.0f, 0.0f }, view, proj );
+			// Third person: HMD on top of the game's orbit camera. The camera's own pitch
+			// is removed so the horizon stays level with the real one.
+			float camYaw = 0.0f, camPitch = 0.0f;
+			const bool level = RenderCameraAngles( camYaw, camPitch );
+			const Quat unpitch = level ? PitchQuat( -camPitch ) : Quat{ 0.0f, 0.0f, 0.0f, 1.0f };
+			const Quat bodyInverse = YawQuat( -s_refYaw );
+			const Vec3 offset = ToVec( eye.position );
+			const Vec3 local = Rotate( bodyInverse,
+				{ offset.x - s_refPosition.x, offset.y - s_refPosition.y, offset.z - s_refPosition.z } );
+			const Vec3 p = Rotate( unpitch, Scale( local, unitsPerMeter ) );
+			const Quat q = Multiply( unpitch, Multiply( bodyInverse, ToQuat( eye.orientation ) ) );
+			BuildViewProj( eye, gameProj, p, q, view, proj );
 		}
 
 		bool FirstPersonMode()
@@ -262,7 +339,7 @@ namespace PSUVR
 		}
 
 		bool SteerFirstPerson( float cameraPosition[ 3 ], float focusPosition[ 3 ],
-			const float playerPosition[ 3 ] )
+			const float playerPosition[ 3 ], int cameraState )
 		{
 			EyePose views[ 2 ];
 			EyePose viewSpace[ 2 ];
@@ -273,6 +350,9 @@ namespace PSUVR
 			}
 			const auto &vr = Config::Get().vr;
 			const float dt = SteerDeltaSeconds();
+			// States 1 (follow) and 3 (refocus) are normal play. Others (5 = NPC talk) are
+			// game-driven: no head steering and no turning, so nothing moves by itself.
+			const bool playState = cameraState == 1 || cameraState == 3;
 
 			// Yaw the game left the camera at after its own update.
 			const float dx = focusPosition[ 0 ] - cameraPosition[ 0 ];
@@ -295,17 +375,17 @@ namespace PSUVR
 				PSU_LOG( "VRCamera FP: primed body=%.1f deg, player=(%.2f, %.2f, %.2f)\n",
 					s_bodyYaw * ( 180.0f / kPi ), playerPosition[ 0 ], playerPosition[ 1 ], playerPosition[ 2 ] );
 			}
-			else if( s_turnFromStick )
+			else if( playState && s_turnFromStick )
 			{
 				ApplyStickTurn( stickX, dt );
 			}
-			else if( haveGameYaw )
+			else if( playState && haveGameYaw )
 			{
 				ApplyCameraDeltaTurn( WrapAngle( gameYaw - s_lastWrittenYaw ) );
 			}
 
 			// "head": forward = where you look (stick turns add on top). "body": FPS-style.
-			const bool headMove = vr.m_fpMoveDirection != "body";
+			const bool headMove = playState && vr.m_fpMoveDirection != "body";
 			const float hmdYaw = headMove ? WrapAngle( PoseYaw( views[ 0 ].orientation ) - s_refYaw ) : 0.0f;
 			const float yaw = WrapAngle( s_bodyYaw + hmdYaw );
 			const float fx = std::sin( yaw );
@@ -321,7 +401,9 @@ namespace PSUVR
 			cameraPosition[ 1 ] = head[ 1 ];
 			cameraPosition[ 2 ] = head[ 2 ] - fz * kSteerDistanceUnits;
 
+			s_headWorld = { head[ 0 ], head[ 1 ], head[ 2 ] };
 			s_lastWrittenYaw = yaw;
+			s_lastSteerTick = GetTickCount();
 			s_steerHmdYaw = hmdYaw;
 			s_camDistance = kSteerDistanceUnits;
 			s_fpActive = true;
@@ -330,7 +412,7 @@ namespace PSUVR
 
 		bool FirstPersonActive()
 		{
-			return s_fpActive && FirstPersonMode();
+			return s_fpActive && FirstPersonMode() && GetTickCount() - s_lastSteerTick < kSteerStaleMs;
 		}
 
 		void ClearFirstPerson()
@@ -346,6 +428,11 @@ namespace PSUVR
 		float FirstPersonCameraDistance()
 		{
 			return s_camDistance;
+		}
+
+		float BodyYaw()
+		{
+			return s_bodyYaw;
 		}
 
 		void UpdateFirstPersonAnchor( const EyePose views[ 2 ] )
@@ -382,17 +469,100 @@ namespace PSUVR
 		void BuildEyeFirstPerson( const EyePose &eye, float unitsPerMeter, const D3DMATRIX &gameProj,
 			D3DMATRIX &view, D3DMATRIX &proj )
 		{
-			// Camera space is level at the steered yaw with the head s_camDistance ahead
-			// along -Z. Only HMD motion since that steer becomes eye rotation, so head
-			// yaw has no tick lag. The face offset follows where the head looks.
-			const float frameYaw = s_refYaw + s_steerHmdYaw;
-			const Quat local = Multiply( YawQuat( -frameYaw ), ToQuat( eye.orientation ) );
-			Vec3 look = Rotate( local, { 0.0f, 0.0f, -1.0f } );
+			// Body frame: VR yaw s_refYaw = game yaw s_bodyYaw, level, origin at the head.
+			const Quat bodyInverse = YawQuat( -s_refYaw );
+			const Quat bodyEye = Multiply( bodyInverse, ToQuat( eye.orientation ) );
+			const Vec3 eyePos = ToVec( eye.position );
+			Vec3 offset = Scale( Rotate( bodyInverse,
+				{ eyePos.x - s_fpAnchor.x, eyePos.y - s_fpAnchor.y, eyePos.z - s_fpAnchor.z } ), unitsPerMeter );
+			// The face offset follows where the head looks, so the eyes stay in front of the face.
+			Vec3 look = Rotate( bodyEye, { 0.0f, 0.0f, -1.0f } );
 			const float flat = std::sqrt( look.x * look.x + look.z * look.z );
 			look = flat > 1.0e-4f ? Vec3{ look.x / flat, 0.0f, look.z / flat } : Vec3{ 0.0f, 0.0f, -1.0f };
-			const float face = Config::Get().vr.m_fpEyeForward * kGameUnitsPerMeter;
-			const Vec3 offset{ look.x * face, 0.0f, look.z * face - s_camDistance };
-			BuildEyeWithYaw( eye, unitsPerMeter, gameProj, frameYaw, s_fpAnchor, offset, view, proj );
+			offset = Add( offset, Scale( look, Config::Get().vr.m_fpEyeForward * kGameUnitsPerMeter ) );
+
+			// Camera the game actually renders from (our steer, or the NPC talk camera).
+			// Place the eye at the head in that camera's space, so any game re-aim or
+			// smoothing is cancelled: the world only moves by stick input and the head.
+			float camYaw = 0.0f, camPitch = 0.0f;
+			Vec3 headCam{ 0.0f, 0.0f, -s_camDistance };
+			float yawDelta = s_steerHmdYaw;
+			if( RenderCameraAngles( camYaw, camPitch ) )
+			{
+				const float dhx = s_headWorld.x - s_renderPos.x;
+				const float dhy = s_headWorld.y - s_renderPos.y;
+				const float dhz = s_headWorld.z - s_renderPos.z;
+				const float sy = std::sin( camYaw ), cy = std::cos( camYaw );
+				const float sp = std::sin( camPitch ), cp = std::cos( camPitch );
+				const float ahead = dhx * sy + dhz * cy;   // along the camera's ground forward
+				const float right = -dhx * cy + dhz * sy;  // game right = ( -cos, 0, sin )
+				headCam = { right, -ahead * sp + dhy * cp, -( ahead * cp + dhy * sp ) };
+				yawDelta = WrapAngle( camYaw - s_bodyYaw );
+			}
+			else
+			{
+				camPitch = 0.0f;
+			}
+			// Body -> camera: undo the camera's yaw relative to the body, then its pitch.
+			const Quat bodyToCam = Multiply( PitchQuat( -camPitch ), YawQuat( -yawDelta ) );
+			const Vec3 p = Add( headCam, Rotate( bodyToCam, offset ) );
+			const Quat q = Multiply( bodyToCam, bodyEye );
+			BuildViewProj( eye, gameProj, p, q, view, proj );
+		}
+
+		void HudPanelPose( const EyePose views[ 2 ], float distanceMeters, float position[ 3 ], float orientation[ 4 ] )
+		{
+			const auto &vr = Config::Get().vr;
+			LARGE_INTEGER now{};
+			LARGE_INTEGER frequency{};
+			QueryPerformanceCounter( &now );
+			QueryPerformanceFrequency( &frequency );
+			float dt = 0.0f;
+			if( s_hudLastTime.QuadPart != 0 && frequency.QuadPart > 0 )
+			{
+				dt = static_cast< float >( now.QuadPart - s_hudLastTime.QuadPart ) /
+					static_cast< float >( frequency.QuadPart );
+			}
+			s_hudLastTime = now;
+			dt = dt < 0.0f ? 0.0f : ( dt > 0.1f ? 0.1f : dt );
+
+			// Lazy follow: stay put while the head looks around, glide back once it has
+			// looked away further than hudFollowAngle, stop when nearly centred.
+			const float headYaw = PoseYaw( views[ 0 ].orientation );
+			const float delta = WrapAngle( headYaw - s_hudYaw );
+			const float followAngle = vr.m_hudFollowAngle * ( kPi / 180.0f );
+			constexpr float kSettle = 5.0f * ( kPi / 180.0f );
+			constexpr float kFollowRate = 4.0f;  // 1/s, exponential ease
+			if( std::fabs( delta ) > followAngle )
+			{
+				s_hudFollowing = true;
+			}
+			if( s_hudFollowing )
+			{
+				const float step = 1.0f - std::exp( -kFollowRate * dt );
+				s_hudYaw = WrapAngle( s_hudYaw + delta * step );
+				if( std::fabs( WrapAngle( headYaw - s_hudYaw ) ) < kSettle )
+				{
+					s_hudFollowing = false;
+				}
+			}
+
+			// First person anchors at the body leash point so leaning doesn't move it.
+			const Vec3 anchor = FirstPersonActive() ? s_fpAnchor : s_refPosition;
+			const float drop = vr.m_hudDrop;
+			const Quat yaw = YawQuat( s_hudYaw );
+			const Vec3 ahead = Rotate( yaw, { 0.0f, -drop, -distanceMeters } );
+			position[ 0 ] = anchor.x + ahead.x;
+			position[ 1 ] = anchor.y + ahead.y;
+			position[ 2 ] = anchor.z + ahead.z;
+			// Tilt the top back slightly so the panel faces the eyes from below eye level
+			// (negative rotation about +X turns the quad's +Z normal upward).
+			const float tilt = std::atan2( drop, distanceMeters );
+			const Quat q = Multiply( yaw, PitchQuat( -tilt ) );
+			orientation[ 0 ] = q.x;
+			orientation[ 1 ] = q.y;
+			orientation[ 2 ] = q.z;
+			orientation[ 3 ] = q.w;
 		}
 
 		void PanelPose( float distanceMeters, float dropMeters, float position[ 3 ], float orientation[ 4 ] )

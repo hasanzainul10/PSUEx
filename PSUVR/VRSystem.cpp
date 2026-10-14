@@ -377,10 +377,19 @@ namespace PSUVR
 					float worldPos[ 3 ]{};
 					float worldOri[ 4 ]{ 0.0f, 0.0f, 0.0f, 1.0f };
 					VRCamera::PanelPose( dist, 0.2f, worldPos, worldOri );
+					// Body-locked HUD/menu panel with lazy follow (or head-locked if off).
+					float userPos[ 3 ]{};
+					float userOri[ 4 ]{ 0.0f, 0.0f, 0.0f, 1.0f };
+					const bool follow = Config::Get().vr.m_hudFollow && m_haveNextViews;
+					if( follow )
+					{
+						VRCamera::HudPanelPose( m_nextViews, dist, userPos, userOri );
+					}
 					m_xr->SubmitHudQuads(
 						hud.HasUserContent() ? hud.UserTexture() : nullptr, dist, userH,
 						hud.HasWorldContent() ? hud.WorldTexture() : nullptr, dist, worldH,
-						worldPos, worldOri );
+						worldPos, worldOri,
+						follow ? userPos : nullptr, follow ? userOri : nullptr );
 					static bool s_loggedHudQuads = false;
 					if( !s_loggedHudQuads )
 					{
@@ -389,6 +398,25 @@ namespace PSUVR
 							hud.HasUserContent() ? 1 : 0, hud.HasWorldContent() ? 1 : 0, dist );
 					}
 				}
+			}
+			// Transitions only: scene mode, stereo on/off, first-person camera active.
+			{
+				static unsigned s_lastMode = 0xFFFFFFFF;
+				static int s_lastStereo = -1;
+				static int s_lastFirstPerson = -1;
+				static unsigned s_transitionLogs = 0;
+				const unsigned mode = *reinterpret_cast< unsigned * >( 0x00B90EA8 );
+				const int firstPerson = VRCamera::FirstPersonActive() ? 1 : 0;
+				if( ( mode != s_lastMode || ( stereoSubmitted ? 1 : 0 ) != s_lastStereo || firstPerson != s_lastFirstPerson ) &&
+					s_transitionLogs < 200 )
+				{
+					++s_transitionLogs;
+					PSU_LOG( "VR: scene mode=%u stereo=%d firstPerson=%d (hadStereoFrame=%d)\n",
+						mode, stereoSubmitted ? 1 : 0, firstPerson, hadStereoFrame ? 1 : 0 );
+				}
+				s_lastMode = mode;
+				s_lastStereo = stereoSubmitted ? 1 : 0;
+				s_lastFirstPerson = firstPerson;
 			}
 			stereo.ConsumeFrame();
 			hud.EndStereoFrame();

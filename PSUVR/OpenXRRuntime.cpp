@@ -863,7 +863,8 @@ namespace PSUVR
 
 	bool OpenXRRuntime::SubmitHudQuads( ID3D11Texture2D *userTex, float userDistanceM, float userHeightM,
 		ID3D11Texture2D *worldTex, float worldDistanceM, float worldHeightM,
-		const float worldPosition[ 3 ], const float worldOrientation[ 4 ] )
+		const float worldPosition[ 3 ], const float worldOrientation[ 4 ],
+		const float userPosition[ 3 ], const float userOrientation[ 4 ] )
 	{
 		if( !m_context || !m_device || !m_frameStarted || !m_shouldRender )
 		{
@@ -876,6 +877,12 @@ namespace PSUVR
 			{
 				m_userHudDistance = ( userDistanceM > 0.1f ) ? userDistanceM : m_quadDistance;
 				m_userHudHeight = userHeightM;
+				m_userHudLocal = userPosition && userOrientation;
+				if( m_userHudLocal )
+				{
+					std::memcpy( m_userHudPosition, userPosition, sizeof( m_userHudPosition ) );
+					std::memcpy( m_userHudOrientation, userOrientation, sizeof( m_userHudOrientation ) );
+				}
 				m_submitUserHud = true;
 				any = true;
 			}
@@ -1109,7 +1116,7 @@ namespace PSUVR
 				? ( static_cast< float >( m_panelWidth ) / static_cast< float >( m_panelHeight ) )
 				: ( 16.0f / 9.0f );
 
-			if( m_submitUserHud && m_visorSwapchain && viewSpace && layerCount < 3 )
+			if( m_submitUserHud && m_visorSwapchain && ( m_userHudLocal ? localSpace != XR_NULL_HANDLE : viewSpace != XR_NULL_HANDLE ) && layerCount < 3 )
 			{
 				const float heightM = m_userHudHeight;
 				userHudLayer.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
@@ -1117,9 +1124,28 @@ namespace PSUVR
 				userHudLayer.subImage.swapchain = static_cast< XrSwapchain >( m_visorSwapchain );
 				userHudLayer.subImage.imageRect.offset = { 0, 0 };
 				userHudLayer.subImage.imageRect.extent = { m_panelWidth, m_panelHeight };
-				userHudLayer.space = viewSpace;
-				userHudLayer.pose.orientation = { 0.0f, 0.0f, 0.0f, 1.0f };
-				userHudLayer.pose.position = { 0.0f, 0.0f, -m_userHudDistance };
+				static bool s_loggedHudSpace = false;
+				if( !s_loggedHudSpace )
+				{
+					s_loggedHudSpace = true;
+					PSU_LOG( "OpenXR: user HUD layer space=%s pos=(%.2f %.2f %.2f) size=%.2fx%.2f\n",
+						m_userHudLocal ? "LOCAL" : "VIEW",
+						m_userHudPosition[ 0 ], m_userHudPosition[ 1 ], m_userHudPosition[ 2 ], heightM * aspect, heightM );
+				}
+				if( m_userHudLocal )
+				{
+					// Body-locked: placed in LOCAL space in front of the body.
+					userHudLayer.space = localSpace;
+					userHudLayer.pose.position = { m_userHudPosition[ 0 ], m_userHudPosition[ 1 ], m_userHudPosition[ 2 ] };
+					userHudLayer.pose.orientation = { m_userHudOrientation[ 0 ], m_userHudOrientation[ 1 ],
+						m_userHudOrientation[ 2 ], m_userHudOrientation[ 3 ] };
+				}
+				else
+				{
+					userHudLayer.space = viewSpace;
+					userHudLayer.pose.orientation = { 0.0f, 0.0f, 0.0f, 1.0f };
+					userHudLayer.pose.position = { 0.0f, 0.0f, -m_userHudDistance };
+				}
 				userHudLayer.size = { heightM * aspect, heightM };
 				layers[ layerCount++ ] = reinterpret_cast< const XrCompositionLayerBaseHeader * >( &userHudLayer );
 			}

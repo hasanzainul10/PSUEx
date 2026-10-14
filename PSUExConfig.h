@@ -101,6 +101,12 @@ public:
 		bool m_hudWorldPanel = false;
 		// Opacity kept for near-black parts of the mission map backdrop on the visor (0 = invisible).
 		float m_hudMapBlackAlpha = 0.15f;
+		// HUD/menu panel in front of the body (lazy follow) instead of locked to the head.
+		bool m_hudFollow = true;
+		// Degrees the head may look away before the panel glides back in front.
+		float m_hudFollowAngle = 35.0f;
+		// How far below eye level the panel sits (meters).
+		float m_hudDrop = 0.1f;
 		// First person: eye height above the player's feet and forward offset (meters, avatar scale).
 		float m_fpEyeHeight = 1.6f;
 		float m_fpEyeForward = 0.12f;
@@ -117,8 +123,10 @@ public:
 		// How far the head may lean / crouch away from the body before the body follows (meters).
 		float m_fpLeanLimit = 0.15f;
 		float m_fpCrouchLimit = 0.2f;
-		bool m_snapTurn = false;
-		bool m_comfortVignette = true;
+		bool m_snapTurn = true;
+		bool m_comfortVignette = false;
+		// 0..1 how far the vignette closes in at full motion.
+		float m_vignetteStrength = 0.7f;
 		// Render the 3D pass per eye (projection layer) with the game frame as a panel.
 		bool m_stereo = true;
 		// Scene mode that gets stereo eyes (5 = town). 0 = every mode (old behavior).

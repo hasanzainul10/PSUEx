@@ -31,9 +31,12 @@ namespace PSUVR
 		bool SubmitSharedTexture( ID3D11Texture2D *src );
 
 		// Town HUD: head-locked user visor + world-locked kiosk (alpha quads over stereo).
+		// userPosition/userOrientation: LOCAL-space pose of the user HUD (body-locked);
+		// nullptr keeps it head-locked in VIEW space.
 		bool SubmitHudQuads( ID3D11Texture2D *userTex, float userDistanceM, float userHeightM,
 			ID3D11Texture2D *worldTex, float worldDistanceM, float worldHeightM,
-			const float worldPosition[ 3 ], const float worldOrientation[ 4 ] );
+			const float worldPosition[ 3 ], const float worldOrientation[ 4 ],
+			const float userPosition[ 3 ] = nullptr, const float userOrientation[ 4 ] = nullptr );
 
 		// Recreate the panel swapchain to match the game back-buffer.
 		bool ResizeSwapchains( int32_t width, int32_t height );
@@ -118,6 +121,9 @@ namespace PSUVR
 		float m_quadHeight = 1.2f;
 		float m_userHudDistance = 2.5f;
 		float m_userHudHeight = 1.4f;
+		bool m_userHudLocal = false;
+		float m_userHudPosition[ 3 ]{};
+		float m_userHudOrientation[ 4 ]{ 0.0f, 0.0f, 0.0f, 1.0f };
 		float m_worldHudHeight = 1.35f;
 
 		uint64_t m_panelSwapchain = 0;
