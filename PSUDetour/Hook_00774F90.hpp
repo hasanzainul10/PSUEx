@@ -5,6 +5,8 @@
 #pragma once
 
 #include "../PSUEx.h"
+#include "../PSUOverlay/FrameTrace.h"
+#include <intrin.h>
 
 namespace sub_774F90
 {
@@ -22,17 +24,18 @@ namespace sub_774F90
 
 	// This function is when the game draws most of the UI, it seems.
 	// Tried scaling it but icky results.
-    typedef int( __thiscall *sub_793C40_t )( void *thisPtr, int a4, int vertexCount, void *vertexPtr, int drawType );
+	typedef int( __thiscall *sub_793C40_t )( void *thisPtr, int a4, int vertexCount, void *vertexPtr, int drawType );
 	sub_793C40_t Original_sub_793C40 = reinterpret_cast< sub_793C40_t >( 0x00793C40 );
 
-    int __fastcall Hook_sub_793C40( void *thisPtr, void * /*dummy*/, int a4, int vertexCount, void *vertexPtr, int drawType )
-    {
-        return Original_sub_793C40( thisPtr, a4, vertexCount, vertexPtr, drawType );
-    }
+	int __fastcall Hook_sub_793C40( void *thisPtr, void * /*dummy*/, int a4, int vertexCount, void *vertexPtr, int drawType )
+	{
+		FrameTrace::OnUiDraw( _ReturnAddress() );
+		return Original_sub_793C40( thisPtr, a4, vertexCount, vertexPtr, drawType );
+	}
 
 	void Hook()
 	{
 		//DetourAttach( &( PVOID & )pOriginalFunction, reinterpret_cast< PVOID >( Hook_774F90 ) );
-		//DetourAttach( &( PVOID & )Original_sub_793C40, reinterpret_cast< PVOID >( Hook_sub_793C40 ) );
+		DetourAttach( &( PVOID & )Original_sub_793C40, reinterpret_cast< PVOID >( Hook_sub_793C40 ) );
 	}
 }

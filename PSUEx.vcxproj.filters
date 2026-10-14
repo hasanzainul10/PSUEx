@@ -126,6 +126,9 @@
     <ClInclude Include="PSUMemory\Patch\V1TextureFilter.hpp">
       <Filter>Header Files\PSUMemory\Patch</Filter>
     </ClInclude>
+    <ClInclude Include="PSUOverlay\FrameTrace.h">
+      <Filter>Header Files\PSUOverlay</Filter>
+    </ClInclude>
     <ClInclude Include="PSUOverlay\PSUOverlay.h">
       <Filter>Header Files\PSUOverlay</Filter>
     </ClInclude>
@@ -252,6 +255,12 @@
     <ClInclude Include="PSUVR\VRRuntime.h">
       <Filter>Header Files\PSUVR</Filter>
     </ClInclude>
+    <ClInclude Include="PSUVR\StereoRenderer.h">
+      <Filter>Header Files\PSUVR</Filter>
+    </ClInclude>
+    <ClInclude Include="PSUVR\VRCamera.h">
+      <Filter>Header Files\PSUVR</Filter>
+    </ClInclude>
     <ClInclude Include="Misc\Log.h">
       <Filter>Header Files\Misc</Filter>
     </ClInclude>
@@ -277,6 +286,9 @@
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PSUOverlay\FrameTrace.cpp">
+      <Filter>Source Files\PSUOverlay</Filter>
     </ClCompile>
     <ClCompile Include="PSUOverlay\PSUOverlay.cpp">
       <Filter>Source Files\PSUOverlay</Filter>
@@ -372,6 +384,12 @@
       <Filter>Source Files\PSUVR</Filter>
     </ClCompile>
     <ClCompile Include="PSUVR\OpenXRRuntime.cpp">
+      <Filter>Source Files\PSUVR</Filter>
+    </ClCompile>
+    <ClCompile Include="PSUVR\StereoRenderer.cpp">
+      <Filter>Source Files\PSUVR</Filter>
+    </ClCompile>
+    <ClCompile Include="PSUVR\VRCamera.cpp">
       <Filter>Source Files\PSUVR</Filter>
     </ClCompile>
   </ItemGroup>

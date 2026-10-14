@@ -18,9 +18,15 @@ Camera mode and input mode are independent settings, so every combination (third
 - [x] Phase 1: `PSUVR` module skeleton, `IVRRuntime`, OpenXR backend, D3D9Ex-to-D3D11 shared-surface bridge, frame loop driven from `Present`, `vr` config section
   - OpenVR backend still TODO. D3D9Ex requires `CreateDeviceEx` (plain `CreateDevice` on an Ex object crashes Clementine).
   - **D3D9Ex also rejects `D3DPOOL_MANAGED`.** Crash dumps all faulted at `d3d9.dll+0xF2A23` reading garbage — fixed by remapping managed creates to `DEFAULT|DYNAMIC` in `PSUVR/D3D9ExCompat` (validate with `vr.d3d9exOnly=true` before enabling OpenXR).
-- [ ] Phase 1: Virtual-screen path (BB StretchRect → shared D3D9/D3D11 → both eye swapchains) behind `vr.enabled` with `solidColorPrototype=false`
-  - Code path exists; previously crashed on Ex before managed-pool remap. Re-verify in HMD after flat Ex soak.
-- [ ] Phase 1: Reverse engineer the scene render entry point; `StereoRenderer` with per-eye matrix override
+- [x] Phase 1: Virtual-screen path behind `vr.enabled` with `solidColorPrototype=false`
+  - BB StretchRect → shared D3D9/D3D11 → **mono** `XrCompositionLayerQuad` (not dual-eye projection of the same BB — that looked like two characters).
+- [x] Phase 1: Reverse engineer the scene render entry point
+  - **`PSU_FrameRender` `0x00479F50`** → scene callback per mode (town = **`0x0046ACB0`**) → `if( byte[0x993328] ) { 0x004FD990(); 0x004FDBC0(); }` → 3 UI draws (`0x793C40`).
+  - **`0x004FD990`** = 3D world pass (layers `0x02`–`0x29`, ~165 DIP, no UI). `0x004FDBC0` = 2D pass (DrawPrimitiveUP quads with its own PROJ).
+  - Fixed-function: the game never sets VIEW (identity), the camera is baked into WORLD, and PROJ is set at `0x0074ADAA` before pass A.
+  - Verified in town: `vr.debugEyeShift` sets VIEW to a sideways translation around pass A only. The 3D world shifts and the UI stays put.
+- [ ] Phase 1: `StereoRenderer` (first build, awaiting headset test). After the game's own pass A, `PSUVR/StereoRenderer` re-runs `0x004FD990` per eye into shared D3D9Ex targets sized like the game's 3D target. `VRCamera` builds VIEW from the HMD pose relative to a yaw-only recenter (F9) at 10 game units/m × `worldScale`, and PROJ from the eye FOV with the game's depth terms. These are submitted as a projection layer with the rendered poses, plus the game frame as a world-locked panel (0.6 m × `hudSize`, `hudDistance` ahead, 0.35 m low). `vr.stereo=false` falls back to the virtual screen.
+- [ ] Phase 1 (original plan): run `0x004FD990` once per eye with VIEW = eye offset and PROJ = per-eye frustum, into left/right targets. Repeat-safety verified: running pass A twice per frame gives the same draws, its deferred lists refill within the pass, and animation speed is normal. Still open: depth/RT handling between eyes, and running the shadow-map part (`0x5E3630`/`0x5E37B0`) once per frame instead of per eye.
 - [ ] Phase 1: `VRCamera` third-person mode (HMD on top of the orbit camera), `VRHud` UI quad layer, recenter and snap turn, `VRDisplay` ImGui panel
 - [ ] Phase 2: Player head position, first-person `VRCamera`, hidden head meshes, head-relative stick movement, usable lock-on
 - [ ] Phase 3: DirectInput hook that builds a synthetic gamepad from the motion controllers, with configurable bindings
@@ -93,7 +99,7 @@ Settings go in a new `vr` section of `config.json`: `enabled`, `runtime` (openxr
 1. Upgrade the device to D3D9Ex, set up the D3D11 bridge and backend init, and drive the VR frame loop from the `Present` hook.
 2. Start with a stereo-less "virtual screen" pass: submit the back buffer as a quad layer to prove the frame pipeline end to end.
 3. Reverse engineer the per-frame scene render entry point (the call between the camera update and the UI pass). Use the `SetRenderTarget` transition from the offscreen target to the back buffer, and the `0x00793C40` UI draw, to mark where the 3D scene ends.
-4. `StereoRenderer`: run the scene render twice with the matrices at `0x00A85C30`/`0x00A85B30` overridden per eye (including asymmetric FOV projections from the runtime), writing into the left and right shared targets.
+4. `StereoRenderer`: run the 3D pass `0x004FD990` twice, with D3D VIEW set to the per-eye offset (the game leaves VIEW at identity) and PROJ overridden per eye (including asymmetric FOV projections from the runtime), writing into the left and right shared targets.
 5. `VRCamera` third-person mode: keep the game's orbit camera position and apply HMD rotation and position on top of it. Add world-scale tuning and a recenter control.
 6. `VRHud`: send the UI pass to its own target and show it as a quad roughly 2 m ahead. Move the minimap and chat into it.
 7. Gamepad works unchanged (passthrough). Add a recenter binding and snap or smooth turn of the camera yaw.

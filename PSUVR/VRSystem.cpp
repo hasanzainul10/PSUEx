@@ -4,6 +4,8 @@
 #include "D3D9ExCompat.h"
 #include "D3D11Bridge.h"
 #include "OpenXRRuntime.h"
+#include "StereoRenderer.h"
+#include "VRCamera.h"
 #include "../Misc/Log.h"
 #include "../PSUExConfig.h"
 
@@ -192,6 +194,22 @@ namespace PSUVR
 		return m_bridgeReady;
 	}
 
+	D3D11Bridge *System::StereoBridge() const
+	{
+		return ( m_enabled && m_runtimeReady && m_bridgeReady && !m_solidColorPrototype ) ? m_bridge : nullptr;
+	}
+
+	bool System::NextViews( EyePose out[ 2 ] ) const
+	{
+		if( !m_haveNextViews )
+		{
+			return false;
+		}
+		out[ 0 ] = m_nextViews[ 0 ];
+		out[ 1 ] = m_nextViews[ 1 ];
+		return true;
+	}
+
 	void System::OnDeviceCreated( IDirect3DDevice9 *device )
 	{
 		LoadConfig();
@@ -272,6 +290,10 @@ namespace PSUVR
 			return;
 		}
 		m_capturedThisFrame = m_bridge->BlitBackBuffer( m_device );
+		if( !m_capturedThisFrame && StereoRenderer::Get().HasFrame() )
+		{
+			m_bridge->Fence( m_device );
+		}
 	}
 
 	void System::OnPresentSubmit()
@@ -289,8 +311,35 @@ namespace PSUVR
 		{
 			if( !m_xr->BeginFrame() )
 			{
+				StereoRenderer::Get().ConsumeFrame();
 				return;
 			}
+
+			// The next game frame renders with poses predicted one display period ahead.
+			m_haveNextViews = m_xr->LocateNextViews( m_nextViews );
+
+			DWORD foregroundPid = 0;
+			GetWindowThreadProcessId( GetForegroundWindow(), &foregroundPid );
+			const bool recenterDown = foregroundPid == GetCurrentProcessId() && ( GetAsyncKeyState( VK_F9 ) & 0x8000 ) != 0;
+			if( recenterDown && !m_recenterKeyDown && m_haveNextViews )
+			{
+				VRCamera::Recenter( m_nextViews );
+			}
+			m_recenterKeyDown = recenterDown;
+
+			bool stereoSubmitted = false;
+			StereoRenderer &stereo = StereoRenderer::Get();
+			if( !m_solidColorPrototype && stereo.HasFrame() && m_bridge )
+			{
+				ID3D11Texture2D *eyes[ 2 ] = { m_bridge->EyeTexture( 0 ), m_bridge->EyeTexture( 1 ) };
+				stereoSubmitted = m_xr->SubmitStereo( eyes, stereo.RenderedPoses() );
+				if( stereoSubmitted && !m_loggedStereo )
+				{
+					m_loggedStereo = true;
+					PSU_LOG( "VR: stereo projection layer active (F9 = recenter)\n" );
+				}
+			}
+			stereo.ConsumeFrame();
 
 			if( m_solidColorPrototype )
 			{
@@ -307,8 +356,16 @@ namespace PSUVR
 			else if( m_capturedThisFrame && m_bridge )
 			{
 				const float dist = Config::Get().vr.m_hudDistance;
-				const float height = 1.2f * Config::Get().vr.m_hudSize;
+				// With stereo the panel is a smaller world-locked screen below eye level.
+				const float height = ( stereoSubmitted ? 0.6f : 1.2f ) * Config::Get().vr.m_hudSize;
 				m_xr->SetVirtualScreenPlacement( dist, height );
+				float panelPosition[ 3 ]{};
+				float panelOrientation[ 4 ]{ 0.0f, 0.0f, 0.0f, 1.0f };
+				if( stereoSubmitted )
+				{
+					VRCamera::PanelPose( dist, 0.35f, panelPosition, panelOrientation );
+				}
+				m_xr->SetPanelWorldPose( stereoSubmitted, panelPosition, panelOrientation );
 				m_xr->SubmitSharedTexture( m_bridge->GetSharedTexture() );
 				if( !m_loggedVirtualScreen )
 				{
@@ -320,7 +377,7 @@ namespace PSUVR
 					LogD3D9ExCompatStats();
 				}
 			}
-			else
+			else if( !stereoSubmitted )
 			{
 				m_xr->ClearEyes( 0.05f, 0.05f, 0.08f );
 			}

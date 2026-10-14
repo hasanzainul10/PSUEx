@@ -3,6 +3,103 @@
 #include "Misc/Log.h"
 #include "PSUVR/VRSystem.h"
 
+// online.exe injects its own PSUEx.dll into PSUC; two copies would hook everything twice.
+static HMODULE s_selfModule = nullptr;
+static bool s_hooked = false;
+static decltype( &LoadLibraryA ) Original_LoadLibraryA = LoadLibraryA;
+static decltype( &LoadLibraryW ) Original_LoadLibraryW = LoadLibraryW;
+static decltype( &LoadLibraryExA ) Original_LoadLibraryExA = LoadLibraryExA;
+static decltype( &LoadLibraryExW ) Original_LoadLibraryExW = LoadLibraryExW;
+
+static bool
+IsPSUExName( const char *base )
+{
+	return _stricmp( base, "PSUEx.dll" ) == 0 || _stricmp( base, "PSUExD.dll" ) == 0;
+}
+
+static bool
+IsOtherPSUExA( LPCSTR path )
+{
+	if( !path )
+	{
+		return false;
+	}
+	const char *slash = strrchr( path, '\\' );
+	const char *fwd = strrchr( path, '/' );
+	const char *base = ( fwd > slash ) ? fwd + 1 : ( slash ? slash + 1 : path );
+	return IsPSUExName( base );
+}
+
+static bool
+IsOtherPSUExW( LPCWSTR path )
+{
+	if( !path )
+	{
+		return false;
+	}
+	char narrow[ MAX_PATH ]{};
+	WideCharToMultiByte( CP_ACP, 0, path, -1, narrow, MAX_PATH, nullptr, nullptr );
+	return IsOtherPSUExA( narrow );
+}
+
+static HMODULE WINAPI
+Hook_LoadLibraryA( LPCSTR path )
+{
+	if( IsOtherPSUExA( path ) )
+	{
+		PSU_LOG( "Blocked second PSUEx load: %s\n", path );
+		return s_selfModule;
+	}
+	return Original_LoadLibraryA( path );
+}
+
+static HMODULE WINAPI
+Hook_LoadLibraryW( LPCWSTR path )
+{
+	if( IsOtherPSUExW( path ) )
+	{
+		PSU_LOG( "Blocked second PSUEx load: %ls\n", path );
+		return s_selfModule;
+	}
+	return Original_LoadLibraryW( path );
+}
+
+static HMODULE WINAPI
+Hook_LoadLibraryExA( LPCSTR path, HANDLE file, DWORD flags )
+{
+	if( IsOtherPSUExA( path ) )
+	{
+		PSU_LOG( "Blocked second PSUEx load: %s\n", path );
+		return s_selfModule;
+	}
+	return Original_LoadLibraryExA( path, file, flags );
+}
+
+static HMODULE WINAPI
+Hook_LoadLibraryExW( LPCWSTR path, HANDLE file, DWORD flags )
+{
+	if( IsOtherPSUExW( path ) )
+	{
+		PSU_LOG( "Blocked second PSUEx load: %ls\n", path );
+		return s_selfModule;
+	}
+	return Original_LoadLibraryExW( path, file, flags );
+}
+
+static HMODULE
+FindOtherPSUEx()
+{
+	for( const char *name : { "PSUEx.dll", "PSUExD.dll" } )
+	{
+		HMODULE module = GetModuleHandleA( name );
+		if( module && module != s_selfModule )
+		{
+			return module;
+		}
+	}
+	return nullptr;
+}
+
 static void
 DetoursHookAll()
 {
@@ -11,6 +108,10 @@ DetoursHookAll()
 		DetourUpdateThread( GetCurrentThread() );
 		DetourAttach( &( PVOID & )Original_WinMain, Hook_WinMain );
 		DetourAttach( &( PVOID & )Original_CreateWindowExA, Hook_CreateWindowExA );
+		DetourAttach( &( PVOID & )Original_LoadLibraryA, Hook_LoadLibraryA );
+		DetourAttach( &( PVOID & )Original_LoadLibraryW, Hook_LoadLibraryW );
+		DetourAttach( &( PVOID & )Original_LoadLibraryExA, Hook_LoadLibraryExA );
+		DetourAttach( &( PVOID & )Original_LoadLibraryExW, Hook_LoadLibraryExW );
 
 		sub_774F90::Hook();			// Initialize DirectInput	
 		sub_776590::Hook();			// Initialize Direct3D
@@ -23,6 +124,7 @@ DetoursHookAll()
 		TItemBulletSlicer::Hook();	// Slicer Crash
 		TFlagManager::Hook();		// Flag Manager
 		TCameraTaskPlay::Hook();	// Camera Position
+		FrameRender::Hook();		// Per-frame scene↔UI orchestrator
 		UIScaling::Hook();			// UI Scaling
 		TextDraw::Hook();			// Translation
 
@@ -67,16 +169,42 @@ APIENTRY DllMain( HMODULE hModule,
 		#endif
 
 			PSU_LOG( "PSUEx DllMain PROCESS_ATTACH\n" );
+
+			char hostExe[ MAX_PATH ]{};
+			GetModuleFileNameA( nullptr, hostExe, MAX_PATH );
+			const char *hostBase = strrchr( hostExe, '\\' );
+			hostBase = hostBase ? hostBase + 1 : hostExe;
+			const bool isPSUC = ( _stricmp( hostBase, "PSUC.exe" ) == 0 )
+				|| ( _stricmp( hostBase, "PSUC_Uncompressed.exe" ) == 0 );
+			if( !isPSUC )
+			{
+				PSU_LOG( "Skip Detours/VR — host is not PSUC (%s)\n", hostExe );
+				break;
+			}
+
+			s_selfModule = hModule;
+			if( HMODULE other = FindOtherPSUEx() )
+			{
+				char otherPath[ MAX_PATH ]{};
+				GetModuleFileNameA( other, otherPath, MAX_PATH );
+				PSU_LOG( "Skip Detours/VR — another PSUEx is already loaded (%s)\n", otherPath );
+				break;
+			}
+
 			DetoursHookAll();
+			s_hooked = true;
 			PSUVR::System::Get().OnProcessAttach();
 		}
 		break;
 
 		case DLL_PROCESS_DETACH:
 		{
-			PSUVR::System::Get().OnProcessDetach();
-			Config().Get().SaveToFile();
-			DetoursUnhookAll();
+			if( s_hooked )
+			{
+				PSUVR::System::Get().OnProcessDetach();
+				Config().Get().SaveToFile();
+				DetoursUnhookAll();
+			}
 
 		#ifdef _DEBUG
 			fclose( stdout );

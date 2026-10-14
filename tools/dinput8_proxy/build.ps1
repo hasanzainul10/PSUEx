@@ -6,7 +6,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-$msvc = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+$msvc = if( Test-Path $vswhere ) { & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath }
+if( -not $msvc ) { $msvc = "D:\VSBuildTools" }
 $vcvars = Join-Path $msvc "VC\Auxiliary\Build\vcvars32.bat"
 if( -not ( Test-Path $vcvars ) ) { throw "vcvars32.bat not found" }
 
@@ -15,7 +16,7 @@ $def = Join-Path $PSScriptRoot "dinput8_proxy.def"
 $out = Join-Path $OutDir "dinput8.dll"
 $cmd = @"
 call `"$vcvars`" >nul
-cl /nologo /O2 /LD /EHsc /DWIN32 /DUNICODE /D_UNICODE `"$src`" /link /DEF:`"$def`" /OUT:`"$out`" dinput8.lib user32.lib
+cl /nologo /O2 /LD /EHsc /DWIN32 /DUNICODE /D_UNICODE `"$src`" /link /DEF:`"$def`" /OUT:`"$out`" dinput8.lib dxguid.lib user32.lib
 "@
 $bat = Join-Path $env:TEMP "build_dinput8_proxy.bat"
 Set-Content -Path $bat -Value $cmd -Encoding ASCII

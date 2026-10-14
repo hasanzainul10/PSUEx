@@ -27,16 +27,27 @@ namespace PSUVR
 		// Clears acquired swapchain images to RGB and releases them.
 		bool ClearEyes( float r, float g, float b );
 
-		// Copies a D3D11 texture into one swapchain for a mono quad layer (virtual screen).
+		// Copies a D3D11 texture into the panel swapchain for a mono quad layer (virtual screen).
 		bool SubmitSharedTexture( ID3D11Texture2D *src );
 
-		// Recreate eye swapchains to match the game back-buffer (virtual screen).
+		// Recreate the panel swapchain to match the game back-buffer.
 		bool ResizeSwapchains( int32_t width, int32_t height );
 
 		void SetVirtualScreenPlacement( float distanceMeters, float heightMeters );
 
-		int32_t SwapchainWidth() const { return m_swapchainWidth; }
-		int32_t SwapchainHeight() const { return m_swapchainHeight; }
+		// Panel in LOCAL space (stereo mode) instead of head-locked VIEW space.
+		void SetPanelWorldPose( bool enable, const float position[ 3 ], const float orientation[ 4 ] );
+
+		// Eye poses (LOCAL space) predicted for the frame after the current one.
+		// Valid after BeginFrame; these are what the next game frame renders with.
+		bool LocateNextViews( EyePose out[ 2 ] );
+
+		// Blits per-eye renders into the eye swapchains for a projection layer
+		// submitted with the poses they were rendered with.
+		bool SubmitStereo( ID3D11Texture2D *const eyes[ 2 ], const EyePose poses[ 2 ] );
+
+		int32_t SwapchainWidth() const { return m_panelWidth; }
+		int32_t SwapchainHeight() const { return m_panelHeight; }
 
 	private:
 		bool LoadLoader();
@@ -44,6 +55,10 @@ namespace PSUVR
 		bool CreateSession( ID3D11Device *d3d11 );
 		bool CreateSwapchains( int32_t width, int32_t height );
 		void DestroySwapchains();
+		bool CreatePanelSwapchain( int32_t width, int32_t height );
+		void DestroyPanelSwapchain();
+		bool CreateSwapchain( int32_t width, int32_t height, uint64_t &handle, void *&images, uint32_t &imageCount );
+		bool BlitIntoSwapchain( uint64_t swapchain, void *images, ID3D11Texture2D *src );
 		int64_t PickSwapchainFormat( uint64_t sessionHandle );
 		bool EnsureBlitPipeline();
 		bool BlitTexture( ID3D11Texture2D *src, ID3D11Texture2D *dst );
@@ -76,12 +91,25 @@ namespace PSUVR
 		bool m_sessionRunning = false;
 		bool m_shouldRender = false;
 		bool m_clearedThisFrame = false;
-		bool m_submitQuadLayer = false; // virtual screen vs stereo clear
+		bool m_submitQuadLayer = false;
+		bool m_submitStereo = false;
 		int m_sessionState = 1; // XR_SESSION_STATE_IDLE
 		int64_t m_displayTime = 0;
+		int64_t m_displayPeriod = 0;
 		uint32_t m_acquiredIndex[ 2 ]{};
 		bool m_loggedSubmitFormats = false;
 		float m_quadDistance = 2.0f;
 		float m_quadHeight = 1.2f;
+
+		uint64_t m_panelSwapchain = 0;
+		void *m_panelImages = nullptr; // XrSwapchainImageD3D11KHR*
+		uint32_t m_panelImageCount = 0;
+		int32_t m_panelWidth = 0;
+		int32_t m_panelHeight = 0;
+		bool m_panelWorldLocked = false;
+		float m_panelPosition[ 3 ]{};
+		float m_panelOrientation[ 4 ]{ 0.0f, 0.0f, 0.0f, 1.0f };
+
+		EyePose m_submittedPoses[ 2 ]{};
 	};
 }

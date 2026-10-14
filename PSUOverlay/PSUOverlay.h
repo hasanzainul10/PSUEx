@@ -34,6 +34,7 @@ private:
 		IDirect3DDevice9 **ppReturnedDeviceInterface
 	);
 
+	typedef HRESULT( APIENTRY *FunctionD3DBeginScene )( LPDIRECT3DDEVICE9 pDevice );
 	typedef HRESULT( APIENTRY *FunctionD3DEndScene )( LPDIRECT3DDEVICE9 pDevice );
 	typedef HRESULT( APIENTRY *FunctionD3DDrawPrimitive )( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, UINT StartVertex, UINT PrimitiveCount );
 	typedef HRESULT( APIENTRY *FunctionD3DDrawPrimitiveUP )( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount, CONST void *pVertexStreamZeroData, UINT VertexStreamZeroStride );
@@ -49,6 +50,7 @@ private:
 	typedef HRESULT( APIENTRY *FunctionSetViewport )( LPDIRECT3DDEVICE9 pDevice, CONST D3DVIEWPORT9 *pViewport );
 	typedef HRESULT( APIENTRY *FunctionSetRenderTarget )( LPDIRECT3DDEVICE9 pDevice, DWORD RenderTargetIndex, IDirect3DSurface9 *pRenderTarget );
 	typedef HRESULT( APIENTRY *FunctionSetScissorRect )( LPDIRECT3DDEVICE9 pDevice, CONST RECT *pRect );
+	typedef HRESULT( APIENTRY *FunctionSetVertexShaderConstantF )( LPDIRECT3DDEVICE9 pDevice, UINT StartRegister, CONST float *pConstantData, UINT Vector4fCount );
 
 	static PSUOverlay *instance;
 
@@ -64,6 +66,7 @@ private:
 	static inline WNDPROC m_pWndProc;
 
 	static inline FunctionD3DCreateDevice m_pOriginalCreateDevice = nullptr;
+	static inline FunctionD3DBeginScene m_pOriginalBeginScene;
 	static inline FunctionD3DEndScene m_pOriginalEndScene;
 	static inline FunctionD3DDrawPrimitive m_pOriginalDrawPrimitive;
 	static inline FunctionD3DDrawPrimitiveUP m_pOriginalDrawPrimitiveUP;
@@ -77,6 +80,7 @@ private:
 	static inline FunctionSetViewport m_pOriginalSetViewport;
 	static inline FunctionSetRenderTarget m_pOriginalSetRenderTarget;
 	static inline FunctionSetScissorRect m_pOriginalSetScissorRect;
+	static inline FunctionSetVertexShaderConstantF m_pOriginalSetVertexShaderConstantF;
 
 	static inline std::map<IDirect3DSwapChain9 *, FunctionSwapChainPresent > m_pOriginalSwapChainPresentsMap;
 	static inline std::map<IDirect3DSwapChain9 *, FunctionSwapChainRelease > m_pOriginalSwapChainReleasesMap;
@@ -94,6 +98,8 @@ public:
 		static PSUOverlay instance;
 		return instance;
 	}
+
+	static IDirect3DDevice9 *Device() { return m_pDevice; }
 
 	PSUOverlay( const PSUOverlay & ) = delete;
 	PSUOverlay &operator=( const PSUOverlay & ) = delete;
@@ -144,6 +150,7 @@ private:
 	static HRESULT APIENTRY Hook_DrawIndexedPrimitive( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, INT BaseVertexIndex, UINT MinIndex, UINT NumVertices, UINT StartIndex, UINT PrimitiveCount );
 	static HRESULT APIENTRY Hook_DrawPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount, CONST void *pVertexStreamZeroData, UINT VertexStreamZeroStride );
 	static HRESULT APIENTRY Hook_DrawIndexedPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, UINT MinVertexIndex, UINT NumVertices, UINT PrimitiveCount, CONST void *pIndexData, D3DFORMAT IndexDataFormat, CONST void *pVertexStreamZeroData, UINT VertexStreamZeroStride );
+	static HRESULT APIENTRY Hook_BeginScene( LPDIRECT3DDEVICE9 pDevice );
 	static HRESULT APIENTRY Hook_EndScene( LPDIRECT3DDEVICE9 D3D9Device );
 	static HRESULT APIENTRY Hook_Present( LPDIRECT3DDEVICE9 pDevice, CONST RECT *pSourceRect, CONST RECT *pDestRect, HWND hDestWindowOverride, CONST RGNDATA *pDirtyRegion );
 	static HRESULT APIENTRY Hook_CreateAdditionalSwapChain( LPDIRECT3DDEVICE9 pDevice, D3DPRESENT_PARAMETERS *pPresentationParameters, IDirect3DSwapChain9 **ppSwapChain );
@@ -153,6 +160,7 @@ private:
 	static HRESULT APIENTRY Hook_SetViewport( LPDIRECT3DDEVICE9 pDevice, const D3DVIEWPORT9 *pViewport );
 	static HRESULT APIENTRY Hook_SetRenderTarget( LPDIRECT3DDEVICE9 pDevice, DWORD RenderTargetIndex, IDirect3DSurface9 *pRenderTarget );
 	static HRESULT APIENTRY Hook_SetScissorRect( LPDIRECT3DDEVICE9 pDevice, const RECT *pRect );
+	static HRESULT APIENTRY Hook_SetVertexShaderConstantF( LPDIRECT3DDEVICE9 pDevice, UINT StartRegister, CONST float *pConstantData, UINT Vector4fCount );
 
 	static void InitializeImGui( const LPDIRECT3DDEVICE9 pDevice );
 	

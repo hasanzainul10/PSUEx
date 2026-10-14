@@ -142,8 +142,98 @@ namespace PSUVR
 		return RecreateShared( d3d9, m_d3d11, width, height );
 	}
 
+	bool D3D11Bridge::CreateSharedTarget( IDirect3DDevice9 *d3d9, UINT width, UINT height, SharedTarget &out )
+	{
+		IDirect3DDevice9Ex *d3d9Ex = nullptr;
+		if( FAILED( d3d9->QueryInterface( __uuidof( IDirect3DDevice9Ex ), reinterpret_cast< void ** >( &d3d9Ex ) ) ) || !d3d9Ex )
+		{
+			return false;
+		}
+		HANDLE shared = nullptr;
+		HRESULT hr = d3d9Ex->CreateTexture( width, height, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT,
+			&out.texture9, &shared );
+		d3d9Ex->Release();
+		if( FAILED( hr ) || !out.texture9 || !shared )
+		{
+			PSU_LOG( "D3D11Bridge: eye CreateTexture(shared) failed 0x%08X\n", hr );
+			ReleaseSharedTarget( out );
+			return false;
+		}
+		if( FAILED( out.texture9->GetSurfaceLevel( 0, &out.surface9 ) ) || !out.surface9 )
+		{
+			ReleaseSharedTarget( out );
+			return false;
+		}
+		hr = m_d3d11->OpenSharedResource( shared, __uuidof( ID3D11Texture2D ), reinterpret_cast< void ** >( &out.texture11 ) );
+		if( FAILED( hr ) || !out.texture11 )
+		{
+			PSU_LOG( "D3D11Bridge: eye OpenSharedResource failed 0x%08X\n", hr );
+			ReleaseSharedTarget( out );
+			return false;
+		}
+		return true;
+	}
+
+	void D3D11Bridge::ReleaseSharedTarget( SharedTarget &target )
+	{
+		if( target.texture11 ) { target.texture11->Release(); target.texture11 = nullptr; }
+		if( target.surface9 ) { target.surface9->Release(); target.surface9 = nullptr; }
+		if( target.texture9 ) { target.texture9->Release(); target.texture9 = nullptr; }
+	}
+
+	void D3D11Bridge::ShutdownEyes()
+	{
+		for( auto &eye : m_eyes )
+		{
+			ReleaseSharedTarget( eye );
+		}
+		if( m_eyeDepth )
+		{
+			m_eyeDepth->Release();
+			m_eyeDepth = nullptr;
+		}
+		m_eyeWidth = 0;
+		m_eyeHeight = 0;
+		m_eyeDepthFormat = D3DFMT_UNKNOWN;
+	}
+
+	bool D3D11Bridge::EnsureEyeTargets( IDirect3DDevice9 *d3d9, UINT width, UINT height, D3DFORMAT depthFormat )
+	{
+		if( !d3d9 || !m_d3d11 || width == 0 || height == 0 )
+		{
+			return false;
+		}
+		if( m_eyeDepth && m_eyes[ 1 ].texture11 && m_eyeWidth == width && m_eyeHeight == height && m_eyeDepthFormat == depthFormat )
+		{
+			return true;
+		}
+
+		ShutdownEyes();
+		for( auto &eye : m_eyes )
+		{
+			if( !CreateSharedTarget( d3d9, width, height, eye ) )
+			{
+				ShutdownEyes();
+				return false;
+			}
+		}
+		const HRESULT hr = d3d9->CreateDepthStencilSurface( width, height, depthFormat, D3DMULTISAMPLE_NONE, 0, FALSE, &m_eyeDepth, nullptr );
+		if( FAILED( hr ) || !m_eyeDepth )
+		{
+			PSU_LOG( "D3D11Bridge: eye depth %ux%u fmt=%u failed 0x%08X\n", width, height, ( unsigned )depthFormat, hr );
+			ShutdownEyes();
+			return false;
+		}
+		m_eyeWidth = width;
+		m_eyeHeight = height;
+		m_eyeDepthFormat = depthFormat;
+		PSU_LOG( "D3D11Bridge: eye targets %ux%u depth fmt=%u\n", width, height, ( unsigned )depthFormat );
+		return true;
+	}
+
 	void D3D11Bridge::Shutdown()
 	{
+		ShutdownEyes();
 		if( m_eventQuery )
 		{
 			m_eventQuery->Release();

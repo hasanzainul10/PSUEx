@@ -97,5 +97,11 @@ public:
 		float m_hudSize = 1.0f;
 		bool m_snapTurn = true;
 		bool m_comfortVignette = true;
+		// Render the 3D pass per eye (projection layer) with the game frame as a panel.
+		bool m_stereo = true;
+		// Debug: shift the 3D pass sideways by ±this many view units, alternating each second.
+		float m_debugEyeShift = 0.0f;
+		// Debug: run the 3D pass twice per frame to test repeat-safety.
+		bool m_debugDoublePass = false;
 	} vr;
 };

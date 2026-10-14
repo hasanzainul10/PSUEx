@@ -143,6 +143,9 @@ void Config::SaveToFile()
 	root[ "vr" ][ "hudSize" ] = vr.m_hudSize;
 	root[ "vr" ][ "snapTurn" ] = vr.m_snapTurn;
 	root[ "vr" ][ "comfortVignette" ] = vr.m_comfortVignette;
+	root[ "vr" ][ "stereo" ] = vr.m_stereo;
+	root[ "vr" ][ "debugEyeShift" ] = vr.m_debugEyeShift;
+	root[ "vr" ][ "debugDoublePass" ] = vr.m_debugDoublePass;
 
 	// Sidecar so Clementine/other writers that rewrite config.json cannot wipe VR.
 	{
@@ -398,6 +401,12 @@ void Config::LoadFromFile()
 			vr.m_snapTurn = vrNode[ "snapTurn" ].get<bool>();
 		if( vrNode.contains( "comfortVignette" ) && vrNode[ "comfortVignette" ].is_boolean() )
 			vr.m_comfortVignette = vrNode[ "comfortVignette" ].get<bool>();
+		if( vrNode.contains( "stereo" ) && vrNode[ "stereo" ].is_boolean() )
+			vr.m_stereo = vrNode[ "stereo" ].get<bool>();
+		if( vrNode.contains( "debugEyeShift" ) && vrNode[ "debugEyeShift" ].is_number() )
+			vr.m_debugEyeShift = vrNode[ "debugEyeShift" ].get<float>();
+		if( vrNode.contains( "debugDoublePass" ) && vrNode[ "debugDoublePass" ].is_boolean() )
+			vr.m_debugDoublePass = vrNode[ "debugDoublePass" ].get<bool>();
 	};
 
 	if( root.contains( "vr" ) && root[ "vr" ].is_object() )

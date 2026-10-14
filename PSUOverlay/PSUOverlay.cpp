@@ -6,6 +6,7 @@
 #include "../PSUVR/D3D9ExCompat.h"
 #include "../Misc/Log.h"
 #include "PSUOverlay.h"
+#include "FrameTrace.h"
 #include "Interface/ConfigDisplay.h"
 #include "Interface/LootDisplay.h"
 #include "Interface/LogDisplay.h"
@@ -239,10 +240,11 @@ HRESULT APIENTRY PSUOverlay::Hook_CreateDevice( IDirect3D9 *pD3D, UINT Adapter, 
 			m_pOriginalCreateAdditionalSwapChain = ( FunctionCreateAdditionalSwapChain )vTable[ 13 ];
 
 			m_pOriginalSetRenderTarget = ( FunctionSetRenderTarget )vTable[ 37 ];
+			m_pOriginalBeginScene = ( FunctionD3DBeginScene )vTable[ 41 ];
 			m_pOriginalEndScene = ( FunctionD3DEndScene )vTable[ 42 ];
 			m_pOriginalSetTransform = ( FunctionSetTransform )vTable[ 44 ];
-			m_pOriginalSetViewport = ( FunctionSetViewport )vTable[ 47 ]; 
-			
+			m_pOriginalSetViewport = ( FunctionSetViewport )vTable[ 47 ];
+			m_pOriginalSetVertexShaderConstantF = ( FunctionSetVertexShaderConstantF )vTable[ 94 ];
 
 			DetourTransactionBegin();
 			DetourUpdateThread( GetCurrentThread() );
@@ -252,57 +254,47 @@ HRESULT APIENTRY PSUOverlay::Hook_CreateDevice( IDirect3D9 *pD3D, UINT Adapter, 
 				PSU_LOG( "Failed to hook Present!\n" );
 			}
 
+			if( DetourAttach( &( PVOID & )m_pOriginalBeginScene, Hook_BeginScene ) != NO_ERROR )
+			{
+				PSU_LOG( "Failed to hook BeginScene!\n" );
+			}
+
 			if( DetourAttach( &( PVOID & )m_pOriginalEndScene, Hook_EndScene ) != NO_ERROR )
 			{
 				PSU_LOG( "Failed to hook EndScene!\n" );
 			}
 
-			PSUVR::System::Get().OnDeviceCreated( pDevice );
-
-			/*if( DetourAttach(&( PVOID & )m_pOriginalReset, Hook_Reset) != NO_ERROR )
-			{
-				printf( "Failed to hook Reset!\n" );
-			}
-
-			if( DetourAttach( &( PVOID & )m_pOriginalDrawPrimitive, Hook_DrawPrimitive ) != NO_ERROR )
-			{
-				printf( "Failed to hook DrawPrimitive!\n" );
-			}
-
-			if( DetourAttach( &( PVOID & )m_pOriginalDrawIndexedPrimitive, Hook_DrawIndexedPrimitive ) != NO_ERROR )
-			{
-				printf( "Failed to hook DrawIndexedPrimitive!\n" );
-			}
-
-			if( DetourAttach( &( PVOID & )m_pOriginalDrawPrimitiveUP, Hook_DrawPrimitiveUP ) != NO_ERROR )
-			{
-				printf( "Failed to hook DrawPrimitiveUP!\n" );
-			}
-
-			if( DetourAttach( &( PVOID & )m_pOriginalDrawIndexedPrimitiveUP, Hook_DrawIndexedPrimitiveUP ) != NO_ERROR )
-			{
-				printf( "Failed to hook DrawIndexedPrimitiveUP!\n" );
-			}
-
-			if( DetourAttach( &( PVOID & )m_pOriginalCreateAdditionalSwapChain, Hook_CreateAdditionalSwapChain ) != NO_ERROR )
-			{
-				printf( "Failed to hook CreateAdditionalSwapChain!\n" );
-			}
-
 			if( DetourAttach( &( PVOID & )m_pOriginalSetTransform, Hook_SetTransform ) != NO_ERROR )
 			{
-				printf( "Failed to hook SetTransform!\n" );
-			}
-
-			if( DetourAttach( &( PVOID & )m_pOriginalSetViewport, Hook_SetViewport ) != NO_ERROR )
-			{
-				printf( "Failed to hook SetViewport!\n" );
+				PSU_LOG( "Failed to hook SetTransform!\n" );
 			}
 
 			if( DetourAttach( &( PVOID & )m_pOriginalSetRenderTarget, Hook_SetRenderTarget ) != NO_ERROR )
 			{
-				printf( "Failed to hook SetRenderTarget!\n" );
-			}*/
+				PSU_LOG( "Failed to hook SetRenderTarget!\n" );
+			}
+
+			// Gated DIP sampling while inside PSU_SceneMode1_Callback (pre-UI only).
+			if( DetourAttach( &( PVOID & )m_pOriginalDrawIndexedPrimitive, Hook_DrawIndexedPrimitive ) != NO_ERROR )
+			{
+				PSU_LOG( "Failed to hook DrawIndexedPrimitive!\n" );
+			}
+
+			// Render-pass tracing: non-indexed draws and shader-constant uploads.
+			if( DetourAttach( &( PVOID & )m_pOriginalDrawPrimitive, Hook_DrawPrimitive ) != NO_ERROR )
+			{
+				PSU_LOG( "Failed to hook DrawPrimitive!\n" );
+			}
+			if( DetourAttach( &( PVOID & )m_pOriginalDrawPrimitiveUP, Hook_DrawPrimitiveUP ) != NO_ERROR )
+			{
+				PSU_LOG( "Failed to hook DrawPrimitiveUP!\n" );
+			}
+			if( DetourAttach( &( PVOID & )m_pOriginalSetVertexShaderConstantF, Hook_SetVertexShaderConstantF ) != NO_ERROR )
+			{
+				PSU_LOG( "Failed to hook SetVertexShaderConstantF!\n" );
+			}
+
+			PSUVR::System::Get().OnDeviceCreated( pDevice );
 
 			HRESULT result = DetourTransactionCommit();
 			if( result != NO_ERROR )
@@ -335,20 +327,27 @@ HRESULT APIENTRY PSUOverlay::Hook_Reset( LPDIRECT3DDEVICE9 pDevice, D3DPRESENT_P
 
 HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitive( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, UINT StartVertex, UINT PrimitiveCount )
 {
+	FrameTrace::OnDrawPrimitive( false );
 	return m_pOriginalDrawPrimitive( pDevice, PrimitiveType, StartVertex, PrimitiveCount );
+}
+
+HRESULT APIENTRY PSUOverlay::Hook_SetVertexShaderConstantF( LPDIRECT3DDEVICE9 pDevice, UINT StartRegister, CONST float *pConstantData, UINT Vector4fCount )
+{
+	FrameTrace::OnVertexShaderConstantF( StartRegister, Vector4fCount, _ReturnAddress() );
+	return m_pOriginalSetVertexShaderConstantF( pDevice, StartRegister, pConstantData, Vector4fCount );
 }
 
 HRESULT APIENTRY PSUOverlay::Hook_DrawIndexedPrimitive( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, INT BaseVertexIndex, UINT MinIndex, UINT NumVertices, UINT StartIndex, UINT PrimitiveCount )
 {
-	HRESULT hr = m_pOriginalDrawIndexedPrimitive(
+	FrameTrace::OnDrawIndexed( _ReturnAddress() );
+	return m_pOriginalDrawIndexedPrimitive(
 		pDevice, PrimitiveType, BaseVertexIndex, MinIndex, NumVertices, StartIndex, PrimitiveCount
 	);
-
-	return hr;
 }
 
 HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount, const void *pVertexStreamZeroData, UINT VertexStreamZeroStride )
 {
+	FrameTrace::OnDrawPrimitive( true );
 	return m_pOriginalDrawPrimitiveUP( pDevice, PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride );
 }
 
@@ -378,6 +377,12 @@ void PrintMatrix( const Matrix4x4 &matrix, const char *name )
 	printf( "\n" );
 }
 
+HRESULT APIENTRY PSUOverlay::Hook_BeginScene( LPDIRECT3DDEVICE9 pDevice )
+{
+	FrameTrace::OnBeginScene( _ReturnAddress() );
+	return m_pOriginalBeginScene( pDevice );
+}
+
 HRESULT APIENTRY PSUOverlay::Hook_EndScene( LPDIRECT3DDEVICE9 pDevice )
 {
 	static bool s_logged = false;
@@ -386,6 +391,8 @@ HRESULT APIENTRY PSUOverlay::Hook_EndScene( LPDIRECT3DDEVICE9 pDevice )
 		s_logged = true;
 		PSU_LOG( "EndScene hooked (first call) device=%p\n", pDevice );
 	}
+
+	FrameTrace::OnEndScene( _ReturnAddress() );
 
 	if( !m_bInitialized )
 	{
@@ -431,6 +438,8 @@ HRESULT APIENTRY PSUOverlay::Hook_Present( LPDIRECT3DDEVICE9 pDevice, const RECT
 		s_logged = true;
 		PSU_LOG( "Present hooked (first call) device=%p\n", pDevice );
 	}
+
+	FrameTrace::OnPresent();
 
 	// Capture BB + GPU fence BEFORE Present; OpenXR WaitFrame AFTER so the
 	// monitor is not blocked / blacked out by the VR compositor.
@@ -526,6 +535,7 @@ HRESULT APIENTRY PSUOverlay::Hook_Swapchain_Release( IDirect3DSwapChain9 *pSwapC
 
 HRESULT APIENTRY PSUOverlay::Hook_SetTransform( LPDIRECT3DDEVICE9 pDevice, D3DTRANSFORMSTATETYPE State, const D3DMATRIX *pMatrix )
 {
+	FrameTrace::OnSetTransform( State, pMatrix, _ReturnAddress() );
 	return m_pOriginalSetTransform( pDevice, State, pMatrix );
 }
 
@@ -537,6 +547,7 @@ HRESULT APIENTRY PSUOverlay::Hook_SetViewport( LPDIRECT3DDEVICE9 pDevice, CONST 
 
 HRESULT APIENTRY PSUOverlay::Hook_SetRenderTarget( LPDIRECT3DDEVICE9 pDevice, DWORD RenderTargetIndex, IDirect3DSurface9 *pRenderTarget )
 {
+	FrameTrace::OnSetRenderTarget( pDevice, RenderTargetIndex, pRenderTarget, _ReturnAddress() );
 	return m_pOriginalSetRenderTarget( pDevice, RenderTargetIndex, pRenderTarget );
 }
 

@@ -2,6 +2,7 @@
 
 #include "../PSUEx.h"
 #include "../Misc/Log.h"
+#include "../PSUOverlay/FrameTrace.h"
 
 namespace TCameraTaskPlay
 {
@@ -94,6 +95,7 @@ namespace TCameraTaskPlay
 		{
 			s_logged = true;
 			PSU_LOG( "TCameraTaskPlay_Update @ 0x0048DA90 first hit (this=%p)\n", ( void * )( uintptr_t )thisPtr );
+			FrameTrace::NotifyGameplay();
 		}
 
 		Global::cameraPosition = camera->m_position;

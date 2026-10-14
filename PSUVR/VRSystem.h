@@ -1,5 +1,7 @@
 #pragma once
 
+#include "VRRuntime.h"
+
 struct IDirect3D9;
 struct IDirect3DDevice9;
 struct ID3D11Device;
@@ -26,6 +28,10 @@ namespace PSUVR
 
 		bool Enabled() const { return m_enabled; }
 
+		// Stereo inputs for StereoRenderer; null/false until OpenXR and the bridge are live.
+		D3D11Bridge *StereoBridge() const;
+		bool NextViews( EyePose out[ 2 ] ) const;
+
 	private:
 		System() = default;
 
@@ -44,6 +50,10 @@ namespace PSUVR
 		bool m_bridgeReady = false;
 		bool m_loggedVirtualScreen = false;
 		bool m_capturedThisFrame = false;
+		bool m_haveNextViews = false;
+		bool m_loggedStereo = false;
+		bool m_recenterKeyDown = false;
+		EyePose m_nextViews[ 2 ]{};
 
 		IDirect3DDevice9 *m_device = nullptr;
 		ID3D11Device *m_d3d11 = nullptr;

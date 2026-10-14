@@ -250,43 +250,81 @@ namespace PSUVR
 
 		for( int eye = 0; eye < 2; ++eye )
 		{
-			XrSwapchainCreateInfo sci{ XR_TYPE_SWAPCHAIN_CREATE_INFO };
-			sci.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT;
-			sci.format = m_swapchainFormat;
-			sci.sampleCount = 1;
-			sci.width = static_cast< uint32_t >( width );
-			sci.height = static_cast< uint32_t >( height );
-			sci.faceCount = 1;
-			sci.arraySize = 1;
-			sci.mipCount = 1;
-
-			XrSwapchain swapchain = XR_NULL_HANDLE;
-			XrResult r = xrCreateSwapchain( session, &sci, &swapchain );
-			if( XR_FAILED( r ) )
+			if( !CreateSwapchain( width, height, m_swapchain[ eye ], m_swapchainImages[ eye ], m_swapchainImageCount[ eye ] ) )
 			{
-				PSU_LOG( "OpenXR: xrCreateSwapchain(%d) failed %s (0x%08X) fmt=%lld %dx%d\n",
-					eye, XrResultString( r ), ( unsigned )r, ( long long )m_swapchainFormat,
-					( int )sci.width, ( int )sci.height );
 				DestroySwapchains();
 				return false;
 			}
-			m_swapchain[ eye ] = static_cast< uint64_t >( swapchain );
-
-			uint32_t count = 0;
-			xrEnumerateSwapchainImages( swapchain, 0, &count, nullptr );
-			auto *images = new XrSwapchainImageD3D11KHR[ count ];
-			for( uint32_t i = 0; i < count; ++i )
-			{
-				images[ i ] = { XR_TYPE_SWAPCHAIN_IMAGE_D3D11_KHR };
-			}
-			xrEnumerateSwapchainImages( swapchain, count, &count, reinterpret_cast< XrSwapchainImageBaseHeader * >( images ) );
-			m_swapchainImageCount[ eye ] = count;
-			m_swapchainImages[ eye ] = images;
 		}
 
-		PSU_LOG( "OpenXR: swapchains %dx%d fmt=%lld\n",
+		PSU_LOG( "OpenXR: eye swapchains %dx%d fmt=%lld\n",
 			m_swapchainWidth, m_swapchainHeight, ( long long )m_swapchainFormat );
 		return true;
+	}
+
+	bool OpenXRRuntime::CreateSwapchain( int32_t width, int32_t height, uint64_t &handle, void *&images, uint32_t &imageCount )
+	{
+		XrSwapchainCreateInfo sci{ XR_TYPE_SWAPCHAIN_CREATE_INFO };
+		sci.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT;
+		sci.format = m_swapchainFormat;
+		sci.sampleCount = 1;
+		sci.width = static_cast< uint32_t >( width );
+		sci.height = static_cast< uint32_t >( height );
+		sci.faceCount = 1;
+		sci.arraySize = 1;
+		sci.mipCount = 1;
+
+		XrSwapchain swapchain = XR_NULL_HANDLE;
+		XrResult r = xrCreateSwapchain( static_cast< XrSession >( m_session ), &sci, &swapchain );
+		if( XR_FAILED( r ) )
+		{
+			PSU_LOG( "OpenXR: xrCreateSwapchain failed %s (0x%08X) fmt=%lld %dx%d\n",
+				XrResultString( r ), ( unsigned )r, ( long long )m_swapchainFormat, width, height );
+			return false;
+		}
+		handle = static_cast< uint64_t >( swapchain );
+
+		uint32_t count = 0;
+		xrEnumerateSwapchainImages( swapchain, 0, &count, nullptr );
+		auto *list = new XrSwapchainImageD3D11KHR[ count ];
+		for( uint32_t i = 0; i < count; ++i )
+		{
+			list[ i ] = { XR_TYPE_SWAPCHAIN_IMAGE_D3D11_KHR };
+		}
+		xrEnumerateSwapchainImages( swapchain, count, &count, reinterpret_cast< XrSwapchainImageBaseHeader * >( list ) );
+		imageCount = count;
+		images = list;
+		return true;
+	}
+
+	bool OpenXRRuntime::CreatePanelSwapchain( int32_t width, int32_t height )
+	{
+		DestroyPanelSwapchain();
+		if( !CreateSwapchain( width, height, m_panelSwapchain, m_panelImages, m_panelImageCount ) )
+		{
+			return false;
+		}
+		m_panelWidth = width;
+		m_panelHeight = height;
+		PSU_LOG( "OpenXR: panel swapchain %dx%d\n", width, height );
+		return true;
+	}
+
+	void OpenXRRuntime::DestroyPanelSwapchain()
+	{
+		if( m_panelImages )
+		{
+			delete[] reinterpret_cast< XrSwapchainImageD3D11KHR * >( m_panelImages );
+			m_panelImages = nullptr;
+		}
+		m_panelImageCount = 0;
+		if( m_panelSwapchain )
+		{
+			xrDestroySwapchain( static_cast< XrSwapchain >( m_panelSwapchain ) );
+			m_panelSwapchain = 0;
+		}
+		m_panelWidth = 0;
+		m_panelHeight = 0;
 	}
 
 	bool OpenXRRuntime::ResizeSwapchains( int32_t width, int32_t height )
@@ -295,11 +333,11 @@ namespace PSUVR
 		{
 			return false;
 		}
-		if( width == m_swapchainWidth && height == m_swapchainHeight && m_swapchain[ 0 ] )
+		if( width == m_panelWidth && height == m_panelHeight && m_panelSwapchain )
 		{
 			return true;
 		}
-		return CreateSwapchains( width, height );
+		return CreatePanelSwapchain( width, height );
 	}
 
 	bool OpenXRRuntime::Init( ID3D11Device *d3d11 )
@@ -308,8 +346,8 @@ namespace PSUVR
 		m_device = d3d11;
 		d3d11->GetImmediateContext( &m_context );
 
-		// Placeholder size; VRSystem resizes to the game back buffer for virtual screen.
-		// 0x0 → runtime recommended eye size (solid-color / until BB resize).
+		// Eye swapchains at the runtime's recommended size; the panel swapchain is
+		// created later at the game back-buffer size (ResizeSwapchains).
 		if( !LoadLoader() || !CreateInstance() || !CreateSession( d3d11 ) || !CreateSwapchains( 0, 0 ) )
 		{
 			Shutdown();
@@ -327,6 +365,7 @@ namespace PSUVR
 		m_sessionRunning = false;
 		m_loggedSubmitFormats = false;
 
+		DestroyPanelSwapchain();
 		DestroySwapchains();
 		if( m_blitRS ) { m_blitRS->Release(); m_blitRS = nullptr; }
 		if( m_blitSampler ) { m_blitSampler->Release(); m_blitSampler = nullptr; }
@@ -446,6 +485,7 @@ namespace PSUVR
 			return false;
 		}
 		m_displayTime = frameState.predictedDisplayTime;
+		m_displayPeriod = frameState.predictedDisplayPeriod;
 		m_shouldRender = frameState.shouldRender;
 
 		XrFrameBeginInfo beginInfo{ XR_TYPE_FRAME_BEGIN_INFO };
@@ -743,10 +783,22 @@ namespace PSUVR
 			return false;
 		}
 
-		// Mono virtual screen: fill ONE swapchain, submit as a quad (not stereo
-		// projection). Blitting the same BB into both eyes with different poses
-		// looks like two copies of the player stitched together.
-		XrSwapchain swapchain = static_cast< XrSwapchain >( m_swapchain[ 0 ] );
+		// Mono virtual screen: one quad layer, not a stereo projection. Blitting
+		// the same BB into both eyes with different poses looks like two copies
+		// of the player stitched together.
+		if( !m_panelSwapchain || !BlitIntoSwapchain( m_panelSwapchain, m_panelImages, src ) )
+		{
+			return false;
+		}
+		m_context->Flush();
+		m_clearedThisFrame = true;
+		m_submitQuadLayer = true;
+		return true;
+	}
+
+	bool OpenXRRuntime::BlitIntoSwapchain( uint64_t swapchainHandle, void *imageList, ID3D11Texture2D *src )
+	{
+		XrSwapchain swapchain = static_cast< XrSwapchain >( swapchainHandle );
 		XrSwapchainImageAcquireInfo ai{ XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO };
 		uint32_t index = 0;
 		if( XR_FAILED( xrAcquireSwapchainImage( swapchain, &ai, &index ) ) )
@@ -762,7 +814,7 @@ namespace PSUVR
 			return false;
 		}
 
-		auto *images = reinterpret_cast< XrSwapchainImageD3D11KHR * >( m_swapchainImages[ 0 ] );
+		auto *images = reinterpret_cast< XrSwapchainImageD3D11KHR * >( imageList );
 		ID3D11Texture2D *dst = images[ index ].texture;
 
 		D3D11_TEXTURE2D_DESC srcDesc{};
@@ -772,7 +824,7 @@ namespace PSUVR
 		if( !m_loggedSubmitFormats )
 		{
 			m_loggedSubmitFormats = true;
-			PSU_LOG( "OpenXR: quad submit src=%ux%u fmt=%u dst=%ux%u fmt=%u\n",
+			PSU_LOG( "OpenXR: first submit blit src=%ux%u fmt=%u dst=%ux%u fmt=%u\n",
 				srcDesc.Width, srcDesc.Height, ( unsigned )srcDesc.Format,
 				dstDesc.Width, dstDesc.Height, ( unsigned )dstDesc.Format );
 		}
@@ -794,10 +846,77 @@ namespace PSUVR
 
 		XrSwapchainImageReleaseInfo ri{ XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
 		xrReleaseSwapchainImage( swapchain, &ri );
+		return true;
+	}
+
+	bool OpenXRRuntime::SubmitStereo( ID3D11Texture2D *const eyes[ 2 ], const EyePose poses[ 2 ] )
+	{
+		if( !m_context || !m_frameStarted || !m_shouldRender || !eyes[ 0 ] || !eyes[ 1 ] )
+		{
+			return false;
+		}
+		for( int eye = 0; eye < 2; ++eye )
+		{
+			if( !BlitIntoSwapchain( m_swapchain[ eye ], m_swapchainImages[ eye ], eyes[ eye ] ) )
+			{
+				return false;
+			}
+			m_submittedPoses[ eye ] = poses[ eye ];
+		}
 		m_context->Flush();
 		m_clearedThisFrame = true;
-		m_submitQuadLayer = true;
+		m_submitStereo = true;
 		return true;
+	}
+
+	bool OpenXRRuntime::LocateNextViews( EyePose out[ 2 ] )
+	{
+		if( !m_frameStarted || !m_space )
+		{
+			return false;
+		}
+		XrViewLocateInfo locateInfo{ XR_TYPE_VIEW_LOCATE_INFO };
+		locateInfo.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+		locateInfo.displayTime = m_displayTime + m_displayPeriod;
+		locateInfo.space = static_cast< XrSpace >( m_space );
+
+		XrViewState viewState{ XR_TYPE_VIEW_STATE };
+		uint32_t viewCount = 0;
+		XrView views[ 2 ]{ { XR_TYPE_VIEW }, { XR_TYPE_VIEW } };
+		if( XR_FAILED( xrLocateViews( static_cast< XrSession >( m_session ), &locateInfo, &viewState, 2, &viewCount, views ) ) || viewCount < 2 )
+		{
+			return false;
+		}
+		const XrViewStateFlags needed = XR_VIEW_STATE_POSITION_VALID_BIT | XR_VIEW_STATE_ORIENTATION_VALID_BIT;
+		if( ( viewState.viewStateFlags & needed ) != needed )
+		{
+			return false;
+		}
+		for( int eye = 0; eye < 2; ++eye )
+		{
+			out[ eye ].position[ 0 ] = views[ eye ].pose.position.x;
+			out[ eye ].position[ 1 ] = views[ eye ].pose.position.y;
+			out[ eye ].position[ 2 ] = views[ eye ].pose.position.z;
+			out[ eye ].orientation[ 0 ] = views[ eye ].pose.orientation.x;
+			out[ eye ].orientation[ 1 ] = views[ eye ].pose.orientation.y;
+			out[ eye ].orientation[ 2 ] = views[ eye ].pose.orientation.z;
+			out[ eye ].orientation[ 3 ] = views[ eye ].pose.orientation.w;
+			out[ eye ].fovAngleLeft = views[ eye ].fov.angleLeft;
+			out[ eye ].fovAngleRight = views[ eye ].fov.angleRight;
+			out[ eye ].fovAngleUp = views[ eye ].fov.angleUp;
+			out[ eye ].fovAngleDown = views[ eye ].fov.angleDown;
+		}
+		return true;
+	}
+
+	void OpenXRRuntime::SetPanelWorldPose( bool enable, const float position[ 3 ], const float orientation[ 4 ] )
+	{
+		m_panelWorldLocked = enable;
+		if( enable )
+		{
+			std::memcpy( m_panelPosition, position, sizeof( m_panelPosition ) );
+			std::memcpy( m_panelOrientation, orientation, sizeof( m_panelOrientation ) );
+		}
 	}
 
 	bool OpenXRRuntime::EndFrame()
@@ -814,50 +933,44 @@ namespace PSUVR
 		XrCompositionLayerProjection projLayer{ XR_TYPE_COMPOSITION_LAYER_PROJECTION };
 		XrCompositionLayerProjectionView projViews[ 2 ]{};
 		XrCompositionLayerQuad quadLayer{ XR_TYPE_COMPOSITION_LAYER_QUAD };
-		const XrCompositionLayerBaseHeader *layers[ 1 ]{};
+		const XrCompositionLayerBaseHeader *layers[ 2 ]{};
 		uint32_t layerCount = 0;
 
 		if( m_shouldRender && m_clearedThisFrame )
 		{
-			if( m_submitQuadLayer && viewSpace )
+			const bool stereo = m_submitStereo;
+			const bool clearOnly = !m_submitStereo && !m_submitQuadLayer;
+			if( stereo || clearOnly )
 			{
-				const float aspect = ( m_swapchainHeight > 0 )
-					? ( static_cast< float >( m_swapchainWidth ) / static_cast< float >( m_swapchainHeight ) )
-					: ( 16.0f / 9.0f );
-				const float heightM = m_quadHeight;
-				const float widthM = heightM * aspect;
-
-				quadLayer.layerFlags = 0;
-				quadLayer.space = viewSpace;
-				quadLayer.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
-				quadLayer.subImage.swapchain = static_cast< XrSwapchain >( m_swapchain[ 0 ] );
-				quadLayer.subImage.imageRect.offset = { 0, 0 };
-				quadLayer.subImage.imageRect.extent = { m_swapchainWidth, m_swapchainHeight };
-				quadLayer.pose.orientation = { 0.0f, 0.0f, 0.0f, 1.0f };
-				// OpenXR VIEW space looks down -Z.
-				quadLayer.pose.position = { 0.0f, 0.0f, -m_quadDistance };
-				quadLayer.size = { widthM, heightM };
-
-				layers[ 0 ] = reinterpret_cast< const XrCompositionLayerBaseHeader * >( &quadLayer );
-				layerCount = 1;
-			}
-			else
-			{
-				XrViewLocateInfo locateInfo{ XR_TYPE_VIEW_LOCATE_INFO };
-				locateInfo.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
-				locateInfo.displayTime = m_displayTime;
-				locateInfo.space = localSpace;
-
-				XrViewState viewState{ XR_TYPE_VIEW_STATE };
-				uint32_t viewCount = 2;
-				XrView views[ 2 ]{ { XR_TYPE_VIEW }, { XR_TYPE_VIEW } };
-				xrLocateViews( session, &locateInfo, &viewState, 2, &viewCount, views );
+				XrView located[ 2 ]{ { XR_TYPE_VIEW }, { XR_TYPE_VIEW } };
+				if( clearOnly )
+				{
+					XrViewLocateInfo locateInfo{ XR_TYPE_VIEW_LOCATE_INFO };
+					locateInfo.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+					locateInfo.displayTime = m_displayTime;
+					locateInfo.space = localSpace;
+					XrViewState viewState{ XR_TYPE_VIEW_STATE };
+					uint32_t viewCount = 2;
+					xrLocateViews( session, &locateInfo, &viewState, 2, &viewCount, located );
+				}
 
 				for( int eye = 0; eye < 2; ++eye )
 				{
 					projViews[ eye ] = { XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW };
-					projViews[ eye ].pose = views[ eye ].pose;
-					projViews[ eye ].fov = views[ eye ].fov;
+					if( stereo )
+					{
+						// Submit the pose each eye was rendered with so the compositor
+						// reprojects from where the image was actually drawn.
+						const EyePose &p = m_submittedPoses[ eye ];
+						projViews[ eye ].pose.position = { p.position[ 0 ], p.position[ 1 ], p.position[ 2 ] };
+						projViews[ eye ].pose.orientation = { p.orientation[ 0 ], p.orientation[ 1 ], p.orientation[ 2 ], p.orientation[ 3 ] };
+						projViews[ eye ].fov = { p.fovAngleLeft, p.fovAngleRight, p.fovAngleUp, p.fovAngleDown };
+					}
+					else
+					{
+						projViews[ eye ].pose = located[ eye ].pose;
+						projViews[ eye ].fov = located[ eye ].fov;
+					}
 					projViews[ eye ].subImage.swapchain = static_cast< XrSwapchain >( m_swapchain[ eye ] );
 					projViews[ eye ].subImage.imageRect.offset = { 0, 0 };
 					projViews[ eye ].subImage.imageRect.extent = { m_swapchainWidth, m_swapchainHeight };
@@ -866,8 +979,37 @@ namespace PSUVR
 				projLayer.space = localSpace;
 				projLayer.viewCount = 2;
 				projLayer.views = projViews;
-				layers[ 0 ] = reinterpret_cast< const XrCompositionLayerBaseHeader * >( &projLayer );
-				layerCount = 1;
+				layers[ layerCount++ ] = reinterpret_cast< const XrCompositionLayerBaseHeader * >( &projLayer );
+			}
+
+			if( m_submitQuadLayer && m_panelSwapchain && ( viewSpace || m_panelWorldLocked ) )
+			{
+				const float aspect = ( m_panelHeight > 0 )
+					? ( static_cast< float >( m_panelWidth ) / static_cast< float >( m_panelHeight ) )
+					: ( 16.0f / 9.0f );
+				const float heightM = m_quadHeight;
+				const float widthM = heightM * aspect;
+
+				quadLayer.layerFlags = 0;
+				quadLayer.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
+				quadLayer.subImage.swapchain = static_cast< XrSwapchain >( m_panelSwapchain );
+				quadLayer.subImage.imageRect.offset = { 0, 0 };
+				quadLayer.subImage.imageRect.extent = { m_panelWidth, m_panelHeight };
+				if( m_panelWorldLocked )
+				{
+					quadLayer.space = localSpace;
+					quadLayer.pose.position = { m_panelPosition[ 0 ], m_panelPosition[ 1 ], m_panelPosition[ 2 ] };
+					quadLayer.pose.orientation = { m_panelOrientation[ 0 ], m_panelOrientation[ 1 ], m_panelOrientation[ 2 ], m_panelOrientation[ 3 ] };
+				}
+				else
+				{
+					// OpenXR VIEW space looks down -Z.
+					quadLayer.space = viewSpace;
+					quadLayer.pose.orientation = { 0.0f, 0.0f, 0.0f, 1.0f };
+					quadLayer.pose.position = { 0.0f, 0.0f, -m_quadDistance };
+				}
+				quadLayer.size = { widthM, heightM };
+				layers[ layerCount++ ] = reinterpret_cast< const XrCompositionLayerBaseHeader * >( &quadLayer );
 			}
 		}
 
@@ -881,6 +1023,7 @@ namespace PSUVR
 		m_frameStarted = false;
 		m_clearedThisFrame = false;
 		m_submitQuadLayer = false;
+		m_submitStereo = false;
 		if( XR_FAILED( r ) )
 		{
 			PSU_LOG( "OpenXR: xrEndFrame failed %s\n", XrResultString( r ) );

@@ -15,7 +15,6 @@ $candidates = @(
 $dll = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 if( -not $dll ) { throw "PSUExD.dll not found. Build Debug|x86 first." }
 
-Copy-Item $dll ( Join-Path $GameDir "PSUEx.dll" ) -Force
 Copy-Item $dll ( Join-Path $GameDir "PSUExD.dll" ) -Force
 
 $loaderDll = Join-Path $root "tools\dinput8_proxy\dinput8.dll"
@@ -37,4 +36,4 @@ if( Test-Path $d3dx ) {
 }
 
 Write-Host "Deployed to $GameDir"
-Write-Host "Launch PSUC.exe, then check psuex.log / dinput8_proxy.log"
+Write-Host "Launch via online.exe (not PSUC.exe directly), then check psuex.log / dinput8_proxy.log"
