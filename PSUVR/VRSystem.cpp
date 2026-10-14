@@ -383,7 +383,8 @@ namespace PSUVR
 				( !stereoSubmitted || Config::Get().vr.m_stereoPanel ) )
 			{
 				const float dist = Config::Get().vr.m_hudDistance;
-				const float height = ( stereoSubmitted ? 0.6f : 1.2f ) * Config::Get().vr.m_hudSize;
+				// Menus / 2D: large head-locked screen. Stereo+panel: small world-locked stand-in.
+				const float height = ( stereoSubmitted ? 0.6f : 1.4f ) * Config::Get().vr.m_hudSize;
 				m_xr->SetVirtualScreenPlacement( dist, height );
 				float panelPosition[ 3 ]{};
 				float panelOrientation[ 4 ]{ 0.0f, 0.0f, 0.0f, 1.0f };
@@ -398,8 +399,9 @@ namespace PSUVR
 					m_loggedVirtualScreen = true;
 					UINT w = 0, h = 0;
 					GetBackBufferSize( m_device, w, h );
-					PSU_LOG( "VR: virtual-screen quad active (bb %ux%u, xr %dx%d, dist=%.2f h=%.2f)\n",
-						w, h, m_xr->SwapchainWidth(), m_xr->SwapchainHeight(), dist, height );
+					const unsigned mode = *reinterpret_cast< unsigned * >( 0x00B90EA8 );
+					PSU_LOG( "VR: 2D virtual screen mode=%u (bb %ux%u, xr %dx%d, dist=%.2f h=%.2f)\n",
+						mode, w, h, m_xr->SwapchainWidth(), m_xr->SwapchainHeight(), dist, height );
 					LogD3D9ExCompatStats();
 				}
 			}

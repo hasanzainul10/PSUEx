@@ -30,6 +30,7 @@ namespace FrameTrace
 	// and 0x004FDBC0 (layers 0x2B-0x3F). Logs per-pass draw/UI/matrix counts.
 	void PassEnter( unsigned passAddress );
 	void PassLeave();
+	unsigned CurrentPassAddress();
 	void OnDrawPrimitive( bool userPointer );
 	void OnVertexShaderConstantF( unsigned startRegister, unsigned vectorCount, void *returnAddress );
 

@@ -56,8 +56,9 @@ Config::Config()
 	vr.m_inputMode = "gamepad";
 	vr.m_worldScale = 1.0f;
 	vr.m_ipdScale = 1.0f;
-	vr.m_hudDistance = 2.0f;
+	vr.m_hudDistance = 2.5f;
 	vr.m_hudSize = 1.0f;
+	vr.m_stereoMode = 5;
 	vr.m_snapTurn = true;
 	vr.m_comfortVignette = true;
 }
@@ -144,6 +145,7 @@ void Config::SaveToFile()
 	root[ "vr" ][ "snapTurn" ] = vr.m_snapTurn;
 	root[ "vr" ][ "comfortVignette" ] = vr.m_comfortVignette;
 	root[ "vr" ][ "stereo" ] = vr.m_stereo;
+	root[ "vr" ][ "stereoMode" ] = vr.m_stereoMode;
 	root[ "vr" ][ "stereoSkipScreenQuads" ] = vr.m_stereoSkipScreenQuads;
 	root[ "vr" ][ "stereoPanel" ] = vr.m_stereoPanel;
 	root[ "vr" ][ "debugEyeShift" ] = vr.m_debugEyeShift;
@@ -405,6 +407,8 @@ void Config::LoadFromFile()
 			vr.m_comfortVignette = vrNode[ "comfortVignette" ].get<bool>();
 		if( vrNode.contains( "stereo" ) && vrNode[ "stereo" ].is_boolean() )
 			vr.m_stereo = vrNode[ "stereo" ].get<bool>();
+		if( vrNode.contains( "stereoMode" ) && vrNode[ "stereoMode" ].is_number() )
+			vr.m_stereoMode = vrNode[ "stereoMode" ].get<unsigned>();
 		if( vrNode.contains( "stereoSkipScreenQuads" ) && vrNode[ "stereoSkipScreenQuads" ].is_boolean() )
 			vr.m_stereoSkipScreenQuads = vrNode[ "stereoSkipScreenQuads" ].get<bool>();
 		if( vrNode.contains( "stereoPanel" ) && vrNode[ "stereoPanel" ].is_boolean() )

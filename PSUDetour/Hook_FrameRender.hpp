@@ -35,10 +35,18 @@ namespace FrameRender
 	{
 		static bool s_logged = false;
 		static bool s_gameplayModeLogged = false;
+		static unsigned s_lastMode = 0xFFFFFFFFu;
+		const unsigned mode = PSUMemory::ReadAbsoluteMemory< unsigned >( 0x00B90EA8 );
 		if( !s_logged )
 		{
 			s_logged = true;
+			s_lastMode = mode;
 			LogMode( "first" );
+		}
+		else if( mode != s_lastMode )
+		{
+			s_lastMode = mode;
+			LogMode( "mode-change" );
 		}
 		if( !s_gameplayModeLogged && FrameTrace::GameplayArmed() )
 		{
@@ -186,7 +194,12 @@ namespace FrameRender
 			RunPassA();
 		}
 		s_passAInFrame = 0;
-		PSUVR::StereoRenderer::Get().RenderEyes( PSUOverlay::Device(), pOriginalPassA );
+		// Stereo only in the configured scene mode (default 5 = town). Menus stay mono.
+		const unsigned mode = PSUMemory::ReadAbsoluteMemory< unsigned >( 0x00B90EA8 );
+		if( vr.m_enabled && vr.m_stereo && ( vr.m_stereoMode == 0 || mode == vr.m_stereoMode ) )
+		{
+			PSUVR::StereoRenderer::Get().RenderEyes( PSUOverlay::Device(), pOriginalPassA );
+		}
 	}
 
 	void __cdecl Hook_PassB()

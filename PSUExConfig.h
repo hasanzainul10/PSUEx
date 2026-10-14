@@ -93,12 +93,14 @@ public:
 		std::string m_inputMode = "gamepad";
 		float m_worldScale = 1.0f;
 		float m_ipdScale = 1.0f;
-		float m_hudDistance = 2.0f;
+		float m_hudDistance = 2.5f;
 		float m_hudSize = 1.0f;
 		bool m_snapTurn = true;
 		bool m_comfortVignette = true;
 		// Render the 3D pass per eye (projection layer) with the game frame as a panel.
 		bool m_stereo = true;
+		// Scene mode that gets stereo eyes (5 = town). 0 = every mode (old behavior).
+		unsigned m_stereoMode = 5;
 		// During eye passes, skip XYZRHW quads that sample an RT filled only by the flat pass
 		// (glare / afterimage ghosts the mono camera over stereo). Shadows rewritten per eye stay.
 		bool m_stereoSkipScreenQuads = true;

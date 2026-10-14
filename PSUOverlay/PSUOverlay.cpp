@@ -385,7 +385,14 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3
 	{
 		verts = stretched;
 	}
-	return m_pOriginalDrawPrimitiveUP( pDevice, PrimitiveType, PrimitiveCount, verts, VertexStreamZeroStride );
+	const HRESULT hr = m_pOriginalDrawPrimitiveUP( pDevice, PrimitiveType, PrimitiveCount, verts, VertexStreamZeroStride );
+	if( SUCCEEDED( hr ) && FrameTrace::CurrentPassAddress() == 0x004FDBC0 )
+	{
+		PSUVR::StereoRenderer::MirrorPassBDrawToEyes( pDevice,
+			static_cast< unsigned >( PrimitiveType ), PrimitiveCount,
+			pVertexStreamZeroData, VertexStreamZeroStride );
+	}
+	return hr;
 }
 
 HRESULT APIENTRY PSUOverlay::Hook_DrawIndexedPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE Type, UINT MinVertexIndex, UINT NumVertices, UINT PrimitiveCount, const void *pIndexData, D3DFORMAT IndexDataFormat, const void *pVertexStreamZeroData, UINT VertexStreamZeroStride )

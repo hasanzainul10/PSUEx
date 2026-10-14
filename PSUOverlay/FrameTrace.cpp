@@ -253,6 +253,11 @@ namespace FrameTrace
 		}
 	}
 
+	unsigned CurrentPassAddress()
+	{
+		return s_curPass ? s_curPass->address : 0;
+	}
+
 	void PassLeave()
 	{
 		PassStats *p = s_curPass;

@@ -27,9 +27,21 @@ namespace PSUVR
 		const EyePose *RenderedViewSpacePoses() const { return m_viewSpacePoses; }
 		void ConsumeFrame() { m_hasFrame = false; }
 
+		unsigned EyeWidth() const { return m_lastEyeW; }
+		unsigned EyeHeight() const { return m_lastEyeH; }
+		unsigned GameWidth() const { return m_lastGameW; }
+		unsigned GameHeight() const { return m_lastGameH; }
+
 		// True while pass() runs for an eye. Used by D3D hooks to skip flat-sourced
 		// screen-space effect quads that would ghost the mono camera over stereo.
 		static bool InEyePass();
+		// True while UI is being replayed onto an eye RT (same-frame HUD).
+		static bool InHudOverlay();
+
+		// Bind stretch/viewport tracking for HUD draws onto an eye (not a full eye pass).
+		static void BeginHudOverlay( IDirect3DSurface9 *eyeTarget, unsigned eyeW, unsigned eyeH,
+			unsigned gameW, unsigned gameH );
+		static void EndHudOverlay();
 
 		// Track RT textures written during the current eye pass (SetRT / StretchRect dest).
 		static void OnSetRenderTarget( IDirect3DSurface9 *target );
@@ -42,6 +54,10 @@ namespace PSUVR
 		// rewritten vertex buffer scaled to the eye RT. Otherwise return nullptr (use original).
 		static const void *StretchScreenQuadIfNeeded( IDirect3DDevice9 *device, unsigned primitiveType,
 			unsigned primitiveCount, const void *verts, unsigned stride, void *ret );
+
+		// After the game's own Pass B draw, copy that DP-UP onto both eye RTs (do not re-run Pass B).
+		static void MirrorPassBDrawToEyes( IDirect3DDevice9 *device, unsigned primitiveType,
+			unsigned primitiveCount, const void *verts, unsigned stride );
 
 		// True when RT0 is the current eye color target (shadow RTs return false).
 		static bool EyeColorTargetBound( IDirect3DDevice9 *device );
@@ -59,6 +75,10 @@ namespace PSUVR
 
 		bool m_hasFrame = false;
 		bool m_loggedFirst = false;
+		unsigned m_lastEyeW = 0;
+		unsigned m_lastEyeH = 0;
+		unsigned m_lastGameW = 0;
+		unsigned m_lastGameH = 0;
 		EyePose m_poses[ 2 ]{};
 		EyePose m_viewSpacePoses[ 2 ]{};
 	};
