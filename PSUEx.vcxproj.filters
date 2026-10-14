@@ -67,6 +67,12 @@
     <Filter Include="Source Files\PSUTranslation">
       <UniqueIdentifier>{8d3a5c7e-1f2b-4a6c-b8d9-4e6f8a0c2b35}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\PSUVR">
+      <UniqueIdentifier>{b2c3d4e5-f6a7-8901-bcde-f12345678901}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\PSUVR">
+      <UniqueIdentifier>{c3d4e5f6-a7b8-9012-cdef-123456789012}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
@@ -228,6 +234,27 @@
     <ClInclude Include="ExceptionHandler.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="PSUVR\VRSystem.h">
+      <Filter>Header Files\PSUVR</Filter>
+    </ClInclude>
+    <ClInclude Include="PSUVR\D3D9ExUpgrade.h">
+      <Filter>Header Files\PSUVR</Filter>
+    </ClInclude>
+    <ClInclude Include="PSUVR\D3D9ExCompat.h">
+      <Filter>Header Files\PSUVR</Filter>
+    </ClInclude>
+    <ClInclude Include="PSUVR\D3D11Bridge.h">
+      <Filter>Header Files\PSUVR</Filter>
+    </ClInclude>
+    <ClInclude Include="PSUVR\OpenXRRuntime.h">
+      <Filter>Header Files\PSUVR</Filter>
+    </ClInclude>
+    <ClInclude Include="PSUVR\VRRuntime.h">
+      <Filter>Header Files\PSUVR</Filter>
+    </ClInclude>
+    <ClInclude Include="Misc\Log.h">
+      <Filter>Header Files\Misc</Filter>
+    </ClInclude>
     <ClInclude Include="PSUDetour\Hook_00774F90.hpp">
       <Filter>Header Files\PSUFunction</Filter>
     </ClInclude>
@@ -331,6 +358,21 @@
     </ClCompile>
     <ClCompile Include="ExceptionHandler.cpp">
       <Filter>Header Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PSUVR\VRSystem.cpp">
+      <Filter>Source Files\PSUVR</Filter>
+    </ClCompile>
+    <ClCompile Include="PSUVR\D3D9ExUpgrade.cpp">
+      <Filter>Source Files\PSUVR</Filter>
+    </ClCompile>
+    <ClCompile Include="PSUVR\D3D9ExCompat.cpp">
+      <Filter>Source Files\PSUVR</Filter>
+    </ClCompile>
+    <ClCompile Include="PSUVR\D3D11Bridge.cpp">
+      <Filter>Source Files\PSUVR</Filter>
+    </ClCompile>
+    <ClCompile Include="PSUVR\OpenXRRuntime.cpp">
+      <Filter>Source Files\PSUVR</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

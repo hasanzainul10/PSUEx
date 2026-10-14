@@ -45,6 +45,21 @@ Config::Config()
 	camera.m_rotationSpeedV = 1.0f;
 	camera.m_refocusSpeed = Constant::Camera::REFOCUS_SPEED;
 	camera.m_turnAcceleration = Constant::Camera::TURN_ACCELERATION;
+
+	// VR (disabled by default — flat PSUEx unchanged)
+	vr.m_enabled = false;
+	vr.m_forceD3D9Ex = false; // only with CreateDeviceEx when vr.enabled
+	vr.m_d3d9exOnly = false;
+	vr.m_solidColorPrototype = false;
+	vr.m_runtime = "openxr";
+	vr.m_cameraMode = "thirdPerson";
+	vr.m_inputMode = "gamepad";
+	vr.m_worldScale = 1.0f;
+	vr.m_ipdScale = 1.0f;
+	vr.m_hudDistance = 2.0f;
+	vr.m_hudSize = 1.0f;
+	vr.m_snapTurn = true;
+	vr.m_comfortVignette = true;
 }
 
 Config::~Config()
@@ -114,6 +129,31 @@ void Config::SaveToFile()
 	root[ "camera" ][ "turnAcceleration" ] = camera.m_turnAcceleration;
 
 	root[ "camera" ][ "fov" ] = camera.m_fov;
+
+	root[ "vr" ][ "enabled" ] = vr.m_enabled;
+	root[ "vr" ][ "forceD3D9Ex" ] = vr.m_forceD3D9Ex;
+	root[ "vr" ][ "d3d9exOnly" ] = vr.m_d3d9exOnly;
+	root[ "vr" ][ "solidColorPrototype" ] = vr.m_solidColorPrototype;
+	root[ "vr" ][ "runtime" ] = vr.m_runtime;
+	root[ "vr" ][ "cameraMode" ] = vr.m_cameraMode;
+	root[ "vr" ][ "inputMode" ] = vr.m_inputMode;
+	root[ "vr" ][ "worldScale" ] = vr.m_worldScale;
+	root[ "vr" ][ "ipdScale" ] = vr.m_ipdScale;
+	root[ "vr" ][ "hudDistance" ] = vr.m_hudDistance;
+	root[ "vr" ][ "hudSize" ] = vr.m_hudSize;
+	root[ "vr" ][ "snapTurn" ] = vr.m_snapTurn;
+	root[ "vr" ][ "comfortVignette" ] = vr.m_comfortVignette;
+
+	// Sidecar so Clementine/other writers that rewrite config.json cannot wipe VR.
+	{
+		json vrOnly = root[ "vr" ];
+		std::ofstream vrFile( "psuex_vr.json" );
+		if( vrFile.is_open() )
+		{
+			vrFile << vrOnly.dump( 4 );
+			vrFile.close();
+		}
+	}
 
 	// Save ImGui Style
 	json styleJson;
@@ -328,6 +368,57 @@ void Config::LoadFromFile()
 
 		if( cameraNode.contains( "fov" ) && cameraNode[ "fov" ].is_number() )
 			camera.m_fov = cameraNode[ "fov" ].get<float>();
+	}
+
+	auto loadVrNode = [ this ]( const json &vrNode )
+	{
+		if( vrNode.contains( "enabled" ) && vrNode[ "enabled" ].is_boolean() )
+			vr.m_enabled = vrNode[ "enabled" ].get<bool>();
+		if( vrNode.contains( "forceD3D9Ex" ) && vrNode[ "forceD3D9Ex" ].is_boolean() )
+			vr.m_forceD3D9Ex = vrNode[ "forceD3D9Ex" ].get<bool>();
+		if( vrNode.contains( "d3d9exOnly" ) && vrNode[ "d3d9exOnly" ].is_boolean() )
+			vr.m_d3d9exOnly = vrNode[ "d3d9exOnly" ].get<bool>();
+		if( vrNode.contains( "solidColorPrototype" ) && vrNode[ "solidColorPrototype" ].is_boolean() )
+			vr.m_solidColorPrototype = vrNode[ "solidColorPrototype" ].get<bool>();
+		if( vrNode.contains( "runtime" ) && vrNode[ "runtime" ].is_string() )
+			vr.m_runtime = vrNode[ "runtime" ].get<std::string>();
+		if( vrNode.contains( "cameraMode" ) && vrNode[ "cameraMode" ].is_string() )
+			vr.m_cameraMode = vrNode[ "cameraMode" ].get<std::string>();
+		if( vrNode.contains( "inputMode" ) && vrNode[ "inputMode" ].is_string() )
+			vr.m_inputMode = vrNode[ "inputMode" ].get<std::string>();
+		if( vrNode.contains( "worldScale" ) && vrNode[ "worldScale" ].is_number() )
+			vr.m_worldScale = vrNode[ "worldScale" ].get<float>();
+		if( vrNode.contains( "ipdScale" ) && vrNode[ "ipdScale" ].is_number() )
+			vr.m_ipdScale = vrNode[ "ipdScale" ].get<float>();
+		if( vrNode.contains( "hudDistance" ) && vrNode[ "hudDistance" ].is_number() )
+			vr.m_hudDistance = vrNode[ "hudDistance" ].get<float>();
+		if( vrNode.contains( "hudSize" ) && vrNode[ "hudSize" ].is_number() )
+			vr.m_hudSize = vrNode[ "hudSize" ].get<float>();
+		if( vrNode.contains( "snapTurn" ) && vrNode[ "snapTurn" ].is_boolean() )
+			vr.m_snapTurn = vrNode[ "snapTurn" ].get<bool>();
+		if( vrNode.contains( "comfortVignette" ) && vrNode[ "comfortVignette" ].is_boolean() )
+			vr.m_comfortVignette = vrNode[ "comfortVignette" ].get<bool>();
+	};
+
+	if( root.contains( "vr" ) && root[ "vr" ].is_object() )
+	{
+		loadVrNode( root[ "vr" ] );
+	}
+
+	// Sidecar overrides config.json (survives Clementine rewriting config.json).
+	{
+		std::ifstream vrFile( "psuex_vr.json" );
+		if( vrFile.is_open() )
+		{
+			json vrRoot;
+			vrFile >> vrRoot;
+			vrFile.close();
+			if( vrRoot.is_object() )
+			{
+				loadVrNode( vrRoot );
+				printf( "Loaded psuex_vr.json\n" );
+			}
+		}
 	}
 
 	// Load ImGui Style

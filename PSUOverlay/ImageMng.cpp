@@ -1,5 +1,6 @@
 #include "ImageMng.h"
 #include "../PSUStructs/Item.h"
+#include "../PSUVR/D3D9ExUpgrade.h"
 
 ImageManager::ImageManager()
 {
@@ -28,10 +29,20 @@ void ImageManager::CreateWhiteTexture()
 {
 	m_whiteTexture = std::make_shared< ImageData >();
 
-	if( S_OK == D3DXCreateTexture( m_pDevice, 16, 16, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &m_whiteTexture->m_data ) )
+	DWORD usage = 0;
+	D3DPOOL pool = D3DPOOL_MANAGED;
+	DWORD lockFlags = 0;
+	if( PSUVR::IsD3D9ExActive() )
+	{
+		usage = D3DUSAGE_DYNAMIC;
+		pool = D3DPOOL_DEFAULT;
+		lockFlags = D3DLOCK_DISCARD;
+	}
+
+	if( S_OK == D3DXCreateTexture( m_pDevice, 16, 16, 1, usage, D3DFMT_A8R8G8B8, pool, &m_whiteTexture->m_data ) )
 	{
 		D3DLOCKED_RECT rect;
-		auto hr = m_whiteTexture->m_data->LockRect( 0, &rect, nullptr, 0 );
+		auto hr = m_whiteTexture->m_data->LockRect( 0, &rect, nullptr, lockFlags );
 		if( FAILED( hr ) )
 		{
 			MessageBoxA( nullptr, "Failed to lock texture rect.", "Error", MB_OK | MB_ICONERROR );
@@ -109,8 +120,17 @@ sptr_image ImageManager::LoadTextureFromMemory( int resourceId ) const
         return m_whiteTexture;
     }
 
-    // Create a texture from the memory data with custom settings
-    PDIRECT3DTEXTURE9 texture;
+    // Create a texture from the memory data with custom settings.
+    // D3D9Ex rejects D3DPOOL_MANAGED — use DEFAULT+DYNAMIC on Ex devices.
+    DWORD usage = 0;
+    D3DPOOL pool = D3DPOOL_MANAGED;
+    if( PSUVR::IsD3D9ExActive() )
+    {
+        usage = D3DUSAGE_DYNAMIC;
+        pool = D3DPOOL_DEFAULT;
+    }
+
+    PDIRECT3DTEXTURE9 texture = nullptr;
     HRESULT hr = D3DXCreateTextureFromFileInMemoryEx(
         m_pDevice,
         pResourceData,
@@ -118,9 +138,9 @@ sptr_image ImageManager::LoadTextureFromMemory( int resourceId ) const
         D3DX_DEFAULT,          // Width - use actual image width
         D3DX_DEFAULT,          // Height - use actual image height
         D3DX_DEFAULT,          // MipLevels
-        0,                     // Usage
+        usage,
         D3DFMT_A8R8G8B8,       // Desired format
-        D3DPOOL_MANAGED,       // Memory pool
+        pool,
         D3DX_DEFAULT,          // Filter
         D3DX_DEFAULT,          // Mip filter
         0,                     // Color key (0 = no colorkey)

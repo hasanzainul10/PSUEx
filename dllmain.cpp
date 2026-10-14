@@ -1,5 +1,7 @@
 #include "PSUEx.h"
 #include "ExceptionHandler.h"
+#include "Misc/Log.h"
+#include "PSUVR/VRSystem.h"
 
 static void
 DetoursHookAll()
@@ -30,6 +32,7 @@ DetoursHookAll()
 		//sub_783120::Hook();
 	}
 	DetourTransactionCommit();
+	PSU_LOG( "Detours attached\n" );
 }
 
 static void
@@ -56,25 +59,31 @@ APIENTRY DllMain( HMODULE hModule,
 		{
 			DisableThreadLibraryCalls( hModule );
 			SetupCrashHandler();
+			PSULog::Init();
 
 		#ifdef _DEBUG
 			AllocConsole();
 			freopen_s( ( FILE ** )stdout, "CONOUT$", "w", stdout );
 		#endif
-			
+
+			PSU_LOG( "PSUEx DllMain PROCESS_ATTACH\n" );
 			DetoursHookAll();
+			PSUVR::System::Get().OnProcessAttach();
 		}
 		break;
 
 		case DLL_PROCESS_DETACH:
 		{
+			PSUVR::System::Get().OnProcessDetach();
+			Config().Get().SaveToFile();
+			DetoursUnhookAll();
+
 		#ifdef _DEBUG
 			fclose( stdout );
 			FreeConsole();
 		#endif
 
-			Config().Get().SaveToFile();
-			DetoursUnhookAll();
+			PSULog::Shutdown();
 		}
 		break;
 	}

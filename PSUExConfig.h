@@ -81,4 +81,21 @@ public:
 		float m_rotationSpeedV;
 		float m_turnAcceleration;
 	} camera;
+
+	struct s_vr {
+		bool m_enabled = false;
+		bool m_forceD3D9Ex = false;
+		// Ex upgrade + CreateDeviceEx + managed-pool remap, but no OpenXR/bridge.
+		bool m_d3d9exOnly = false;
+		bool m_solidColorPrototype = false; // true = teal clear; false = virtual-screen blit
+		std::string m_runtime = "openxr";
+		std::string m_cameraMode = "thirdPerson";
+		std::string m_inputMode = "gamepad";
+		float m_worldScale = 1.0f;
+		float m_ipdScale = 1.0f;
+		float m_hudDistance = 2.0f;
+		float m_hudSize = 1.0f;
+		bool m_snapTurn = true;
+		bool m_comfortVignette = true;
+	} vr;
 };

@@ -1,0 +1,20 @@
+---
+description: How to build PSUEx and check that changes compile
+alwaysApply: true
+---
+
+# Building PSUEx
+
+- The solution is `PSUEx.sln` (MSVC v143, C++latest). Only `Win32` builds load into the game; ignore the `x64` configurations.
+- Requires the DirectX SDK (June 2010), found through `$(DXSDK_DIR)`.
+- Debug outputs `PSUExD.dll` and opens a console for `printf` logging. Release outputs `PSUEx.dll`.
+- After C++ changes, compile before reporting done:
+
+```powershell
+msbuild PSUEx.sln /p:Configuration=Debug /p:Platform=x86 /m /v:minimal
+```
+
+If `msbuild` isn't on PATH, find it with `& "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -find MSBuild\**\Bin\MSBuild.exe`.
+
+- New `.cpp`/`.h` files must be added to `PSUEx.vcxproj` (and `PSUEx.vcxproj.filters`), or they won't compile.
+- In-game testing is manual. Ask the user to copy the DLL into the game folder and report the console output.

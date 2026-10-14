@@ -1,7 +1,59 @@
 
 #include "ExceptionHandler.h"
+#include "Misc/Log.h"
+
+#include <cstring>
 
 #pragma comment(lib, "Dbghelp.lib")
+
+static void LogAccessViolation( EXCEPTION_POINTERS *pExceptionPointers )
+{
+	EXCEPTION_RECORD *rec = pExceptionPointers->ExceptionRecord;
+	const DWORD_PTR faultAddr = reinterpret_cast< DWORD_PTR >( rec->ExceptionAddress );
+	const ULONG_PTR accessType = rec->NumberParameters >= 1 ? rec->ExceptionInformation[ 0 ] : 0;
+	const ULONG_PTR accessAddr = rec->NumberParameters >= 2 ? rec->ExceptionInformation[ 1 ] : 0;
+
+	HMODULE mod = nullptr;
+	char modName[ MAX_PATH ] = "(unknown)";
+	DWORD_PTR offset = faultAddr;
+	if( GetModuleHandleExA(
+			GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+			reinterpret_cast< LPCSTR >( faultAddr ),
+			&mod ) &&
+		mod )
+	{
+		char path[ MAX_PATH ]{};
+		if( GetModuleFileNameA( mod, path, MAX_PATH ) )
+		{
+			const char *base = strrchr( path, '\\' );
+			strncpy_s( modName, base ? base + 1 : path, _TRUNCATE );
+		}
+		offset = faultAddr - reinterpret_cast< DWORD_PTR >( mod );
+	}
+
+	if( rec->ExceptionCode == EXCEPTION_ACCESS_VIOLATION )
+	{
+		PSU_LOG(
+			"CRASH: ACCESS_VIOLATION code=0x%08X fault=%s+0x%X (0x%p) access=%s target=0x%p tid=%lu\n",
+			rec->ExceptionCode,
+			modName,
+			static_cast< unsigned >( offset ),
+			reinterpret_cast< void * >( faultAddr ),
+			accessType == 0 ? "read" : ( accessType == 1 ? "write" : "exec/dep" ),
+			reinterpret_cast< void * >( accessAddr ),
+			GetCurrentThreadId() );
+	}
+	else
+	{
+		PSU_LOG(
+			"CRASH: code=0x%08X fault=%s+0x%X (0x%p) tid=%lu\n",
+			rec->ExceptionCode,
+			modName,
+			static_cast< unsigned >( offset ),
+			reinterpret_cast< void * >( faultAddr ),
+			GetCurrentThreadId() );
+	}
+}
 
 // Create a timestamped filename
 std::string GetCrashDumpFilename()
@@ -50,10 +102,12 @@ bool WriteMinidump( EXCEPTION_POINTERS *pExceptionPointers, const std::string &d
 // The crash handler function
 LONG WINAPI GlobalCrashHandler( EXCEPTION_POINTERS *pExceptionPointers )
 {
-	// Mayhaps the exception handler was a bit too aggressive? Only handle access violations.
+	LogAccessViolation( pExceptionPointers );
+
+	// Only prompt/dump on access violations; still log every unhandled exception.
     if( pExceptionPointers->ExceptionRecord->ExceptionCode != EXCEPTION_ACCESS_VIOLATION )
     {
-        return EXCEPTION_CONTINUE_SEARCH; // Let the game handle it
+        return EXCEPTION_CONTINUE_SEARCH;
     }
 
     int response = MessageBoxA( nullptr,

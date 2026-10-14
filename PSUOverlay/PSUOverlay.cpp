@@ -1,6 +1,10 @@
 #include "../Misc/Globals.h"
 
 #include "../PSUExConfig.h"
+#include "../PSUVR/VRSystem.h"
+#include "../PSUVR/D3D9ExUpgrade.h"
+#include "../PSUVR/D3D9ExCompat.h"
+#include "../Misc/Log.h"
 #include "PSUOverlay.h"
 #include "Interface/ConfigDisplay.h"
 #include "Interface/LootDisplay.h"
@@ -195,11 +199,27 @@ HRESULT APIENTRY PSUOverlay::Hook_CreateDevice( IDirect3D9 *pD3D, UINT Adapter, 
 
 	deviceCreationCount++;
 
-	auto hr = m_pOriginalCreateDevice( pD3D, Adapter, DeviceType, hFocusWindow, BehaviorFlags, pPresentationParameters, ppReturnedDeviceInterface );
+	HRESULT hr = E_FAIL;
+	if( PSUVR::IsD3D9ExActive() )
+	{
+		hr = PSUVR::TryCreateDeviceEx(
+			pD3D, Adapter, DeviceType, hFocusWindow, BehaviorFlags,
+			pPresentationParameters, ppReturnedDeviceInterface );
+	}
+	if( FAILED( hr ) )
+	{
+		hr = m_pOriginalCreateDevice( pD3D, Adapter, DeviceType, hFocusWindow, BehaviorFlags, pPresentationParameters, ppReturnedDeviceInterface );
+	}
 
 	if( SUCCEEDED( hr ) && ppReturnedDeviceInterface )
 	{
 		IDirect3DDevice9 *pDevice = *ppReturnedDeviceInterface;
+
+		// Managed-pool remap must cover every Ex device (temp + real share a vtable).
+		if( PSUVR::IsD3D9ExActive() )
+		{
+			PSUVR::InstallD3D9ExCompatHooks( pDevice );
+		}
 
 		// Log the vTable pointer
 		void **vTable = *( void *** )pDevice;
@@ -209,33 +229,35 @@ HRESULT APIENTRY PSUOverlay::Hook_CreateDevice( IDirect3D9 *pD3D, UINT Adapter, 
 		{
 			Global::pD3DDevice = pDevice;
 
-			m_pOriginalReset = ( FunctionD3DReset )vTable[ 0x10 ];
-			
-			m_pOriginalPresent = ( FunctionD3DPresent )vTable[ 0x42 ];
-			m_pOriginalDrawPrimitive = ( FunctionD3DDrawPrimitive )vTable[ 0x51 ]; 
-			m_pOriginalDrawIndexedPrimitive = ( FunctionD3DDrawIndexedPrimitive )vTable[ 0x52 ];  
-			m_pOriginalDrawPrimitiveUP = ( FunctionD3DDrawPrimitiveUP )vTable[ 0x53 ];  
-			m_pOriginalDrawIndexedPrimitiveUP = ( FunctionD3DDrawIndexedPrimitiveUP )vTable[ 0x54 ];  
-			m_pOriginalCreateAdditionalSwapChain = ( FunctionCreateAdditionalSwapChain )vTable[ 0x56 ];
+			// IDirect3DDevice9 vtable indices (d3d9.h)
+			m_pOriginalReset = ( FunctionD3DReset )vTable[ 16 ];
+			m_pOriginalPresent = ( FunctionD3DPresent )vTable[ 17 ];
+			m_pOriginalDrawPrimitive = ( FunctionD3DDrawPrimitive )vTable[ 81 ];
+			m_pOriginalDrawIndexedPrimitive = ( FunctionD3DDrawIndexedPrimitive )vTable[ 82 ];
+			m_pOriginalDrawPrimitiveUP = ( FunctionD3DDrawPrimitiveUP )vTable[ 83 ];
+			m_pOriginalDrawIndexedPrimitiveUP = ( FunctionD3DDrawIndexedPrimitiveUP )vTable[ 84 ];
+			m_pOriginalCreateAdditionalSwapChain = ( FunctionCreateAdditionalSwapChain )vTable[ 13 ];
 
-			m_pOriginalSetRenderTarget = ( FunctionSetRenderTarget )vTable[ 0x24 ];
-			m_pOriginalEndScene = ( FunctionD3DEndScene )vTable[ 0x2A ];
-			m_pOriginalSetTransform = ( FunctionSetTransform )vTable[ 0x2C ];
-			m_pOriginalSetViewport = ( FunctionSetViewport )vTable[ 0x2F ]; 
+			m_pOriginalSetRenderTarget = ( FunctionSetRenderTarget )vTable[ 37 ];
+			m_pOriginalEndScene = ( FunctionD3DEndScene )vTable[ 42 ];
+			m_pOriginalSetTransform = ( FunctionSetTransform )vTable[ 44 ];
+			m_pOriginalSetViewport = ( FunctionSetViewport )vTable[ 47 ]; 
 			
 
 			DetourTransactionBegin();
 			DetourUpdateThread( GetCurrentThread() );
 
-			/*if( DetourAttach(&( PVOID & )m_pOriginalPresent, Hook_Present) != NO_ERROR )
+			if( DetourAttach( &( PVOID & )m_pOriginalPresent, Hook_Present ) != NO_ERROR )
 			{
-				printf( "Failed to hook Present!\n" );
-			}*/
+				PSU_LOG( "Failed to hook Present!\n" );
+			}
 
 			if( DetourAttach( &( PVOID & )m_pOriginalEndScene, Hook_EndScene ) != NO_ERROR )
 			{
-				printf( "Failed to hook EndScene!\n" );
+				PSU_LOG( "Failed to hook EndScene!\n" );
 			}
+
+			PSUVR::System::Get().OnDeviceCreated( pDevice );
 
 			/*if( DetourAttach(&( PVOID & )m_pOriginalReset, Hook_Reset) != NO_ERROR )
 			{
@@ -358,6 +380,13 @@ void PrintMatrix( const Matrix4x4 &matrix, const char *name )
 
 HRESULT APIENTRY PSUOverlay::Hook_EndScene( LPDIRECT3DDEVICE9 pDevice )
 {
+	static bool s_logged = false;
+	if( !s_logged )
+	{
+		s_logged = true;
+		PSU_LOG( "EndScene hooked (first call) device=%p\n", pDevice );
+	}
+
 	if( !m_bInitialized )
 	{
 		m_pDevice = pDevice;
@@ -396,7 +425,19 @@ HRESULT APIENTRY PSUOverlay::Hook_EndScene( LPDIRECT3DDEVICE9 pDevice )
 
 HRESULT APIENTRY PSUOverlay::Hook_Present( LPDIRECT3DDEVICE9 pDevice, const RECT *pSourceRect, const RECT *pDestRect, HWND hDestWindowOverride, const RGNDATA *pDirtyRegion )
 {
-	return m_pOriginalPresent( pDevice, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion );
+	static bool s_logged = false;
+	if( !s_logged )
+	{
+		s_logged = true;
+		PSU_LOG( "Present hooked (first call) device=%p\n", pDevice );
+	}
+
+	// Capture BB + GPU fence BEFORE Present; OpenXR WaitFrame AFTER so the
+	// monitor is not blocked / blacked out by the VR compositor.
+	PSUVR::System::Get().OnPresentCapture();
+	const HRESULT hr = m_pOriginalPresent( pDevice, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion );
+	PSUVR::System::Get().OnPresentSubmit();
+	return hr;
 }
 
 HRESULT APIENTRY PSUOverlay::Hook_CreateAdditionalSwapChain( LPDIRECT3DDEVICE9 pDevice, D3DPRESENT_PARAMETERS *pPresentationParameters, IDirect3DSwapChain9 **ppSwapChain )

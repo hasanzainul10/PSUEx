@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../PSUEx.h"
+#include "../Misc/Log.h"
 
 namespace TCameraTaskPlay
 {
@@ -88,6 +89,13 @@ namespace TCameraTaskPlay
 	{
 		CameraTaskPlayData *camera = reinterpret_cast< CameraTaskPlayData * >( thisPtr );
 
+		static bool s_logged = false;
+		if( !s_logged )
+		{
+			s_logged = true;
+			PSU_LOG( "TCameraTaskPlay_Update @ 0x0048DA90 first hit (this=%p)\n", ( void * )( uintptr_t )thisPtr );
+		}
+
 		Global::cameraPosition = camera->m_position;
 		Global::cameraFocus = camera->m_focusPosition;
 
@@ -121,6 +129,21 @@ namespace TCameraTaskPlay
 		}
 
 		camera->m_updateDist = Constant::Camera::UPDATE_DISTANCE;
+
+		// SteamVR often bleeds controller/mouse look into the flat game while an
+		// OpenXR session is active. Kill orbit rates until VR input is owned by us.
+		if( Config::Get().vr.m_enabled )
+		{
+			static bool s_loggedVrCam = false;
+			if( !s_loggedVrCam )
+			{
+				s_loggedVrCam = true;
+				PSU_LOG( "TCameraTaskPlay: VR enabled — zeroing rotate speeds (SteamVR look bleed)\n" );
+			}
+			camera->m_rotateSpeedH = 0.0f;
+			camera->m_rotateSpeedV = 0.0f;
+			camera->m_turnAcceleration = 0.0f;
+		}
 
 		return pOriginal48DA90( thisPtr );
 	}

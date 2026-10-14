@@ -1,0 +1,338 @@
+#include "VRSystem.h"
+
+#include "D3D9ExUpgrade.h"
+#include "D3D9ExCompat.h"
+#include "D3D11Bridge.h"
+#include "OpenXRRuntime.h"
+#include "../Misc/Log.h"
+#include "../PSUExConfig.h"
+
+#include <d3d9.h>
+#include <d3d11.h>
+
+#pragma comment( lib, "d3d11.lib" )
+#pragma comment( lib, "dxgi.lib" )
+
+namespace PSUVR
+{
+	System &System::Get()
+	{
+		static System instance;
+		return instance;
+	}
+
+	void System::LoadConfig()
+	{
+		m_enabled = Config::Get().vr.m_enabled;
+		m_forceD3D9Ex = Config::Get().vr.m_forceD3D9Ex;
+		m_d3d9exOnly = Config::Get().vr.m_d3d9exOnly;
+		m_solidColorPrototype = Config::Get().vr.m_solidColorPrototype;
+		PSU_LOG(
+			"VR config: enabled=%d forceD3D9Ex=%d d3d9exOnly=%d solidColor=%d runtime=%s camera=%s input=%s\n",
+			( int )m_enabled, ( int )m_forceD3D9Ex, ( int )m_d3d9exOnly, ( int )m_solidColorPrototype,
+			Config::Get().vr.m_runtime.c_str(),
+			Config::Get().vr.m_cameraMode.c_str(),
+			Config::Get().vr.m_inputMode.c_str() );
+	}
+
+	void System::OnProcessAttach()
+	{
+		Config::Get().LoadFromFile();
+		LoadConfig();
+		if( m_enabled || m_forceD3D9Ex || m_d3d9exOnly )
+		{
+			m_d3d9ExInstalled = InstallD3D9ExUpgrade();
+		}
+	}
+
+	void System::OnProcessDetach()
+	{
+		LogD3D9ExCompatStats();
+		if( m_bridge )
+		{
+			m_bridge->Shutdown();
+			delete m_bridge;
+			m_bridge = nullptr;
+		}
+		m_bridgeReady = false;
+		if( m_xr )
+		{
+			m_xr->Shutdown();
+			delete m_xr;
+			m_xr = nullptr;
+		}
+		m_runtimeReady = false;
+		m_runtimeFailed = false;
+		m_device = nullptr;
+		if( m_d3d11Context )
+		{
+			m_d3d11Context->Release();
+			m_d3d11Context = nullptr;
+		}
+		if( m_d3d11 )
+		{
+			m_d3d11->Release();
+			m_d3d11 = nullptr;
+		}
+		if( m_d3d9ExInstalled )
+		{
+			RemoveD3D9ExUpgrade();
+			m_d3d9ExInstalled = false;
+		}
+	}
+
+	void System::OnDirect3DCreated( IDirect3D9 *d3d9 )
+	{
+		LoadConfig();
+		PSU_LOG( "VR: OnDirect3DCreated %p d3d9exActive=%d\n", d3d9, ( int )IsD3D9ExActive() );
+	}
+
+	bool System::EnsureD3D11()
+	{
+		if( m_d3d11 )
+		{
+			return true;
+		}
+
+		D3D_FEATURE_LEVEL level = D3D_FEATURE_LEVEL_11_0;
+		UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+		HRESULT hr = D3D11CreateDevice(
+			nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags,
+			&level, 1, D3D11_SDK_VERSION, &m_d3d11, nullptr, &m_d3d11Context );
+		if( FAILED( hr ) )
+		{
+			PSU_LOG( "VR: D3D11CreateDevice failed 0x%08X\n", hr );
+			return false;
+		}
+		PSU_LOG( "VR: D3D11 device created %p\n", m_d3d11 );
+		return true;
+	}
+
+	bool System::EnsureRuntime()
+	{
+		if( m_runtimeReady )
+		{
+			return true;
+		}
+		if( m_runtimeFailed || !m_enabled || m_d3d9exOnly )
+		{
+			return false;
+		}
+		if( !EnsureD3D11() )
+		{
+			m_runtimeFailed = true;
+			return false;
+		}
+		if( !m_xr )
+		{
+			m_xr = new OpenXRRuntime();
+		}
+		m_runtimeReady = m_xr->Init( m_d3d11 );
+		if( !m_runtimeReady )
+		{
+			m_runtimeFailed = true;
+			PSU_LOG( "VR: OpenXR init failed (start SteamVR / OpenXR runtime); continuing flat\n" );
+		}
+		return m_runtimeReady;
+	}
+
+	static bool GetBackBufferSize( IDirect3DDevice9 *device, UINT &w, UINT &h )
+	{
+		w = 0;
+		h = 0;
+		if( !device )
+		{
+			return false;
+		}
+		IDirect3DSurface9 *bb = nullptr;
+		if( FAILED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &bb ) ) || !bb )
+		{
+			return false;
+		}
+		D3DSURFACE_DESC desc{};
+		bb->GetDesc( &desc );
+		bb->Release();
+		w = desc.Width;
+		h = desc.Height;
+		return w > 0 && h > 0;
+	}
+
+	bool System::EnsureBridge()
+	{
+		if( !m_device || !m_d3d11 || !IsD3D9ExActive() || m_d3d9exOnly )
+		{
+			return false;
+		}
+
+		UINT bbW = 0, bbH = 0;
+		if( !GetBackBufferSize( m_device, bbW, bbH ) )
+		{
+			return false;
+		}
+
+		if( !m_bridge )
+		{
+			m_bridge = new D3D11Bridge();
+		}
+
+		if( !m_bridge->Ready() )
+		{
+			m_bridgeReady = m_bridge->Init( m_device, m_d3d11, bbW, bbH );
+		}
+		else
+		{
+			m_bridgeReady = m_bridge->EnsureSize( m_device, bbW, bbH );
+		}
+
+		if( m_bridgeReady && m_runtimeReady && m_xr )
+		{
+			m_xr->ResizeSwapchains( static_cast< int32_t >( bbW ), static_cast< int32_t >( bbH ) );
+		}
+
+		return m_bridgeReady;
+	}
+
+	void System::OnDeviceCreated( IDirect3DDevice9 *device )
+	{
+		LoadConfig();
+		m_device = device;
+		m_bridgeReady = false;
+		m_runtimeFailed = false;
+		m_loggedVirtualScreen = false;
+		PSU_LOG( "VR: OnDeviceCreated %p d3d9exActive=%d\n", device, ( int )IsD3D9ExActive() );
+
+		if( IsD3D9ExActive() )
+		{
+			InstallD3D9ExCompatHooks( device );
+		}
+
+		// Flat D3D9Ex soak / managed-pool validation — no OpenXR.
+		if( m_d3d9exOnly )
+		{
+			PSU_LOG( "VR: d3d9exOnly — Ex device active, OpenXR/bridge skipped\n" );
+			return;
+		}
+
+		if( !m_enabled )
+		{
+			return;
+		}
+
+		if( !m_solidColorPrototype && IsD3D9ExActive() && EnsureD3D11() )
+		{
+			EnsureBridge();
+			if( m_bridgeReady && m_bridge->BlitBackBuffer( m_device ) )
+			{
+				PSU_LOG( "VR: D3D11Bridge probe blit ok\n" );
+			}
+		}
+
+		EnsureRuntime();
+		if( !m_solidColorPrototype && m_runtimeReady )
+		{
+			EnsureBridge();
+		}
+	}
+
+	void System::OnPresentCapture()
+	{
+		m_capturedThisFrame = false;
+		if( m_d3d9exOnly )
+		{
+			static unsigned s_presents = 0;
+			++s_presents;
+			if( s_presents == 1 )
+			{
+				LogD3D9ExCompatStats();
+				PSU_LOG( "VR: d3d9exOnly Present path alive (no OpenXR)\n" );
+			}
+			else if( s_presents == 60 || s_presents == 300 )
+			{
+				PSU_LOG( "VR: d3d9exOnly still presenting (frame %u)\n", s_presents );
+				LogD3D9ExCompatStats();
+			}
+			return;
+		}
+		if( !m_enabled )
+		{
+			return;
+		}
+		if( !EnsureRuntime() || !m_xr )
+		{
+			return;
+		}
+		// Always poll OpenXR events (solid-color path used to skip this).
+		m_xr->PumpEvents();
+		if( m_solidColorPrototype )
+		{
+			return;
+		}
+		if( !EnsureBridge() || !m_bridge || !m_device )
+		{
+			return;
+		}
+		m_capturedThisFrame = m_bridge->BlitBackBuffer( m_device );
+	}
+
+	void System::OnPresentSubmit()
+	{
+		if( !m_enabled || m_d3d9exOnly )
+		{
+			return;
+		}
+		if( !EnsureRuntime() || !m_xr )
+		{
+			return;
+		}
+
+		__try
+		{
+			if( !m_xr->BeginFrame() )
+			{
+				return;
+			}
+
+			if( m_solidColorPrototype )
+			{
+				if( m_xr->ClearEyes( 0.0f, 0.45f, 0.55f ) )
+				{
+					static bool s_loggedTeal = false;
+					if( !s_loggedTeal )
+					{
+						s_loggedTeal = true;
+						PSU_LOG( "VR: solid-color (teal) submit active\n" );
+					}
+				}
+			}
+			else if( m_capturedThisFrame && m_bridge )
+			{
+				const float dist = Config::Get().vr.m_hudDistance;
+				const float height = 1.2f * Config::Get().vr.m_hudSize;
+				m_xr->SetVirtualScreenPlacement( dist, height );
+				m_xr->SubmitSharedTexture( m_bridge->GetSharedTexture() );
+				if( !m_loggedVirtualScreen )
+				{
+					m_loggedVirtualScreen = true;
+					UINT w = 0, h = 0;
+					GetBackBufferSize( m_device, w, h );
+					PSU_LOG( "VR: virtual-screen quad active (bb %ux%u, xr %dx%d, dist=%.2f h=%.2f)\n",
+						w, h, m_xr->SwapchainWidth(), m_xr->SwapchainHeight(), dist, height );
+					LogD3D9ExCompatStats();
+				}
+			}
+			else
+			{
+				m_xr->ClearEyes( 0.05f, 0.05f, 0.08f );
+			}
+
+			m_xr->EndFrame();
+		}
+		__except( EXCEPTION_EXECUTE_HANDLER )
+		{
+			PSU_LOG( "VR: exception in OpenXR submit (0x%08X) — disabling VR for this session\n",
+				GetExceptionCode() );
+			m_enabled = false;
+			m_runtimeFailed = true;
+		}
+	}
+}
