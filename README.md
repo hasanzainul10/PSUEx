@@ -5,6 +5,8 @@ It enhances and extends the original game by injecting new features and improvem
 
 > **Note:** This project is still in early development. Expect breaking changes and bugs along the way.
 
+**Install on your Clementine client:** see **[docs/INSTALL.md](docs/INSTALL.md)** (files to copy, VR config, launch via `online.exe`, troubleshooting).
+
 ---
 
 ## 🔧 Features
@@ -13,6 +15,7 @@ It enhances and extends the original game by injecting new features and improvem
 - Extended Resolution support, along with FOV correction and more.
 - Floor Reader for extended item loot information.
 - Camera Controls for distance, height, and rotation speed.
+- Experimental OpenXR VR (town stereo + floating HUD panels) — see [docs/INSTALL.md](docs/INSTALL.md) and [docs/VR_ROADMAP.md](docs/VR_ROADMAP.md).
 
 ---
 
