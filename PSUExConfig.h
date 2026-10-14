@@ -99,7 +99,22 @@ public:
 		float m_uiScale = 1.5f;
 		// Town UI: false = everything on the head-locked visor; true = also use the world-locked kiosk panel.
 		bool m_hudWorldPanel = false;
-		bool m_snapTurn = true;
+		// Opacity kept for near-black parts of the mission map backdrop on the visor (0 = invisible).
+		float m_hudMapBlackAlpha = 0.15f;
+		// First person: eye height above the player's feet and forward offset (meters, avatar scale).
+		float m_fpEyeHeight = 1.6f;
+		float m_fpEyeForward = 0.12f;
+		// Right-stick snap turn step in degrees (snapTurn = true).
+		float m_snapTurnDegrees = 30.0f;
+		// Right-stick smooth turn speed in degrees per second (snapTurn = false).
+		float m_fpTurnSpeed = 120.0f;
+		// "head" = left stick forward goes where you look; "body" = where the body faces.
+		std::string m_fpMoveDirection = "head";
+		// Skip drawing the local player's model in first person (no clipping into it).
+		bool m_fpHideBody = true;
+		// Horizontal radius around the player's axis whose meshes are hidden (meters).
+		float m_fpHideRadius = 0.6f;
+		bool m_snapTurn = false;
 		bool m_comfortVignette = true;
 		// Render the 3D pass per eye (projection layer) with the game frame as a panel.
 		bool m_stereo = true;

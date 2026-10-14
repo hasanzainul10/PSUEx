@@ -37,6 +37,8 @@ namespace PSUVR
 		// True while pass() runs for an eye. Used by D3D hooks to skip flat-sourced
 		// screen-space effect quads that would ghost the mono camera over stereo.
 		static bool InEyePass();
+		// vr.enabled + vr.stereo and the current scene matches vr.stereoMode (town by default).
+		static bool SceneAllowsStereo();
 		// True while remapping Pass B nameplates/bubbles onto eye RTs (skip HUD capture).
 		static bool InNameplateDraw();
 
@@ -50,6 +52,10 @@ namespace PSUVR
 
 		// XYZRHW draws that sample an RT texture not written this eye pass → skip.
 		static bool ShouldSkipScreenQuad( IDirect3DDevice9 *device, void *ret, unsigned primitiveCount, bool userPointer );
+		// First person: track WORLD during eye passes and skip meshes whose origin sits
+		// on the local player's axis (vr.fpHideBody).
+		static void OnSetWorld( D3DTRANSFORMSTATETYPE state, const D3DMATRIX *matrix );
+		static bool ShouldSkipLocalPlayerDraw( IDirect3DDevice9 *device );
 
 		// If this DP-UP is a near-full-screen XYZRHW quad sized for the game RT, return a
 		// rewritten vertex buffer scaled to the eye RT. Otherwise return nullptr (use original).

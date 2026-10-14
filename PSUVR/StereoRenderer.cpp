@@ -10,15 +10,12 @@
 #include <d3d9.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <unordered_set>
 
 namespace PSUVR
 {
-	// Game units per meter: the follow camera sits 40-70 units behind the player
-	// and focuses 15 units up, which reads as ~4-7 m and ~1.5 m.
-	constexpr float kUnitsPerMeter = 10.0f;
-
 	namespace
 	{
 		bool s_inEyePass = false;
@@ -33,6 +30,15 @@ namespace PSUVR
 		alignas( 16 ) unsigned char s_nameplateVertBuf[ 64 * 64 ]{};
 		std::unordered_set< IDirect3DBaseTexture9 * > s_writtenTextures;
 		unsigned s_screenQuadLogCount = 0;
+
+		// First-person body hide: last WORLD translation (= mesh origin in game-camera space).
+		bool s_haveWorld = false;
+		float s_worldT[ 3 ]{};
+		unsigned s_hideSkipped = 0;
+		unsigned s_hideDraws = 0;
+		bool s_hideLogged = false;
+		unsigned s_hideSampleCount = 0;
+		float s_hideSamples[ 8 ][ 4 ]{};  // x, y, z, skipped
 		unsigned s_stretchLogCount = 0;
 		constexpr unsigned kMaxScreenQuadLogs = 24;
 		constexpr unsigned kMaxStretchLogs = 16;
@@ -159,11 +165,27 @@ namespace PSUVR
 		s_gameH = gameH;
 		MarkSurfaceTexture( eyeTarget );
 		s_inEyePass = true;
+		s_haveWorld = false;
+		s_hideSkipped = 0;
+		s_hideDraws = 0;
+		s_hideSampleCount = 0;
 	}
 
 	void StereoRenderer::EndEyePass()
 	{
+		if( !s_hideLogged && VRCamera::FirstPersonActive() && s_hideDraws > 0 )
+		{
+			s_hideLogged = true;
+			PSU_LOG( "VRHide: eye pass skipped %u of %u world draws as local player\n", s_hideSkipped, s_hideDraws );
+			for( unsigned i = 0; i < s_hideSampleCount; ++i )
+			{
+				PSU_LOG( "VRHide:   near origin (%.1f, %.1f, %.1f) %s\n",
+					s_hideSamples[ i ][ 0 ], s_hideSamples[ i ][ 1 ], s_hideSamples[ i ][ 2 ],
+					s_hideSamples[ i ][ 3 ] != 0.0f ? "hidden" : "kept" );
+			}
+		}
 		s_inEyePass = false;
+		s_haveWorld = false;
 		s_eyeSurface = nullptr;
 		s_eyeW = 0;
 		s_eyeH = 0;
@@ -249,6 +271,62 @@ namespace PSUVR
 			srcDesc.Width, srcDesc.Height, srcDesc.Usage,
 			dstDesc.Width, dstDesc.Height, dstDesc.Usage,
 			ret );
+	}
+
+	void StereoRenderer::OnSetWorld( D3DTRANSFORMSTATETYPE state, const D3DMATRIX *matrix )
+	{
+		if( !s_inEyePass || state != D3DTS_WORLD )
+		{
+			return;
+		}
+		s_haveWorld = matrix != nullptr;
+		if( matrix )
+		{
+			s_worldT[ 0 ] = matrix->_41;
+			s_worldT[ 1 ] = matrix->_42;
+			s_worldT[ 2 ] = matrix->_43;
+		}
+	}
+
+	bool StereoRenderer::ShouldSkipLocalPlayerDraw( IDirect3DDevice9 *device )
+	{
+		if( !s_inEyePass || !s_haveWorld || !device || !Config::Get().vr.m_fpHideBody )
+		{
+			return false;
+		}
+		float axisZ = 0.0f, feetY = 0.0f, headY = 0.0f;
+		if( !VRCamera::LocalPlayerCameraSpace( axisZ, feetY, headY ) )
+		{
+			return false;
+		}
+		// Pre-transformed 2D ignores WORLD.
+		DWORD fvf = 0;
+		if( SUCCEEDED( device->GetFVF( &fvf ) ) && ( fvf & D3DFVF_POSITION_MASK ) == D3DFVF_XYZRHW )
+		{
+			return false;
+		}
+		++s_hideDraws;
+
+		const float units = VRCamera::kGameUnitsPerMeter;
+		const float dx = s_worldT[ 0 ];
+		const float dz = s_worldT[ 2 ] - axisZ;
+		const float horizontal = std::sqrt( dx * dx + dz * dz );
+		const float radius = Config::Get().vr.m_fpHideRadius * units;
+		const bool inside = horizontal < radius &&
+			s_worldT[ 1 ] > feetY - 0.3f * units && s_worldT[ 1 ] < headY + 0.5f * units;
+		if( inside )
+		{
+			++s_hideSkipped;
+		}
+		if( !s_hideLogged && s_hideSampleCount < 8 && horizontal < 2.0f * units )
+		{
+			float *sample = s_hideSamples[ s_hideSampleCount++ ];
+			sample[ 0 ] = s_worldT[ 0 ];
+			sample[ 1 ] = s_worldT[ 1 ];
+			sample[ 2 ] = s_worldT[ 2 ];
+			sample[ 3 ] = inside ? 1.0f : 0.0f;
+		}
+		return inside;
 	}
 
 	bool StereoRenderer::ShouldSkipScreenQuad( IDirect3DDevice9 *device, void *ret,
@@ -541,15 +619,21 @@ namespace PSUVR
 		}
 	}
 
+	bool StereoRenderer::SceneAllowsStereo()
+	{
+		const auto &vr = Config::Get().vr;
+		if( !vr.m_enabled || !vr.m_stereo )
+		{
+			return false;
+		}
+		const unsigned sceneMode = *reinterpret_cast< unsigned * >( 0x00B90EA8 );
+		return vr.m_stereoMode == 0 || sceneMode == vr.m_stereoMode;
+	}
+
 	void StereoRenderer::RenderEyes( IDirect3DDevice9 *device, Pass pass )
 	{
 		const auto &vr = Config::Get().vr;
-		if( !device || !pass || !vr.m_enabled || !vr.m_stereo )
-		{
-			return;
-		}
-		const unsigned sceneMode = *reinterpret_cast< unsigned * >( 0x00B90EA8 );
-		if( vr.m_stereoMode != 0 && sceneMode != vr.m_stereoMode )
+		if( !device || !pass || !SceneAllowsStereo() )
 		{
 			return;
 		}
@@ -604,7 +688,8 @@ namespace PSUVR
 			device->GetTransform( D3DTS_VIEW, &gameView );
 			device->GetTransform( D3DTS_PROJECTION, &gameProj );
 
-			const float unitsPerMeter = kUnitsPerMeter * ( vr.m_worldScale > 0.01f ? vr.m_worldScale : 1.0f );
+			const float unitsPerMeter = VRCamera::kGameUnitsPerMeter * ( vr.m_worldScale > 0.01f ? vr.m_worldScale : 1.0f );
+			const bool firstPerson = VRCamera::FirstPersonActive();
 			const DWORD clearFlags = D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER | ( HasStencil( depthFormat ) ? D3DCLEAR_STENCIL : 0 );
 
 			m_gameProj = gameProj;
@@ -614,7 +699,14 @@ namespace PSUVR
 			{
 				D3DMATRIX eyeView{};
 				D3DMATRIX eyeProj{};
-				VRCamera::BuildEye( views[ eye ], unitsPerMeter, gameProj, eyeView, eyeProj );
+				if( firstPerson )
+				{
+					VRCamera::BuildEyeFirstPerson( views[ eye ], unitsPerMeter, gameProj, eyeView, eyeProj );
+				}
+				else
+				{
+					VRCamera::BuildEye( views[ eye ], unitsPerMeter, gameProj, eyeView, eyeProj );
+				}
 				m_eyeView[ eye ] = eyeView;
 				m_eyeProj[ eye ] = eyeProj;
 

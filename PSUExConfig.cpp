@@ -60,8 +60,16 @@ Config::Config()
 	vr.m_hudSize = 1.0f;
 	vr.m_uiScale = 1.5f;
 	vr.m_hudWorldPanel = false;
+	vr.m_hudMapBlackAlpha = 0.15f;
+	vr.m_fpEyeHeight = 1.6f;
+	vr.m_fpEyeForward = 0.12f;
+	vr.m_snapTurnDegrees = 30.0f;
+	vr.m_fpTurnSpeed = 120.0f;
+	vr.m_fpMoveDirection = "head";
+	vr.m_fpHideBody = true;
+	vr.m_fpHideRadius = 0.6f;
 	vr.m_stereoMode = 5;
-	vr.m_snapTurn = true;
+	vr.m_snapTurn = false;
 	vr.m_comfortVignette = true;
 }
 
@@ -146,6 +154,14 @@ void Config::SaveToFile()
 	root[ "vr" ][ "hudSize" ] = vr.m_hudSize;
 	root[ "vr" ][ "uiScale" ] = vr.m_uiScale;
 	root[ "vr" ][ "hudWorldPanel" ] = vr.m_hudWorldPanel;
+	root[ "vr" ][ "hudMapBlackAlpha" ] = vr.m_hudMapBlackAlpha;
+	root[ "vr" ][ "fpEyeHeight" ] = vr.m_fpEyeHeight;
+	root[ "vr" ][ "fpEyeForward" ] = vr.m_fpEyeForward;
+	root[ "vr" ][ "snapTurnDegrees" ] = vr.m_snapTurnDegrees;
+	root[ "vr" ][ "fpTurnSpeed" ] = vr.m_fpTurnSpeed;
+	root[ "vr" ][ "fpMoveDirection" ] = vr.m_fpMoveDirection;
+	root[ "vr" ][ "fpHideBody" ] = vr.m_fpHideBody;
+	root[ "vr" ][ "fpHideRadius" ] = vr.m_fpHideRadius;
 	root[ "vr" ][ "snapTurn" ] = vr.m_snapTurn;
 	root[ "vr" ][ "comfortVignette" ] = vr.m_comfortVignette;
 	root[ "vr" ][ "stereo" ] = vr.m_stereo;
@@ -409,6 +425,22 @@ void Config::LoadFromFile()
 			vr.m_uiScale = vrNode[ "uiScale" ].get<float>();
 		if( vrNode.contains( "hudWorldPanel" ) && vrNode[ "hudWorldPanel" ].is_boolean() )
 			vr.m_hudWorldPanel = vrNode[ "hudWorldPanel" ].get<bool>();
+		if( vrNode.contains( "hudMapBlackAlpha" ) && vrNode[ "hudMapBlackAlpha" ].is_number() )
+			vr.m_hudMapBlackAlpha = vrNode[ "hudMapBlackAlpha" ].get<float>();
+		if( vrNode.contains( "fpEyeHeight" ) && vrNode[ "fpEyeHeight" ].is_number() )
+			vr.m_fpEyeHeight = vrNode[ "fpEyeHeight" ].get<float>();
+		if( vrNode.contains( "fpEyeForward" ) && vrNode[ "fpEyeForward" ].is_number() )
+			vr.m_fpEyeForward = vrNode[ "fpEyeForward" ].get<float>();
+		if( vrNode.contains( "snapTurnDegrees" ) && vrNode[ "snapTurnDegrees" ].is_number() )
+			vr.m_snapTurnDegrees = vrNode[ "snapTurnDegrees" ].get<float>();
+		if( vrNode.contains( "fpTurnSpeed" ) && vrNode[ "fpTurnSpeed" ].is_number() )
+			vr.m_fpTurnSpeed = vrNode[ "fpTurnSpeed" ].get<float>();
+		if( vrNode.contains( "fpMoveDirection" ) && vrNode[ "fpMoveDirection" ].is_string() )
+			vr.m_fpMoveDirection = vrNode[ "fpMoveDirection" ].get<std::string>();
+		if( vrNode.contains( "fpHideBody" ) && vrNode[ "fpHideBody" ].is_boolean() )
+			vr.m_fpHideBody = vrNode[ "fpHideBody" ].get<bool>();
+		if( vrNode.contains( "fpHideRadius" ) && vrNode[ "fpHideRadius" ].is_number() )
+			vr.m_fpHideRadius = vrNode[ "fpHideRadius" ].get<float>();
 		if( vrNode.contains( "snapTurn" ) && vrNode[ "snapTurn" ].is_boolean() )
 			vr.m_snapTurn = vrNode[ "snapTurn" ].get<bool>();
 		if( vrNode.contains( "comfortVignette" ) && vrNode[ "comfortVignette" ].is_boolean() )

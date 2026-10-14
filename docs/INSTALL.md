@@ -71,8 +71,20 @@ Create (or edit) **`psuex_vr.json`** next to `PSUC.exe`:
 | `stereoMode` | Scene mode that gets stereo. **`5` = town**. `0` = every mode (old / experimental). Login and menus stay on a large head-locked virtual screen. |
 | `hudDistance` | Distance in meters for the virtual screen / HUD panels (~2.5 is a good start). |
 | `hudSize` | Scale of those floating panels. The town visor HUD is 1.4 m × `hudSize` tall; lower it (e.g. `0.85`) if corner UI sits too far out in your view. |
+| `hudMapBlackAlpha` | Opacity kept for the black backdrop around the mission map on the visor (default **0.15**; `0` = invisible, `1` = as in the flat game). |
 | `hudWorldPanel` | Default **false**: all town UI (HUD, menus, shop windows) sits on the head-locked visor exactly as the game lays it out. `true` enables the experimental world-locked kiosk panel for centered windows. |
 | `uiScale` | Enlarge HUD widgets / nameplates when capturing for VR (default **1.5**). Useful at high game resolutions. Try `1.3`–`2.0`. Does not change the flat monitor. |
+| `cameraMode` | `thirdPerson` (default) or `firstPerson` (town stereo only; other scenes stay on the virtual screen). |
+| `fpEyeHeight` | First person: eye height above the character's feet in meters (default **1.6**). |
+| `fpEyeForward` | First person: how far in front of the face the eyes sit, in meters (default **0.12**), so you don't see the inside of your own head. |
+| `snapTurn` | First person: `false` (default) = the right stick turns smoothly; `true` = 30° steps (comfort). |
+| `snapTurnDegrees` | Snap step size (default **30**). |
+| `fpTurnSpeed` | Smooth turn speed in degrees per second (default **120**). |
+| `fpMoveDirection` | `"head"` (default): left stick forward walks where you look. `"body"`: forward is where your body faces, and the head looks around without steering. |
+| `fpHideBody` | Hide your own character in first person so you don't see inside it (default **true**). |
+| `fpHideRadius` | How close to your character's center a mesh has to be to get hidden, in meters (default **0.6**). Raise it if a weapon or hair still pokes into view; lower it if nearby characters vanish. |
+
+**First-person controls (gamepad):** the right stick turns your body and view. By default the left stick moves where you look, and the right stick adds turning on top. `fpMoveDirection: "body"` gives FPS-style body-relative movement instead. F9 recenters. Turning reads the right stick through XInput (Xbox-style pads). Without XInput it falls back to the game's own camera orbit.
 | `stereoPanel` | Leave **`false`**. Turning it on also shows a flat PiP of the monitor frame in stereo (usually worse). |
 
 You can also put a `"vr"` object inside `config.json`, but Clementine or other tools sometimes rewrite that file. **`psuex_vr.json` overrides it** and is the safer place for VR settings.

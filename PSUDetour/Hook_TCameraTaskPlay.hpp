@@ -3,6 +3,8 @@
 #include "../PSUEx.h"
 #include "../Misc/Log.h"
 #include "../PSUOverlay/FrameTrace.h"
+#include "../PSUStructs/PSUPlayerData.h"
+#include "../PSUVR/VRCamera.h"
 
 namespace TCameraTaskPlay
 {
@@ -85,6 +87,29 @@ namespace TCameraTaskPlay
 		return pOriginal48E4C0( thisPtr );
 	}
 
+	// The camera object the view is built from: *( *( task + 0x24 ) + 4 ).
+	// 0x0048FA00 copies its position (+0xFC) and target (+0x108) into m_position /
+	// m_focusPosition, then writes new values back through 0x0048B9A0 / 0x0048B9F0,
+	// which set bit 0 of the flags at +0x130 (view dirty).
+	constexpr uintptr_t kRenderCameraPosition = 0xFC;
+	constexpr uintptr_t kRenderCameraTarget = 0x108;
+	constexpr uintptr_t kRenderCameraFlags = 0x130;
+
+	uint8_t *RenderCameraObject( const CameraTaskPlayData *camera )
+	{
+		auto *holder = static_cast< uint8_t * >( camera->m_ptr_e );
+		if( !holder || !PSUMemory::IsValidPointer( holder + 4 ) )
+		{
+			return nullptr;
+		}
+		auto *object = *reinterpret_cast< uint8_t ** >( holder + 4 );
+		if( !object || !PSUMemory::IsValidPointer( object + kRenderCameraFlags ) )
+		{
+			return nullptr;
+		}
+		return object;
+	}
+
 	// Calls any time the camera updates.
 	int __fastcall Hook_48DA90( int thisPtr )
 	{
@@ -134,7 +159,9 @@ namespace TCameraTaskPlay
 
 		// SteamVR often bleeds controller/mouse look into the flat game while an
 		// OpenXR session is active. Kill orbit rates until VR input is owned by us.
-		if( Config::Get().vr.m_enabled )
+		// First person keeps them only when XInput is missing and the orbit is read back as turning.
+		const bool firstPerson = PSUVR::VRCamera::FirstPersonMode();
+		if( Config::Get().vr.m_enabled && ( !firstPerson || PSUVR::VRCamera::TurnFromStick() ) )
 		{
 			static bool s_loggedVrCam = false;
 			if( !s_loggedVrCam )
@@ -147,7 +174,35 @@ namespace TCameraTaskPlay
 			camera->m_turnAcceleration = 0.0f;
 		}
 
-		return pOriginal48DA90( thisPtr );
+		const int result = pOriginal48DA90( thisPtr );
+
+		// First person: steer the orbit camera level behind the head so the game's
+		// camera-relative movement and culling follow the HMD.
+		bool steered = false;
+		if( firstPerson )
+		{
+			// Get() refreshes the player pointer; it returns a zeroed dummy while not ready.
+			const PSUPlayer &player = PSUPlayer::Get();
+			uint8_t *renderCamera = RenderCameraObject( camera );
+			if( PSUPlayer::IsReady() && renderCamera )
+			{
+				const float playerPos[ 3 ] = { player.position.x, player.position.y, player.position.z };
+				steered = PSUVR::VRCamera::SteerFirstPerson(
+					&camera->m_position.x, &camera->m_focusPosition.x, playerPos );
+				if( steered )
+				{
+					// m_position / m_focusPosition are mirrors; the view is built from the camera object.
+					std::memcpy( renderCamera + kRenderCameraPosition, &camera->m_position.x, sizeof( float ) * 3 );
+					std::memcpy( renderCamera + kRenderCameraTarget, &camera->m_focusPosition.x, sizeof( float ) * 3 );
+					*reinterpret_cast< uint32_t * >( renderCamera + kRenderCameraFlags ) |= 1u;
+				}
+			}
+		}
+		if( !steered )
+		{
+			PSUVR::VRCamera::ClearFirstPerson();
+		}
+		return result;
 	}
 
 	void Hook()

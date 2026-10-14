@@ -71,6 +71,10 @@ Debug: `psuex.log` in the game folder; `dinput8_proxy.log` should show `Skip PSU
 | `0x0049E460` | PSU_EndOffscreenToBB | `void __cdecl (void)` | — | verified | Restores BB and composites. FrameTrace `SetRT … BB ret=0049E59C`. |
 | `0x0048C960` | PSU_CameraProjectionSetup | `undefined4 __cdecl (void)` | — | ghidra-labeled | Builds projection into `DAT_00b8eb20` then calls `PSU_SetProjectionMatrix`. Init path — **not** the per-frame 3D draw. |
 | `0x0074AD80` | PSU_SetProjectionMatrix | `void __cdecl (float* mat)` | — | verified | Copies into `g_ProjectionMatrix` + `SetTransform(PROJ)`. FrameTrace `SetTransform PROJ ret=0074ADAA`. |
+| `0x0048FA00` | TCameraTaskPlay_ApplyCamera | `void (task in EAX, new pos in EBX, push target)` | — | disasm | Copies the render camera's position/target into the task mirrors `+0xC8`/`+0xD4`, then writes new values via `0x0048B9A0` (pos → `cam+0xFC`) and `0x0048B9F0` (target → `cam+0x108`), both `cam+0x130 |= 1`. `cam = *( *(task+0x24) + 4 )`. Writing only the task mirrors does nothing (first-person test 2026-10-14). |
+| `0x008C7794` | TCameraTaskPlay state handlers | `void (__thiscall*)[]` indexed by `task+0x20` | — | disasm | `0x0048DA90` dispatches on the state byte; slot 1 = `0x0048DB60`. |
+| `0x00749D40` | PSU_SetTransform | `void __cdecl (D3DTRANSFORMSTATETYPE, const D3DMATRIX*)` | — | disasm | Thin wrapper over `IDirect3DDevice9::SetTransform` (vtable `+0xB0`). 24 direct callers (byte scan). CamTrace's `ret=00749D5C` is its return. |
+| `0x0074E9A0` | PSU_SetWorldMatrix | `void __cdecl (const D3DMATRIX* or null)` | — | disasm | `PSU_SetTransform(0x100 WORLD, m ? m : identity@0x0086D830)`. |
 | `0x00759BB0` | PSU_CopyViewMatrix | `void __cdecl (void* src)` | — | ghidra-labeled | Copies into `g_ViewMatrix`. Called from `PSU_InitViewLights` (init). |
 | `0x004FC890` | PSU_InitViewLights | `undefined4 __cdecl (void)` | — | ghidra-labeled | Init/lights path; calls `PSU_CopyViewMatrix` + `FUN_0075a070`. |
 | `0x00785308` | PSU_BeginScene_Wrapper | `void __cdecl (void)` | — | verified | Thin `BeginScene` on `g_pD3DDevice_a89130`. FrameTrace `BeginScene ret=0078530E`. EndScene `0x00785318`, Present `0x00785328`. |
@@ -83,7 +87,8 @@ Debug: `psuex.log` in the game folder; `dinput8_proxy.log` should show `Skip PSU
 | `0x00A888C0` | g_pD3D | `IDirect3D9*` | verified | Runtime log 2026-10-14: non-null after `PSU_InitializeDirect3D` |
 | `0x00A89130` | g_pD3DDevice_a89130 | `IDirect3DDevice9*` | ghidra-labeled | Device used by Begin/End/Present wrappers at `0x00785308`+ |
 | `0x00BA8C40` | g_pD3DDevice_ba8c40 | `IDirect3DDevice9*` | ghidra-labeled | Device used by matrix/`SetRenderState` helpers (`PSU_SetProjectionMatrix`, etc.) |
-| `0x00A85C30` | g_ViewMatrix | `Matrix4x4` | ghidra-labeled | Stereo per-eye override target |
+| `0x00A85C30` | g_ViewMatrix | `Matrix4x4` | ghidra-labeled | **Not the per-frame camera.** Raw byte scan (2026-10-14): only 5 refs, all in `PSU_CopyViewMatrix` (init, from `PSU_InitViewLights`) and the light loop `0x0075A070` (lights → view space, `SetLight`). The orbit camera is folded into each WORLD by the callers of `0x0074E9A0`, so first person steers `TCameraTaskPlay` instead of using this matrix. |
+| `0x009CA8AC` | g_pLocalPlayer (via `PSUPlayer`, `ReadMemory(0x5CA8AC)` is base-relative) | `PSUPlayer*` | code-used | `+0x114` position (`Vector3F`), `+0x124` angle. Zero during area / universe change. |
 | `0x00A85B30` | g_ProjectionMatrix | `Matrix4x4` | ghidra-labeled | Stereo per-eye override target |
 | `0x00B90EA8` | g_SceneModeIndex | `uint32` | verified | Index into scene callback table (`*0x10` stride) |
 | `0x00B90ED0` | g_SceneCallbackSkip | `uint32` | verified | Non-zero skips the mode callback in `PSU_FrameRender` |

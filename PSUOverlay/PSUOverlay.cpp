@@ -347,7 +347,8 @@ HRESULT APIENTRY PSUOverlay::Hook_Reset( LPDIRECT3DDEVICE9 pDevice, D3DPRESENT_P
 HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitive( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, UINT StartVertex, UINT PrimitiveCount )
 {
 	FrameTrace::OnDrawPrimitive( false );
-	if( PSUVR::StereoRenderer::ShouldSkipScreenQuad( pDevice, _ReturnAddress(), PrimitiveCount, false ) )
+	if( PSUVR::StereoRenderer::ShouldSkipScreenQuad( pDevice, _ReturnAddress(), PrimitiveCount, false ) ||
+		PSUVR::StereoRenderer::ShouldSkipLocalPlayerDraw( pDevice ) )
 	{
 		return D3D_OK;
 	}
@@ -363,7 +364,8 @@ HRESULT APIENTRY PSUOverlay::Hook_SetVertexShaderConstantF( LPDIRECT3DDEVICE9 pD
 HRESULT APIENTRY PSUOverlay::Hook_DrawIndexedPrimitive( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, INT BaseVertexIndex, UINT MinIndex, UINT NumVertices, UINT StartIndex, UINT PrimitiveCount )
 {
 	FrameTrace::OnDrawIndexed( _ReturnAddress() );
-	if( PSUVR::StereoRenderer::ShouldSkipScreenQuad( pDevice, _ReturnAddress(), PrimitiveCount, false ) )
+	if( PSUVR::StereoRenderer::ShouldSkipScreenQuad( pDevice, _ReturnAddress(), PrimitiveCount, false ) ||
+		PSUVR::StereoRenderer::ShouldSkipLocalPlayerDraw( pDevice ) )
 	{
 		return D3D_OK;
 	}
@@ -604,6 +606,7 @@ HRESULT APIENTRY PSUOverlay::Hook_Swapchain_Release( IDirect3DSwapChain9 *pSwapC
 HRESULT APIENTRY PSUOverlay::Hook_SetTransform( LPDIRECT3DDEVICE9 pDevice, D3DTRANSFORMSTATETYPE State, const D3DMATRIX *pMatrix )
 {
 	FrameTrace::OnSetTransform( State, pMatrix, _ReturnAddress() );
+	PSUVR::StereoRenderer::OnSetWorld( State, pMatrix );
 	return m_pOriginalSetTransform( pDevice, State, pMatrix );
 }
 

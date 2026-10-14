@@ -264,6 +264,9 @@
     <ClInclude Include="PSUVR\VRCamera.h">
       <Filter>Header Files\PSUVR</Filter>
     </ClInclude>
+    <ClInclude Include="PSUVR\VRGamepad.h">
+      <Filter>Header Files\PSUVR</Filter>
+    </ClInclude>
     <ClInclude Include="Misc\Log.h">
       <Filter>Header Files\Misc</Filter>
     </ClInclude>
@@ -396,6 +399,9 @@
       <Filter>Source Files\PSUVR</Filter>
     </ClCompile>
     <ClCompile Include="PSUVR\VRCamera.cpp">
+      <Filter>Source Files\PSUVR</Filter>
+    </ClCompile>
+    <ClCompile Include="PSUVR\VRGamepad.cpp">
       <Filter>Source Files\PSUVR</Filter>
     </ClCompile>
   </ItemGroup>

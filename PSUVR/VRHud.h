@@ -68,6 +68,8 @@ namespace PSUVR
 		void RememberUserAabb( float minX, float minY, float maxX, float maxY );
 		void RememberWorldAabb( float minX, float minY, float maxX, float maxY );
 		bool NearExistingUserAabb( float cx, float cy, float pad ) const;
+		// Current render target is the game-sized frame (not a render-to-texture pass).
+		bool TargetsGameFrame( IDirect3DDevice9 *device ) const;
 		bool NearExistingWorldAabb( float cx, float cy, float pad ) const;
 		static bool IsWorldUiWidget( const void *verts, int vertexCount, unsigned stride,
 			unsigned gameW, unsigned gameH );

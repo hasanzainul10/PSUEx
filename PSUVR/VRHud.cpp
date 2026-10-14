@@ -135,8 +135,280 @@ namespace PSUVR
 			return true;
 		}
 
+		// The HUD RT is game-sized, so the game's viewport and scissor map 1:1. Fall back
+		// to the full RT if they don't fit (e.g. an eye-sized viewport left bound).
+		void ApplyGameClip( IDirect3DDevice9 *device, const D3DVIEWPORT9 &gameVp, const RECT &gameScissor,
+			unsigned w, unsigned h )
+		{
+			D3DVIEWPORT9 vp = gameVp;
+			if( vp.Width < 1 || vp.Height < 1 || vp.X + vp.Width > w || vp.Y + vp.Height > h )
+			{
+				vp = { 0, 0, w, h, 0.0f, 1.0f };
+			}
+			device->SetViewport( &vp );
+			RECT scissor = gameScissor;
+			scissor.left = ( std::max )( scissor.left, 0L );
+			scissor.top = ( std::max )( scissor.top, 0L );
+			scissor.right = ( std::min )( scissor.right, static_cast< LONG >( w ) );
+			scissor.bottom = ( std::min )( scissor.bottom, static_cast< LONG >( h ) );
+			if( scissor.right <= scissor.left || scissor.bottom <= scissor.top )
+			{
+				scissor = { 0, 0, static_cast< LONG >( w ), static_cast< LONG >( h ) };
+			}
+			device->SetScissorRect( &scissor );
+		}
+
+		// Transformed (non-RHW) 2D draws: project through WORLD*VIEW*PROJ and the viewport.
+		// The mission map's background is a huge plane that only the 3D world's depth hides
+		// in the flat frame; in VR that depth lives in the eye buffers, so it would cover
+		// the visor. True when the projection covers most of the screen.
+		bool IsProjectedNearFullscreen( IDirect3DDevice9 *device, const void *verts, unsigned vertCount,
+			unsigned stride, unsigned gameW, unsigned gameH )
+		{
+			if( !device || !verts || vertCount < 3 || stride < 12 )
+			{
+				return false;
+			}
+			D3DMATRIX world{}, view{}, proj{};
+			device->GetTransform( D3DTS_WORLD, &world );
+			device->GetTransform( D3DTS_VIEW, &view );
+			device->GetTransform( D3DTS_PROJECTION, &proj );
+			D3DVIEWPORT9 vp{};
+			device->GetViewport( &vp );
+			auto mul = []( const float in[ 4 ], const D3DMATRIX &m, float out[ 4 ] )
+			{
+				for( int c = 0; c < 4; ++c )
+				{
+					out[ c ] = in[ 0 ] * m.m[ 0 ][ c ] + in[ 1 ] * m.m[ 1 ][ c ] + in[ 2 ] * m.m[ 2 ][ c ] + in[ 3 ] * m.m[ 3 ][ c ];
+				}
+			};
+			float minX = 1.0e30f, minY = 1.0e30f, maxX = -1.0e30f, maxY = -1.0e30f;
+			const auto *bytes = static_cast< const unsigned char * >( verts );
+			for( unsigned i = 0; i < vertCount; ++i )
+			{
+				const float *p = reinterpret_cast< const float * >( bytes + i * stride );
+				const float v[ 4 ] = { p[ 0 ], p[ 1 ], p[ 2 ], 1.0f };
+				float a[ 4 ], b[ 4 ], c[ 4 ];
+				mul( v, world, a );
+				mul( a, view, b );
+				mul( b, proj, c );
+				if( c[ 3 ] <= 1.0e-6f )
+				{
+					// Behind the projection plane: a plane this large spans the screen.
+					return true;
+				}
+				const float sx = vp.X + ( c[ 0 ] / c[ 3 ] * 0.5f + 0.5f ) * vp.Width;
+				const float sy = vp.Y + ( 0.5f - c[ 1 ] / c[ 3 ] * 0.5f ) * vp.Height;
+				minX = ( std::min )( minX, sx );
+				maxX = ( std::max )( maxX, sx );
+				minY = ( std::min )( minY, sy );
+				maxY = ( std::max )( maxY, sy );
+			}
+			const float gw = static_cast< float >( gameW );
+			const float gh = static_cast< float >( gameH );
+			minX = ( std::max )( minX, 0.0f );
+			minY = ( std::max )( minY, 0.0f );
+			maxX = ( std::min )( maxX, gw );
+			maxY = ( std::min )( maxY, gh );
+			if( maxX <= minX || maxY <= minY )
+			{
+				return false;
+			}
+			return ( ( maxX - minX ) * ( maxY - minY ) ) / ( gw * gh ) >= 0.45f;
+		}
+
+		// Map backdrop: near-black vertex colours of transformed 2D draws get their alpha
+		// scaled so the backdrop doesn't block the world behind the visor. Returns the
+		// copy to draw, or nullptr when nothing changed.
+		const void *FadeBlackVertices( const void *verts, unsigned vertCount, unsigned stride,
+			DWORD fvf, float alphaScale )
+		{
+			static alignas( 16 ) unsigned char s_fadeBuf[ kMaxUiXformVerts * kMaxUiXformStride ]{};
+			if( !( fvf & D3DFVF_DIFFUSE ) || alphaScale >= 1.0f || !verts ||
+				vertCount > kMaxUiXformVerts || stride > kMaxUiXformStride )
+			{
+				return nullptr;
+			}
+			unsigned colorOffset = 12;  // XYZ
+			if( fvf & D3DFVF_NORMAL ) colorOffset += 12;
+			if( fvf & D3DFVF_PSIZE ) colorOffset += 4;
+			if( colorOffset + 4 > stride )
+			{
+				return nullptr;
+			}
+			constexpr unsigned kBlackLevel = 0x40;
+			const float scale = alphaScale < 0.0f ? 0.0f : alphaScale;
+			std::memcpy( s_fadeBuf, verts, vertCount * stride );
+			bool changed = false;
+			for( unsigned i = 0; i < vertCount; ++i )
+			{
+				auto *color = reinterpret_cast< DWORD * >( s_fadeBuf + i * stride + colorOffset );
+				const DWORD c = *color;
+				const unsigned r = ( c >> 16 ) & 0xFF, g = ( c >> 8 ) & 0xFF, b = c & 0xFF;
+				if( r <= kBlackLevel && g <= kBlackLevel && b <= kBlackLevel )
+				{
+					const DWORD a = static_cast< DWORD >( static_cast< float >( c >> 24 ) * scale );
+					*color = ( c & 0x00FFFFFF ) | ( a << 24 );
+					changed = true;
+				}
+			}
+			return changed ? s_fadeBuf : nullptr;
+		}
+
+		// Diagnostics for dark panels: each distinct large visor draw (caller + rounded box)
+		// once, with FVF, first vertex colour and bound texture.
+		void LogLargeDraw( IDirect3DDevice9 *device, void *ret, const char *route, const void *verts,
+			unsigned vertCount, unsigned stride, DWORD fvf, unsigned gameW, unsigned gameH )
+		{
+			constexpr unsigned kMaxLargeLogs = 48;
+			struct Seen { void *ret; int x0, y0, x1, y1; };
+			static Seen s_seen[ kMaxLargeLogs ]{};
+			static unsigned s_count = 0;
+			if( s_count >= kMaxLargeLogs || !verts || ( fvf & D3DFVF_POSITION_MASK ) != D3DFVF_XYZRHW )
+			{
+				return;
+			}
+			float minX = 0, minY = 0, maxX = 0, maxY = 0;
+			if( !ComputeAabb( verts, vertCount, stride, minX, minY, maxX, maxY ) )
+			{
+				return;
+			}
+			const float area = ( maxX - minX ) * ( maxY - minY ) /
+				( static_cast< float >( gameW ) * static_cast< float >( gameH ) );
+			if( area < 0.03f )
+			{
+				return;
+			}
+			const Seen key{ ret, static_cast< int >( minX ) / 8, static_cast< int >( minY ) / 8,
+				static_cast< int >( maxX ) / 8, static_cast< int >( maxY ) / 8 };
+			for( unsigned i = 0; i < s_count; ++i )
+			{
+				const Seen &k = s_seen[ i ];
+				if( k.ret == key.ret && k.x0 == key.x0 && k.y0 == key.y0 && k.x1 == key.x1 && k.y1 == key.y1 )
+				{
+					return;
+				}
+			}
+			s_seen[ s_count++ ] = key;
+			DWORD color = 0;
+			unsigned colorOffset = 16;
+			if( fvf & D3DFVF_NORMAL ) colorOffset += 12;
+			if( fvf & D3DFVF_PSIZE ) colorOffset += 4;
+			const bool haveColor = ( fvf & D3DFVF_DIFFUSE ) && colorOffset + 4 <= stride;
+			if( haveColor )
+			{
+				color = *reinterpret_cast< const DWORD * >( static_cast< const unsigned char * >( verts ) + colorOffset );
+			}
+			IDirect3DBaseTexture9 *texture = nullptr;
+			device->GetTexture( 0, &texture );
+			DWORD texWidth = 0, texHeight = 0;
+			if( texture )
+			{
+				if( texture->GetType() == D3DRTYPE_TEXTURE )
+				{
+					D3DSURFACE_DESC desc{};
+					static_cast< IDirect3DTexture9 * >( texture )->GetLevelDesc( 0, &desc );
+					texWidth = desc.Width;
+					texHeight = desc.Height;
+				}
+				texture->Release();
+			}
+			DWORD blend = 0, srcBlend = 0, dstBlend = 0;
+			device->GetRenderState( D3DRS_ALPHABLENDENABLE, &blend );
+			device->GetRenderState( D3DRS_SRCBLEND, &srcBlend );
+			device->GetRenderState( D3DRS_DESTBLEND, &dstBlend );
+			PSU_LOG( "VRHud large: ret=%p %s box=(%.0f,%.0f)-(%.0f,%.0f) area=%.2f fvf=0x%lX color=%s0x%08lX tex=%lux%lu blend=%lu %lu/%lu\n",
+				ret, route, minX, minY, maxX, maxY, area, fvf, haveColor ? "" : "n/a ", color,
+				texWidth, texHeight, blend, srcBlend, dstBlend );
+		}
+
+		// Additive draws (DESTBLEND = ONE: glows, flares) add light in the flat frame. On the
+		// transparent HUD RT they would also add alpha and turn into dark opaque panels.
+		// Keep their colour but leave the RT alpha alone; the visor layer is premultiplied,
+		// so colour with zero alpha still adds over the world like in the flat game.
+		struct AdditiveAlphaGuard
+		{
+			IDirect3DDevice9 *device = nullptr;
+			DWORD separate = 0, srcAlpha = 0, dstAlpha = 0;
+
+			explicit AdditiveAlphaGuard( IDirect3DDevice9 *dev )
+			{
+				DWORD blend = 0, dstBlend = 0;
+				dev->GetRenderState( D3DRS_ALPHABLENDENABLE, &blend );
+				dev->GetRenderState( D3DRS_DESTBLEND, &dstBlend );
+				if( !blend || dstBlend != D3DBLEND_ONE )
+				{
+					return;
+				}
+				device = dev;
+				dev->GetRenderState( D3DRS_SEPARATEALPHABLENDENABLE, &separate );
+				dev->GetRenderState( D3DRS_SRCBLENDALPHA, &srcAlpha );
+				dev->GetRenderState( D3DRS_DESTBLENDALPHA, &dstAlpha );
+				dev->SetRenderState( D3DRS_SEPARATEALPHABLENDENABLE, TRUE );
+				dev->SetRenderState( D3DRS_SRCBLENDALPHA, D3DBLEND_ZERO );
+				dev->SetRenderState( D3DRS_DESTBLENDALPHA, D3DBLEND_ONE );
+			}
+
+			~AdditiveAlphaGuard()
+			{
+				if( !device )
+				{
+					return;
+				}
+				device->SetRenderState( D3DRS_SEPARATEALPHABLENDENABLE, separate );
+				device->SetRenderState( D3DRS_SRCBLENDALPHA, srcAlpha );
+				device->SetRenderState( D3DRS_DESTBLENDALPHA, dstAlpha );
+			}
+		};
+
+		// Once per caller: render target size and depth/stencil state of a transformed 2D draw.
+		void LogDrawState( IDirect3DDevice9 *device, void *ret )
+		{
+			constexpr unsigned kMaxStateLogs = 8;
+			static void *s_seen[ kMaxStateLogs ]{};
+			static unsigned s_count = 0;
+			for( unsigned i = 0; i < s_count; ++i )
+			{
+				if( s_seen[ i ] == ret )
+				{
+					return;
+				}
+			}
+			if( s_count >= kMaxStateLogs )
+			{
+				return;
+			}
+			s_seen[ s_count++ ] = ret;
+			D3DSURFACE_DESC rtDesc{};
+			D3DSURFACE_DESC dsDesc{};
+			IDirect3DSurface9 *rt = nullptr;
+			IDirect3DSurface9 *ds = nullptr;
+			if( SUCCEEDED( device->GetRenderTarget( 0, &rt ) ) && rt )
+			{
+				rt->GetDesc( &rtDesc );
+				rt->Release();
+			}
+			if( SUCCEEDED( device->GetDepthStencilSurface( &ds ) ) && ds )
+			{
+				ds->GetDesc( &dsDesc );
+				ds->Release();
+			}
+			DWORD zEnable = 0, zFunc = 0, stencil = 0, stencilFunc = 0, stencilRef = 0, colorWrite = 0, blend = 0;
+			device->GetRenderState( D3DRS_ZENABLE, &zEnable );
+			device->GetRenderState( D3DRS_ZFUNC, &zFunc );
+			device->GetRenderState( D3DRS_STENCILENABLE, &stencil );
+			device->GetRenderState( D3DRS_STENCILFUNC, &stencilFunc );
+			device->GetRenderState( D3DRS_STENCILREF, &stencilRef );
+			device->GetRenderState( D3DRS_COLORWRITEENABLE, &colorWrite );
+			device->GetRenderState( D3DRS_ALPHABLENDENABLE, &blend );
+			PSU_LOG( "VRHud route:   rt=%ux%u ds=%ux%u z=%lu zfunc=%lu stencil=%lu sfunc=%lu sref=%lu colorwrite=0x%lX blend=%lu\n",
+				rtDesc.Width, rtDesc.Height, dsDesc.Width, dsDesc.Height,
+				zEnable, zFunc, stencil, stencilFunc, stencilRef, colorWrite, blend );
+		}
+
 		// One line per unique (caller, route), so psuex.log shows where each UI piece went.
-		void LogRoute( void *ret, const char *route, const void *verts, unsigned vertCount, unsigned stride )
+		void LogRoute( void *ret, const char *route, const void *verts, unsigned vertCount, unsigned stride,
+			const D3DVIEWPORT9 *viewport = nullptr )
 		{
 			constexpr unsigned kMaxRouteLogs = 64;
 			struct Seen { void *ret; const char *route; };
@@ -165,6 +437,11 @@ namespace PSUVR
 			}
 			PSU_LOG( "VRHud route: ret=%p %s box=(%.0f,%.0f)-(%.0f,%.0f) z=%.4f rhw=%.4f n=%u stride=%u\n",
 				ret, route, minX, minY, maxX, maxY, z, rhw, vertCount, stride );
+			if( viewport )
+			{
+				PSU_LOG( "VRHud route:   viewport=(%lu,%lu %lux%lu)\n",
+					viewport->X, viewport->Y, viewport->Width, viewport->Height );
+			}
 		}
 
 		// Expand indexed XYZRHW into a triangle-list UP buffer in s_uiXformBuf.
@@ -384,6 +661,20 @@ namespace PSUVR
 		m_worldAabbs[ m_worldAabbCount++ ] = { minX, minY, maxX, maxY };
 	}
 
+	bool VRHud::TargetsGameFrame( IDirect3DDevice9 *device ) const
+	{
+		// Render-to-texture (a different-sized target) is not part of the visible frame.
+		IDirect3DSurface9 *rt = nullptr;
+		if( FAILED( device->GetRenderTarget( 0, &rt ) ) || !rt )
+		{
+			return false;
+		}
+		D3DSURFACE_DESC desc{};
+		rt->GetDesc( &desc );
+		rt->Release();
+		return desc.Width == m_w && desc.Height == m_h;
+	}
+
 	bool VRHud::NearExistingUserAabb( float cx, float cy, float pad ) const
 	{
 		for( unsigned i = 0; i < m_userAabbCount; ++i )
@@ -594,12 +885,12 @@ namespace PSUVR
 		m_capturing = true;
 		device->SetRenderState( D3DRS_ZENABLE, FALSE );
 		device->SetRenderState( D3DRS_ZWRITEENABLE, FALSE );
+		const AdditiveAlphaGuard additiveGuard( device );
 		device->SetRenderTarget( 0, target );
 		device->SetDepthStencilSurface( nullptr );
-		D3DVIEWPORT9 vp{ 0, 0, m_w, m_h, 0.0f, 1.0f };
-		device->SetViewport( &vp );
-		RECT scissor{ 0, 0, static_cast< LONG >( m_w ), static_cast< LONG >( m_h ) };
-		device->SetScissorRect( &scissor );
+		// SetRenderTarget reset the viewport; put the game's back so clipped 2D
+		// (the mission map's background plane) stays inside its rectangle.
+		ApplyGameClip( device, savedVp, savedScissor, m_w, m_h );
 		drawFn( thisPtr, a4, vertexCount, vertexPtr, drawType );
 		m_capturing = false;
 
@@ -676,19 +967,35 @@ namespace PSUVR
 		device->GetFVF( &savedFvf );
 		device->GetStreamSource( 0, &savedVb, &savedVbOffset, &savedVbStride );
 		device->GetIndices( &savedIb );
+		DWORD stencilWriteMask = 0;
+		device->GetRenderState( D3DRS_STENCILWRITEMASK, &stencilWriteMask );
+
+		// Transformed 2D (the mission map) is masked by the game's depth/stencil:
+		// test against the game's buffer, but never write it.
+		const bool transformed = ( savedFvf & D3DFVF_POSITION_MASK ) != D3DFVF_XYZRHW;
+		IDirect3DSurface9 *replayDs = nullptr;
+		if( savedDs )
+		{
+			D3DSURFACE_DESC dsDesc{};
+			if( SUCCEEDED( savedDs->GetDesc( &dsDesc ) ) && dsDesc.Width == m_w && dsDesc.Height == m_h )
+			{
+				replayDs = savedDs;
+			}
+		}
 
 		m_capturing = true;
-		device->SetRenderState( D3DRS_ZENABLE, FALSE );
+		device->SetRenderState( D3DRS_ZENABLE, ( transformed && replayDs ) ? zEnable : FALSE );
 		device->SetRenderState( D3DRS_ZWRITEENABLE, FALSE );
+		const AdditiveAlphaGuard additiveGuard( device );
+		device->SetRenderState( D3DRS_STENCILWRITEMASK, 0 );
 		device->SetRenderTarget( 0, target );
-		device->SetDepthStencilSurface( nullptr );
-		D3DVIEWPORT9 vp{ 0, 0, m_w, m_h, 0.0f, 1.0f };
-		device->SetViewport( &vp );
-		RECT scissor{ 0, 0, static_cast< LONG >( m_w ), static_cast< LONG >( m_h ) };
-		device->SetScissorRect( &scissor );
+		device->SetDepthStencilSurface( replayDs );
+		// SetRenderTarget reset the viewport; put the game's back.
+		ApplyGameClip( device, savedVp, savedScissor, m_w, m_h );
 		device->DrawPrimitiveUP( static_cast< D3DPRIMITIVETYPE >( primitiveType ),
 			primitiveCount, verts, stride );
 		m_capturing = false;
+		device->SetRenderState( D3DRS_STENCILWRITEMASK, stencilWriteMask );
 
 		device->SetFVF( savedFvf );
 		device->SetStreamSource( 0, savedVb, savedVbOffset, savedVbStride );
@@ -801,6 +1108,9 @@ namespace PSUVR
 		if( userVerts >= 3 )
 		{
 			LogRoute( ret, "font-user", s_userBucket, userVerts, stride );
+			DWORD fontFvf = 0;
+			device->GetFVF( &fontFvf );
+			LogLargeDraw( device, ret, "font-user", s_userBucket, userVerts, stride, fontFvf, m_w, m_h );
 			ReplayPassBOnto( device, false, D3DPT_TRIANGLELIST, userVerts / 3, s_userBucket, stride, false );
 		}
 		if( worldVerts >= 3 )
@@ -836,9 +1146,22 @@ namespace PSUVR
 			return;
 		}
 		const unsigned vertCount = VertCountForPrimitive( primitiveType, primitiveCount );
+		if( !TargetsGameFrame( device ) )
+		{
+			LogRoute( ret, "skip-offscreen", verts, vertCount, stride );
+			return;
+		}
 		if( IsNearFullscreenDraw( verts, vertCount, stride, m_w, m_h ) )
 		{
 			LogRoute( ret, "skip-fullscreen", verts, vertCount, stride );
+			return;
+		}
+		DWORD drawFvf = 0;
+		device->GetFVF( &drawFvf );
+		if( ( drawFvf & D3DFVF_POSITION_MASK ) != D3DFVF_XYZRHW &&
+			IsProjectedNearFullscreen( device, verts, vertCount, stride, m_w, m_h ) )
+		{
+			LogRoute( ret, "skip-fullscreen-3d", verts, vertCount, stride );
 			return;
 		}
 		if( IsAvatarAnchoredPassB( verts, primitiveType, primitiveCount, stride, m_w, m_h ) )
@@ -852,7 +1175,33 @@ namespace PSUVR
 			return;
 		}
 		const bool world = ClassifyWorldLayer( verts, vertCount, stride );
-		LogRoute( ret, world ? "world" : "user", verts, vertCount, stride );
+		DWORD fvf = 0;
+		device->GetFVF( &fvf );
+		if( ( fvf & D3DFVF_POSITION_MASK ) == D3DFVF_XYZRHW )
+		{
+			LogRoute( ret, world ? "world" : "user", verts, vertCount, stride );
+			LogLargeDraw( device, ret, world ? "world" : "user", verts, vertCount, stride, fvf, m_w, m_h );
+		}
+		else
+		{
+			// Transformed 2D (mission map): log what confines it in the flat frame.
+			D3DVIEWPORT9 viewport{};
+			device->GetViewport( &viewport );
+			LogRoute( ret, world ? "world-3d" : "user-3d", verts, vertCount, stride, &viewport );
+			LogDrawState( device, ret );
+			if( const void *faded = FadeBlackVertices( verts, vertCount, stride, fvf,
+					Config::Get().vr.m_hudMapBlackAlpha ) )
+			{
+				static bool s_loggedFade = false;
+				if( !s_loggedFade )
+				{
+					s_loggedFade = true;
+					PSU_LOG( "VRHud: fading black map backdrop to %.2f alpha (ret=%p)\n",
+						Config::Get().vr.m_hudMapBlackAlpha, ret );
+				}
+				verts = faded;
+			}
+		}
 		ReplayPassBOnto( device, world, primitiveType, primitiveCount, verts, stride );
 		if( m_inUiDraw )
 		{
@@ -871,7 +1220,7 @@ namespace PSUVR
 		{
 			return;
 		}
-		if( !StereoRenderer::Get().HasFrame() )
+		if( !StereoRenderer::Get().HasFrame() || !TargetsGameFrame( device ) )
 		{
 			return;
 		}
@@ -963,7 +1312,7 @@ namespace PSUVR
 		{
 			return;
 		}
-		if( !StereoRenderer::Get().HasFrame() )
+		if( !StereoRenderer::Get().HasFrame() || !TargetsGameFrame( device ) )
 		{
 			return;
 		}
