@@ -612,6 +612,10 @@ namespace PSUVR
 			const bool firstPerson = VRCamera::FirstPersonActive();
 			// Bracket the local player's draw callback so its head can be cut in the eyes.
 			VRPlayerDraw::Update( firstPerson );
+			if( firstPerson )
+			{
+				VRCamera::UpdateFirstPersonAnchor( views );
+			}
 			const DWORD clearFlags = D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER | ( HasStencil( depthFormat ) ? D3DCLEAR_STENCIL : 0 );
 
 			m_gameProj = gameProj;

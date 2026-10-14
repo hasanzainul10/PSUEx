@@ -2,6 +2,7 @@
 
 #include "D3D11Bridge.h"
 #include "StereoRenderer.h"
+#include "VRCamera.h"
 #include "VRSystem.h"
 #include "../Misc/Log.h"
 #include "../PSUExConfig.h"
@@ -361,6 +362,46 @@ namespace PSUVR
 			}
 		};
 
+		// View depth (game units) of a pre-transformed vertex from its z, through the
+		// game PROJ (row vectors, w = z_view * _34): z = ( zv*_33 + _43 ) / ( zv*_34 ).
+		float DepthFromZ( float z, const D3DMATRIX &proj )
+		{
+			const float denom = z * proj._34 - proj._33;
+			if( std::fabs( denom ) < 1.0e-6f || std::fabs( proj._34 ) < 1.0e-6f )
+			{
+				return 1.0f / ( std::max )( 1.0e-6f, 1.0f - z );  // near = 1, infinite far
+			}
+			const float zView = proj._43 / denom;
+			return std::fabs( zView * proj._34 );
+		}
+
+		// One line per (layer, route) so new world-anchored layers can be spotted.
+		void LogLayerRoute( int layer, const char *route, const void *verts, unsigned vertCount, unsigned stride )
+		{
+			constexpr unsigned kMaxLayerLogs = 64;
+			struct Seen { int layer; const char *route; };
+			static Seen s_seen[ kMaxLayerLogs ]{};
+			static unsigned s_count = 0;
+			if( s_count >= kMaxLayerLogs )
+			{
+				return;
+			}
+			for( unsigned i = 0; i < s_count; ++i )
+			{
+				if( s_seen[ i ].layer == layer && s_seen[ i ].route == route )
+				{
+					return;
+				}
+			}
+			s_seen[ s_count++ ] = { layer, route };
+			float minX = 0, minY = 0, maxX = 0, maxY = 0;
+			ComputeAabb( verts, vertCount, stride, minX, minY, maxX, maxY );
+			const float z = stride >= 16 ? static_cast< const float * >( verts )[ 2 ] : 0.0f;
+			const float depth = z > 0.0f && z < 1.0f ? 1.0f / ( 1.0f - z ) : 0.0f;
+			PSU_LOG( "VRHud layer=0x%02X %s box=(%.0f,%.0f)-(%.0f,%.0f) z=%.5f depth~%.1f n=%u\n",
+				layer, route, minX, minY, maxX, maxY, z, depth, vertCount );
+		}
+
 		// Once per caller: render target size and depth/stencil state of a transformed 2D draw.
 		void LogDrawState( IDirect3DDevice9 *device, void *ret )
 		{
@@ -539,6 +580,13 @@ namespace PSUVR
 			}
 			return 0;
 		}
+	}
+
+	int VRHud::s_passBLayer = -1;
+
+	void VRHud::SetPassBLayer( int layer )
+	{
+		s_passBLayer = layer;
 	}
 
 	VRHud &VRHud::Get()
@@ -743,6 +791,12 @@ namespace PSUVR
 		{
 			return false;
 		}
+		return IsAvatarRegion( verts, vertCount, stride, gameW, gameH );
+	}
+
+	bool VRHud::IsAvatarRegion( const void *verts, unsigned vertCount, unsigned stride,
+		unsigned gameW, unsigned gameH )
+	{
 		float minX = 0, minY = 0, maxX = 0, maxY = 0;
 		if( !ComputeAabb( verts, vertCount, stride, minX, minY, maxX, maxY ) )
 		{
@@ -1163,6 +1217,66 @@ namespace PSUVR
 		{
 			LogRoute( ret, "skip-fullscreen-3d", verts, vertCount, stride );
 			return;
+		}
+		// World-anchored 2D from draw-layer objects: z holds the projected depth
+		// (0.94-0.98 seen), which DrawNameplateToEyes uses to place it in 3D.
+		// Exact layer from Hook_PassB (stack scans hit stale return addresses).
+		const int layer = s_passBLayer;
+		if( layer >= 0 )
+		{
+			float minX = 0, minY = 0, maxX = 0, maxY = 0;
+			ComputeAabb( verts, vertCount, stride, minX, minY, maxX, maxY );
+			const float z = stride >= 16 ? static_cast< const float * >( verts )[ 2 ] : 0.0f;
+			const bool hasDepth = z > 0.5f && z < 1.0f;
+			if( !hasDepth && VRCamera::FirstPersonActive() )
+			{
+				// Our own nameplate has no depth and sits just above the head, which the
+				// steered first-person camera always puts at screen center.
+				const float cx = ( minX + maxX ) * 0.5f;
+				const float cy = ( minY + maxY ) * 0.5f;
+				const float gw = static_cast< float >( m_w );
+				const float gh = static_cast< float >( m_h );
+				if( std::fabs( cx - gw * 0.5f ) < gw * 0.15f && cy > gh * 0.1f && cy < gh * 0.55f )
+				{
+					LogLayerRoute( layer, "skip-own-plate", verts, vertCount, stride );
+					if( m_inUiDraw )
+					{
+						++m_uiPassBCaptures;
+					}
+					return;
+				}
+			}
+			// HUD widgets live in the same layers with a constant HUD z, which decodes to a
+			// point just in front of the game camera. In first person that camera sits
+			// behind the head, so such points would land behind the eyes and flip.
+			// Classify by decoded depth: nearer than the head = HUD (visor), around the
+			// head = ours (hidden in first person), beyond = world (eyes).
+			const float depth = hasDepth ? DepthFromZ( z, stereo.GameProj() ) : 0.0f;
+			const bool firstPerson = VRCamera::FirstPersonActive();
+			constexpr float kOwnBand = 8.0f;        // game units around the head
+			constexpr float kHudDepthThird = 12.0f; // third person: nearer = HUD
+			const float headDepth = firstPerson ? VRCamera::FirstPersonCameraDistance() : 0.0f;
+			if( hasDepth && firstPerson && std::fabs( depth - headDepth ) < kOwnBand )
+			{
+				LogLayerRoute( layer, "skip-own", verts, vertCount, stride );
+				if( m_inUiDraw )
+				{
+					++m_uiPassBCaptures;
+				}
+				return;
+			}
+			const float worldDepth = firstPerson ? headDepth + kOwnBand : kHudDepthThird;
+			if( hasDepth && depth > worldDepth )
+			{
+				LogLayerRoute( layer, "eyes", verts, vertCount, stride );
+				stereo.DrawNameplateToEyes( device, primitiveType, primitiveCount, verts, stride );
+				if( m_inUiDraw )
+				{
+					++m_uiPassBCaptures;
+				}
+				return;
+			}
+			LogLayerRoute( layer, "visor", verts, vertCount, stride );
 		}
 		if( IsAvatarAnchoredPassB( verts, primitiveType, primitiveCount, stride, m_w, m_h ) )
 		{

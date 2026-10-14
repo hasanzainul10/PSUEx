@@ -114,6 +114,9 @@ public:
 		std::string m_fpBody = "headless";
 		// How far below the eyes the headless cut sits (meters).
 		float m_fpNeckDrop = 0.22f;
+		// How far the head may lean / crouch away from the body before the body follows (meters).
+		float m_fpLeanLimit = 0.15f;
+		float m_fpCrouchLimit = 0.2f;
 		bool m_snapTurn = false;
 		bool m_comfortVignette = true;
 		// Render the 3D pass per eye (projection layer) with the game frame as a panel.

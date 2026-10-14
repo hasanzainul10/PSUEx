@@ -68,6 +68,8 @@ Config::Config()
 	vr.m_fpMoveDirection = "head";
 	vr.m_fpBody = "headless";
 	vr.m_fpNeckDrop = 0.22f;
+	vr.m_fpLeanLimit = 0.15f;
+	vr.m_fpCrouchLimit = 0.2f;
 	vr.m_stereoMode = 5;
 	vr.m_snapTurn = false;
 	vr.m_comfortVignette = true;
@@ -162,6 +164,8 @@ void Config::SaveToFile()
 	root[ "vr" ][ "fpMoveDirection" ] = vr.m_fpMoveDirection;
 	root[ "vr" ][ "fpBody" ] = vr.m_fpBody;
 	root[ "vr" ][ "fpNeckDrop" ] = vr.m_fpNeckDrop;
+	root[ "vr" ][ "fpLeanLimit" ] = vr.m_fpLeanLimit;
+	root[ "vr" ][ "fpCrouchLimit" ] = vr.m_fpCrouchLimit;
 	root[ "vr" ][ "snapTurn" ] = vr.m_snapTurn;
 	root[ "vr" ][ "comfortVignette" ] = vr.m_comfortVignette;
 	root[ "vr" ][ "stereo" ] = vr.m_stereo;
@@ -441,6 +445,10 @@ void Config::LoadFromFile()
 			vr.m_fpBody = vrNode[ "fpBody" ].get<std::string>();
 		if( vrNode.contains( "fpNeckDrop" ) && vrNode[ "fpNeckDrop" ].is_number() )
 			vr.m_fpNeckDrop = vrNode[ "fpNeckDrop" ].get<float>();
+		if( vrNode.contains( "fpLeanLimit" ) && vrNode[ "fpLeanLimit" ].is_number() )
+			vr.m_fpLeanLimit = vrNode[ "fpLeanLimit" ].get<float>();
+		if( vrNode.contains( "fpCrouchLimit" ) && vrNode[ "fpCrouchLimit" ].is_number() )
+			vr.m_fpCrouchLimit = vrNode[ "fpCrouchLimit" ].get<float>();
 		if( vrNode.contains( "snapTurn" ) && vrNode[ "snapTurn" ].is_boolean() )
 			vr.m_snapTurn = vrNode[ "snapTurn" ].get<bool>();
 		if( vrNode.contains( "comfortVignette" ) && vrNode[ "comfortVignette" ].is_boolean() )

@@ -80,6 +80,10 @@ namespace PSUVR
 		unsigned m_lastEyeH = 0;
 		unsigned m_lastGameW = 0;
 		unsigned m_lastGameH = 0;
+	public:
+		// Game PROJ captured for the current stereo frame (pre-transformed 2D was built with it).
+		const D3DMATRIX &GameProj() const { return m_gameProj; }
+	private:
 		D3DMATRIX m_gameProj{};
 		D3DMATRIX m_invGameProj{};
 		D3DMATRIX m_eyeView[ 2 ]{};

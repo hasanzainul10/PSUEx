@@ -68,6 +68,9 @@ namespace PSUVR
 		bool s_haveReference = false;
 		Vec3 s_refPosition{};
 		float s_refYaw = 0.0f;
+		// First person: tracking-space point the head is leashed to (follows the head
+		// once it leans further than fpLeanLimit / fpCrouchLimit).
+		Vec3 s_fpAnchor{};
 
 		// First person (game world yaw: forward = ( sin, 0, cos ); turning left increases it).
 		// The game camera follows the body only; the HMD looks around inside that frame.
@@ -93,13 +96,14 @@ namespace PSUVR
 		constexpr float kSnapPress = 0.6f;
 		constexpr float kSnapRelease = 0.3f;
 
-		// cameraOffset is added to the eye position in camera space (game units).
+		// refPosition is the tracking-space origin of camera space; cameraOffset is added
+		// to the eye position in camera space (game units).
 		void BuildEyeWithYaw( const EyePose &eye, float unitsPerMeter, const D3DMATRIX &gameProj,
-			float frameYaw, const Vec3 &cameraOffset, D3DMATRIX &view, D3DMATRIX &proj )
+			float frameYaw, const Vec3 &refPosition, const Vec3 &cameraOffset, D3DMATRIX &view, D3DMATRIX &proj )
 		{
 			const Quat yawInverse = YawQuat( -frameYaw );
 			const Vec3 offset = ToVec( eye.position );
-			Vec3 p = Rotate( yawInverse, { offset.x - s_refPosition.x, offset.y - s_refPosition.y, offset.z - s_refPosition.z } );
+			Vec3 p = Rotate( yawInverse, { offset.x - refPosition.x, offset.y - refPosition.y, offset.z - refPosition.z } );
 			p = {
 				p.x * unitsPerMeter + cameraOffset.x,
 				p.y * unitsPerMeter + cameraOffset.y,
@@ -233,6 +237,7 @@ namespace PSUVR
 			// Yaw only, so the game camera's horizon stays level with the real one.
 			s_refYaw = PoseYaw( views[ 0 ].orientation );
 			s_haveReference = true;
+			s_fpAnchor = s_refPosition;
 			// First person re-derives body yaw from the camera on its next steer.
 			s_fpPrimed = false;
 			PSU_LOG( "VRCamera: recentered at (%.3f, %.3f, %.3f) yaw=%.1f deg\n",
@@ -247,7 +252,7 @@ namespace PSUVR
 		void BuildEye( const EyePose &eye, float unitsPerMeter, const D3DMATRIX &gameProj,
 			D3DMATRIX &view, D3DMATRIX &proj )
 		{
-			BuildEyeWithYaw( eye, unitsPerMeter, gameProj, s_refYaw, { 0.0f, 0.0f, 0.0f }, view, proj );
+			BuildEyeWithYaw( eye, unitsPerMeter, gameProj, s_refYaw, s_refPosition, { 0.0f, 0.0f, 0.0f }, view, proj );
 		}
 
 		bool FirstPersonMode()
@@ -338,6 +343,42 @@ namespace PSUVR
 			return s_turnFromStick;
 		}
 
+		float FirstPersonCameraDistance()
+		{
+			return s_camDistance;
+		}
+
+		void UpdateFirstPersonAnchor( const EyePose views[ 2 ] )
+		{
+			const auto &vr = Config::Get().vr;
+			const Vec3 head{
+				( views[ 0 ].position[ 0 ] + views[ 1 ].position[ 0 ] ) * 0.5f,
+				( views[ 0 ].position[ 1 ] + views[ 1 ].position[ 1 ] ) * 0.5f,
+				( views[ 0 ].position[ 2 ] + views[ 1 ].position[ 2 ] ) * 0.5f };
+			// Horizontal leash: lean up to fpLeanLimit, then the anchor follows the head.
+			const float lean = vr.m_fpLeanLimit < 0.0f ? 0.0f : vr.m_fpLeanLimit;
+			const float dx = head.x - s_fpAnchor.x;
+			const float dz = head.z - s_fpAnchor.z;
+			const float horizontal = std::sqrt( dx * dx + dz * dz );
+			if( horizontal > lean && horizontal > 1.0e-6f )
+			{
+				const float pull = ( horizontal - lean ) / horizontal;
+				s_fpAnchor.x += dx * pull;
+				s_fpAnchor.z += dz * pull;
+			}
+			// Vertical leash (ducking, standing up).
+			const float crouch = vr.m_fpCrouchLimit < 0.0f ? 0.0f : vr.m_fpCrouchLimit;
+			const float dy = head.y - s_fpAnchor.y;
+			if( dy > crouch )
+			{
+				s_fpAnchor.y += dy - crouch;
+			}
+			else if( dy < -crouch )
+			{
+				s_fpAnchor.y += dy + crouch;
+			}
+		}
+
 		void BuildEyeFirstPerson( const EyePose &eye, float unitsPerMeter, const D3DMATRIX &gameProj,
 			D3DMATRIX &view, D3DMATRIX &proj )
 		{
@@ -351,7 +392,7 @@ namespace PSUVR
 			look = flat > 1.0e-4f ? Vec3{ look.x / flat, 0.0f, look.z / flat } : Vec3{ 0.0f, 0.0f, -1.0f };
 			const float face = Config::Get().vr.m_fpEyeForward * kGameUnitsPerMeter;
 			const Vec3 offset{ look.x * face, 0.0f, look.z * face - s_camDistance };
-			BuildEyeWithYaw( eye, unitsPerMeter, gameProj, frameYaw, offset, view, proj );
+			BuildEyeWithYaw( eye, unitsPerMeter, gameProj, frameYaw, s_fpAnchor, offset, view, proj );
 		}
 
 		void PanelPose( float distanceMeters, float dropMeters, float position[ 3 ], float orientation[ 4 ] )

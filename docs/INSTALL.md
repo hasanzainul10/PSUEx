@@ -83,6 +83,8 @@ Create (or edit) **`psuex_vr.json`** next to `PSUC.exe`:
 | `fpMoveDirection` | `"head"` (default): left stick forward walks where you look. `"body"`: forward is where your body faces, and the head looks around without steering. |
 | `fpBody` | Your own character in first person: `"headless"` (default) cuts away the head and hair so arms, hands, torso and legs stay visible; `"hidden"` removes the whole body; `"full"` draws everything. |
 | `fpNeckDrop` | How far below your eyes the headless cut sits, in meters (default **0.22**). Raise it if hair or the head still shows; lower it if the shoulders disappear. |
+| `fpLeanLimit` | How far you can physically lean before your character's body follows, in meters (default **0.15**). Walking around your room no longer pulls the view out of the body. `0` locks the view to the body. |
+| `fpCrouchLimit` | The same for ducking and standing up, in meters (default **0.2**). |
 
 **First-person controls (gamepad):** the right stick turns your body and view. By default the left stick moves where you look, and the right stick adds turning on top. `fpMoveDirection: "body"` gives FPS-style body-relative movement instead. F9 recenters. Turning reads the right stick through XInput (Xbox-style pads). Without XInput it falls back to the game's own camera orbit.
 | `stereoPanel` | Leave **`false`**. Turning it on also shows a flat PiP of the monitor frame in stereo (usually worse). |

@@ -8,6 +8,7 @@
 #include "../Misc/Log.h"
 #include "../PSUOverlay/FrameTrace.h"
 #include "../PSUVR/StereoRenderer.h"
+#include "../PSUVR/VRHud.h"
 #include <intrin.h>
 
 namespace FrameRender
@@ -202,10 +203,30 @@ namespace FrameRender
 		}
 	}
 
+	// PSU_DrawLayer takes the layer index in EDI.
+	static void DrawLayer( int layer )
+	{
+		static const uintptr_t s_drawLayer = 0x00560830;
+		__asm
+		{
+			push edi
+			mov edi, layer
+			call dword ptr [ s_drawLayer ]
+			pop edi
+		}
+	}
+
+	// Same as 0x004FDBC0 (`mov edi, layer; call 0x00560830` for 0x2B..0x3F), but records
+	// the current layer so VRHud knows exactly which layer object a 2D draw belongs to.
 	void __cdecl Hook_PassB()
 	{
 		FrameTrace::PassEnter( 0x004FDBC0 );
-		pOriginalPassB();
+		for( int layer = 0x2B; layer <= 0x3F; ++layer )
+		{
+			PSUVR::VRHud::SetPassBLayer( layer );
+			DrawLayer( layer );
+		}
+		PSUVR::VRHud::SetPassBLayer( -1 );
 		FrameTrace::PassLeave();
 	}
 

@@ -39,6 +39,11 @@ namespace PSUVR
 		void ClearFirstPerson();
 		// The right stick is read through XInput (false = turning falls back to the game's orbit).
 		bool TurnFromStick();
+		// Game units from the steered first-person camera to the head.
+		float FirstPersonCameraDistance();
+		// Leash the first-person head to the body: physical lean/crouch beyond
+		// vr.fpLeanLimit / vr.fpCrouchLimit drags the anchor instead of the view.
+		void UpdateFirstPersonAnchor( const EyePose views[ 2 ] );
 		void BuildEyeFirstPerson( const EyePose &eye, float unitsPerMeter, const D3DMATRIX &gameProj,
 			D3DMATRIX &view, D3DMATRIX &proj );
 

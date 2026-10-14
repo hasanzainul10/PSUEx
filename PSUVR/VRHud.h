@@ -13,6 +13,10 @@ namespace PSUVR
 	public:
 		static VRHud &Get();
 
+		// Pass-B render layer being drawn (0x2B..0x3F), -1 outside pass B. Set by
+		// Hook_PassB, which runs the layer loop itself so attribution is exact.
+		static void SetPassBLayer( int layer );
+
 		// Clear both HUD RTs at game resolution. Call once per stereo frame after Pass A.
 		void BeginStereoFrame( IDirect3DDevice9 *device, unsigned gameW, unsigned gameH );
 
@@ -73,11 +77,15 @@ namespace PSUVR
 		bool NearExistingWorldAabb( float cx, float cy, float pad ) const;
 		static bool IsWorldUiWidget( const void *verts, int vertexCount, unsigned stride,
 			unsigned gameW, unsigned gameH );
+		// Size/position of a nameplate or speech bubble (mid screen, small).
+		static bool IsAvatarRegion( const void *verts, unsigned vertCount, unsigned stride,
+			unsigned gameW, unsigned gameH );
 		static bool IsAvatarAnchoredPassB( const void *verts, unsigned primitiveType,
 			unsigned primitiveCount, unsigned stride, unsigned gameW, unsigned gameH );
 		bool IsVisorChrome( float minX, float minY, float maxX, float maxY,
 			unsigned gameW, unsigned gameH ) const;
 
+		static int s_passBLayer;
 		bool m_active = false;
 		bool m_capturing = false;
 		bool m_inUiDraw = false;
