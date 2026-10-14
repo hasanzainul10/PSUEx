@@ -66,8 +66,8 @@ Config::Config()
 	vr.m_snapTurnDegrees = 30.0f;
 	vr.m_fpTurnSpeed = 120.0f;
 	vr.m_fpMoveDirection = "head";
-	vr.m_fpHideBody = true;
-	vr.m_fpHideRadius = 0.6f;
+	vr.m_fpBody = "headless";
+	vr.m_fpNeckDrop = 0.22f;
 	vr.m_stereoMode = 5;
 	vr.m_snapTurn = false;
 	vr.m_comfortVignette = true;
@@ -160,8 +160,8 @@ void Config::SaveToFile()
 	root[ "vr" ][ "snapTurnDegrees" ] = vr.m_snapTurnDegrees;
 	root[ "vr" ][ "fpTurnSpeed" ] = vr.m_fpTurnSpeed;
 	root[ "vr" ][ "fpMoveDirection" ] = vr.m_fpMoveDirection;
-	root[ "vr" ][ "fpHideBody" ] = vr.m_fpHideBody;
-	root[ "vr" ][ "fpHideRadius" ] = vr.m_fpHideRadius;
+	root[ "vr" ][ "fpBody" ] = vr.m_fpBody;
+	root[ "vr" ][ "fpNeckDrop" ] = vr.m_fpNeckDrop;
 	root[ "vr" ][ "snapTurn" ] = vr.m_snapTurn;
 	root[ "vr" ][ "comfortVignette" ] = vr.m_comfortVignette;
 	root[ "vr" ][ "stereo" ] = vr.m_stereo;
@@ -437,10 +437,10 @@ void Config::LoadFromFile()
 			vr.m_fpTurnSpeed = vrNode[ "fpTurnSpeed" ].get<float>();
 		if( vrNode.contains( "fpMoveDirection" ) && vrNode[ "fpMoveDirection" ].is_string() )
 			vr.m_fpMoveDirection = vrNode[ "fpMoveDirection" ].get<std::string>();
-		if( vrNode.contains( "fpHideBody" ) && vrNode[ "fpHideBody" ].is_boolean() )
-			vr.m_fpHideBody = vrNode[ "fpHideBody" ].get<bool>();
-		if( vrNode.contains( "fpHideRadius" ) && vrNode[ "fpHideRadius" ].is_number() )
-			vr.m_fpHideRadius = vrNode[ "fpHideRadius" ].get<float>();
+		if( vrNode.contains( "fpBody" ) && vrNode[ "fpBody" ].is_string() )
+			vr.m_fpBody = vrNode[ "fpBody" ].get<std::string>();
+		if( vrNode.contains( "fpNeckDrop" ) && vrNode[ "fpNeckDrop" ].is_number() )
+			vr.m_fpNeckDrop = vrNode[ "fpNeckDrop" ].get<float>();
 		if( vrNode.contains( "snapTurn" ) && vrNode[ "snapTurn" ].is_boolean() )
 			vr.m_snapTurn = vrNode[ "snapTurn" ].get<bool>();
 		if( vrNode.contains( "comfortVignette" ) && vrNode[ "comfortVignette" ].is_boolean() )

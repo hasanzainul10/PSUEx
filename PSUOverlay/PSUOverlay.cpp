@@ -4,6 +4,7 @@
 #include "../PSUVR/VRSystem.h"
 #include "../PSUVR/StereoRenderer.h"
 #include "../PSUVR/VRHud.h"
+#include "../PSUVR/VRPlayerDraw.h"
 #include "../PSUVR/D3D9ExUpgrade.h"
 #include "../PSUVR/D3D9ExCompat.h"
 #include "../Misc/Log.h"
@@ -347,8 +348,12 @@ HRESULT APIENTRY PSUOverlay::Hook_Reset( LPDIRECT3DDEVICE9 pDevice, D3DPRESENT_P
 HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitive( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, UINT StartVertex, UINT PrimitiveCount )
 {
 	FrameTrace::OnDrawPrimitive( false );
-	if( PSUVR::StereoRenderer::ShouldSkipScreenQuad( pDevice, _ReturnAddress(), PrimitiveCount, false ) ||
-		PSUVR::StereoRenderer::ShouldSkipLocalPlayerDraw( pDevice ) )
+	if( PSUVR::StereoRenderer::ShouldSkipScreenQuad( pDevice, _ReturnAddress(), PrimitiveCount, false ) )
+	{
+		return D3D_OK;
+	}
+	const PSUVR::LocalPlayerDrawScope localPlayer( pDevice );
+	if( localPlayer.Skip() )
 	{
 		return D3D_OK;
 	}
@@ -364,8 +369,12 @@ HRESULT APIENTRY PSUOverlay::Hook_SetVertexShaderConstantF( LPDIRECT3DDEVICE9 pD
 HRESULT APIENTRY PSUOverlay::Hook_DrawIndexedPrimitive( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, INT BaseVertexIndex, UINT MinIndex, UINT NumVertices, UINT StartIndex, UINT PrimitiveCount )
 {
 	FrameTrace::OnDrawIndexed( _ReturnAddress() );
-	if( PSUVR::StereoRenderer::ShouldSkipScreenQuad( pDevice, _ReturnAddress(), PrimitiveCount, false ) ||
-		PSUVR::StereoRenderer::ShouldSkipLocalPlayerDraw( pDevice ) )
+	if( PSUVR::StereoRenderer::ShouldSkipScreenQuad( pDevice, _ReturnAddress(), PrimitiveCount, false ) )
+	{
+		return D3D_OK;
+	}
+	const PSUVR::LocalPlayerDrawScope localPlayer( pDevice );
+	if( localPlayer.Skip() )
 	{
 		return D3D_OK;
 	}
@@ -606,7 +615,6 @@ HRESULT APIENTRY PSUOverlay::Hook_Swapchain_Release( IDirect3DSwapChain9 *pSwapC
 HRESULT APIENTRY PSUOverlay::Hook_SetTransform( LPDIRECT3DDEVICE9 pDevice, D3DTRANSFORMSTATETYPE State, const D3DMATRIX *pMatrix )
 {
 	FrameTrace::OnSetTransform( State, pMatrix, _ReturnAddress() );
-	PSUVR::StereoRenderer::OnSetWorld( State, pMatrix );
 	return m_pOriginalSetTransform( pDevice, State, pMatrix );
 }
 

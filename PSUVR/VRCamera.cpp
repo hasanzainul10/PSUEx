@@ -338,19 +338,6 @@ namespace PSUVR
 			return s_turnFromStick;
 		}
 
-		bool LocalPlayerCameraSpace( float &axisZ, float &feetY, float &headY )
-		{
-			if( !FirstPersonActive() )
-			{
-				return false;
-			}
-			// The steered camera is level at head height and targets the head.
-			axisZ = -s_camDistance;
-			headY = 0.0f;
-			feetY = -Config::Get().vr.m_fpEyeHeight * kGameUnitsPerMeter;
-			return true;
-		}
-
 		void BuildEyeFirstPerson( const EyePose &eye, float unitsPerMeter, const D3DMATRIX &gameProj,
 			D3DMATRIX &view, D3DMATRIX &proj )
 		{

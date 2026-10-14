@@ -110,10 +110,10 @@ public:
 		float m_fpTurnSpeed = 120.0f;
 		// "head" = left stick forward goes where you look; "body" = where the body faces.
 		std::string m_fpMoveDirection = "head";
-		// Skip drawing the local player's model in first person (no clipping into it).
-		bool m_fpHideBody = true;
-		// Horizontal radius around the player's axis whose meshes are hidden (meters).
-		float m_fpHideRadius = 0.6f;
+		// Own character in first person: "headless" (cut above the neck), "hidden", "full".
+		std::string m_fpBody = "headless";
+		// How far below the eyes the headless cut sits (meters).
+		float m_fpNeckDrop = 0.22f;
 		bool m_snapTurn = false;
 		bool m_comfortVignette = true;
 		// Render the 3D pass per eye (projection layer) with the game frame as a panel.

@@ -39,8 +39,6 @@ namespace PSUVR
 		void ClearFirstPerson();
 		// The right stick is read through XInput (false = turning falls back to the game's orbit).
 		bool TurnFromStick();
-		// Local player's vertical axis in game-camera space (game units): x = 0, z = axisZ.
-		bool LocalPlayerCameraSpace( float &axisZ, float &feetY, float &headY );
 		void BuildEyeFirstPerson( const EyePose &eye, float unitsPerMeter, const D3DMATRIX &gameProj,
 			D3DMATRIX &view, D3DMATRIX &proj );
 
