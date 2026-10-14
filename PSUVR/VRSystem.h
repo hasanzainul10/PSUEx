@@ -30,7 +30,8 @@ namespace PSUVR
 
 		// Stereo inputs for StereoRenderer; null/false until OpenXR and the bridge are live.
 		D3D11Bridge *StereoBridge() const;
-		bool NextViews( EyePose out[ 2 ] ) const;
+		bool NextViews( EyePose localOut[ 2 ], EyePose viewSpaceOut[ 2 ] ) const;
+		bool EyeSwapchainSize( uint32_t &width, uint32_t &height ) const;
 
 	private:
 		System() = default;
@@ -54,6 +55,7 @@ namespace PSUVR
 		bool m_loggedStereo = false;
 		bool m_recenterKeyDown = false;
 		EyePose m_nextViews[ 2 ]{};
+		EyePose m_nextViewSpacePoses[ 2 ]{};
 
 		IDirect3DDevice9 *m_device = nullptr;
 		ID3D11Device *m_d3d11 = nullptr;

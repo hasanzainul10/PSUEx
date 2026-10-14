@@ -199,14 +199,27 @@ namespace PSUVR
 		return ( m_enabled && m_runtimeReady && m_bridgeReady && !m_solidColorPrototype ) ? m_bridge : nullptr;
 	}
 
-	bool System::NextViews( EyePose out[ 2 ] ) const
+	bool System::NextViews( EyePose localOut[ 2 ], EyePose viewSpaceOut[ 2 ] ) const
 	{
 		if( !m_haveNextViews )
 		{
 			return false;
 		}
-		out[ 0 ] = m_nextViews[ 0 ];
-		out[ 1 ] = m_nextViews[ 1 ];
+		localOut[ 0 ] = m_nextViews[ 0 ];
+		localOut[ 1 ] = m_nextViews[ 1 ];
+		viewSpaceOut[ 0 ] = m_nextViewSpacePoses[ 0 ];
+		viewSpaceOut[ 1 ] = m_nextViewSpacePoses[ 1 ];
+		return true;
+	}
+
+	bool System::EyeSwapchainSize( uint32_t &width, uint32_t &height ) const
+	{
+		if( !m_xr || m_xr->EyeSwapchainWidth() < 1 || m_xr->EyeSwapchainHeight() < 1 )
+		{
+			return false;
+		}
+		width = static_cast< uint32_t >( m_xr->EyeSwapchainWidth() );
+		height = static_cast< uint32_t >( m_xr->EyeSwapchainHeight() );
 		return true;
 	}
 
@@ -290,6 +303,7 @@ namespace PSUVR
 			return;
 		}
 		m_capturedThisFrame = m_bridge->BlitBackBuffer( m_device );
+		// Stereo eye RTs are drawn earlier in the tick; fence if the BB path did not.
 		if( !m_capturedThisFrame && StereoRenderer::Get().HasFrame() )
 		{
 			m_bridge->Fence( m_device );
@@ -316,7 +330,7 @@ namespace PSUVR
 			}
 
 			// The next game frame renders with poses predicted one display period ahead.
-			m_haveNextViews = m_xr->LocateNextViews( m_nextViews );
+			m_haveNextViews = m_xr->LocateNextViews( m_nextViews, m_nextViewSpacePoses );
 
 			DWORD foregroundPid = 0;
 			GetWindowThreadProcessId( GetForegroundWindow(), &foregroundPid );
@@ -332,11 +346,11 @@ namespace PSUVR
 			if( !m_solidColorPrototype && stereo.HasFrame() && m_bridge )
 			{
 				ID3D11Texture2D *eyes[ 2 ] = { m_bridge->EyeTexture( 0 ), m_bridge->EyeTexture( 1 ) };
-				stereoSubmitted = m_xr->SubmitStereo( eyes, stereo.RenderedPoses() );
+				stereoSubmitted = m_xr->SubmitStereo( eyes, stereo.RenderedPoses(), stereo.RenderedViewSpacePoses() );
 				if( stereoSubmitted && !m_loggedStereo )
 				{
 					m_loggedStereo = true;
-					PSU_LOG( "VR: stereo projection layer active (F9 = recenter)\n" );
+					PSU_LOG( "VR: stereo projection layer active (head-locked submit, F9 = recenter)\n" );
 				}
 			}
 			stereo.ConsumeFrame();

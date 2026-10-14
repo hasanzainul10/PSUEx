@@ -99,6 +99,9 @@ public:
 		bool m_comfortVignette = true;
 		// Render the 3D pass per eye (projection layer) with the game frame as a panel.
 		bool m_stereo = true;
+		// During eye passes, skip XYZRHW quads that sample an RT filled only by the flat pass
+		// (glare / afterimage ghosts the mono camera over stereo). Shadows rewritten per eye stay.
+		bool m_stereoSkipScreenQuads = true;
 		// Debug: shift the 3D pass sideways by ±this many view units, alternating each second.
 		float m_debugEyeShift = 0.0f;
 		// Debug: run the 3D pass twice per frame to test repeat-safety.

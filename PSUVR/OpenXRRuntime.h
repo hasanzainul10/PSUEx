@@ -38,16 +38,22 @@ namespace PSUVR
 		// Panel in LOCAL space (stereo mode) instead of head-locked VIEW space.
 		void SetPanelWorldPose( bool enable, const float position[ 3 ], const float orientation[ 4 ] );
 
-		// Eye poses (LOCAL space) predicted for the frame after the current one.
-		// Valid after BeginFrame; these are what the next game frame renders with.
-		bool LocateNextViews( EyePose out[ 2 ] );
+		// Eye poses predicted for the frame after the current one (after BeginFrame).
+		// localOut: LOCAL space — used to build D3D VIEW (head on top of the game camera).
+		// viewSpaceOut: VIEW space — used when submitting the projection layer so the
+		// compositor does not reproject game pixels as if they were real-world depth
+		// (that mismatch shows up as sky/water ghosting under SteamVR motion smoothing).
+		bool LocateNextViews( EyePose localOut[ 2 ], EyePose viewSpaceOut[ 2 ] );
 
-		// Blits per-eye renders into the eye swapchains for a projection layer
-		// submitted with the poses they were rendered with.
-		bool SubmitStereo( ID3D11Texture2D *const eyes[ 2 ], const EyePose poses[ 2 ] );
+		// Blits per-eye renders into the eye swapchains. fov comes from localPoses;
+		// the projection layer is submitted head-locked using viewSpacePoses.
+		bool SubmitStereo( ID3D11Texture2D *const eyes[ 2 ], const EyePose localPoses[ 2 ],
+			const EyePose viewSpacePoses[ 2 ] );
 
 		int32_t SwapchainWidth() const { return m_panelWidth; }
 		int32_t SwapchainHeight() const { return m_panelHeight; }
+		int32_t EyeSwapchainWidth() const { return m_swapchainWidth; }
+		int32_t EyeSwapchainHeight() const { return m_swapchainHeight; }
 
 	private:
 		bool LoadLoader();
@@ -110,6 +116,7 @@ namespace PSUVR
 		float m_panelPosition[ 3 ]{};
 		float m_panelOrientation[ 4 ]{ 0.0f, 0.0f, 0.0f, 1.0f };
 
-		EyePose m_submittedPoses[ 2 ]{};
+		EyePose m_submittedPoses[ 2 ]{};      // FOV (+ debug); layer uses view-space poses
+		EyePose m_submittedViewSpacePoses[ 2 ]{};
 	};
 }

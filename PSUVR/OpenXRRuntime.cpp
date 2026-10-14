@@ -849,7 +849,8 @@ namespace PSUVR
 		return true;
 	}
 
-	bool OpenXRRuntime::SubmitStereo( ID3D11Texture2D *const eyes[ 2 ], const EyePose poses[ 2 ] )
+	bool OpenXRRuntime::SubmitStereo( ID3D11Texture2D *const eyes[ 2 ], const EyePose localPoses[ 2 ],
+		const EyePose viewSpacePoses[ 2 ] )
 	{
 		if( !m_context || !m_frameStarted || !m_shouldRender || !eyes[ 0 ] || !eyes[ 1 ] )
 		{
@@ -861,7 +862,8 @@ namespace PSUVR
 			{
 				return false;
 			}
-			m_submittedPoses[ eye ] = poses[ eye ];
+			m_submittedPoses[ eye ] = localPoses[ eye ];
+			m_submittedViewSpacePoses[ eye ] = viewSpacePoses[ eye ];
 		}
 		m_context->Flush();
 		m_clearedThisFrame = true;
@@ -869,29 +871,8 @@ namespace PSUVR
 		return true;
 	}
 
-	bool OpenXRRuntime::LocateNextViews( EyePose out[ 2 ] )
+	static void CopyXrViewsToEyePoses( const XrView views[ 2 ], EyePose out[ 2 ] )
 	{
-		if( !m_frameStarted || !m_space )
-		{
-			return false;
-		}
-		XrViewLocateInfo locateInfo{ XR_TYPE_VIEW_LOCATE_INFO };
-		locateInfo.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
-		locateInfo.displayTime = m_displayTime + m_displayPeriod;
-		locateInfo.space = static_cast< XrSpace >( m_space );
-
-		XrViewState viewState{ XR_TYPE_VIEW_STATE };
-		uint32_t viewCount = 0;
-		XrView views[ 2 ]{ { XR_TYPE_VIEW }, { XR_TYPE_VIEW } };
-		if( XR_FAILED( xrLocateViews( static_cast< XrSession >( m_session ), &locateInfo, &viewState, 2, &viewCount, views ) ) || viewCount < 2 )
-		{
-			return false;
-		}
-		const XrViewStateFlags needed = XR_VIEW_STATE_POSITION_VALID_BIT | XR_VIEW_STATE_ORIENTATION_VALID_BIT;
-		if( ( viewState.viewStateFlags & needed ) != needed )
-		{
-			return false;
-		}
 		for( int eye = 0; eye < 2; ++eye )
 		{
 			out[ eye ].position[ 0 ] = views[ eye ].pose.position.x;
@@ -906,6 +887,46 @@ namespace PSUVR
 			out[ eye ].fovAngleUp = views[ eye ].fov.angleUp;
 			out[ eye ].fovAngleDown = views[ eye ].fov.angleDown;
 		}
+	}
+
+	static bool LocateViewsInSpace( XrSession session, XrSpace space, XrTime time, XrView outViews[ 2 ] )
+	{
+		XrViewLocateInfo locateInfo{ XR_TYPE_VIEW_LOCATE_INFO };
+		locateInfo.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+		locateInfo.displayTime = time;
+		locateInfo.space = space;
+		XrViewState viewState{ XR_TYPE_VIEW_STATE };
+		uint32_t viewCount = 0;
+		outViews[ 0 ] = { XR_TYPE_VIEW };
+		outViews[ 1 ] = { XR_TYPE_VIEW };
+		if( XR_FAILED( xrLocateViews( session, &locateInfo, &viewState, 2, &viewCount, outViews ) ) || viewCount < 2 )
+		{
+			return false;
+		}
+		const XrViewStateFlags needed = XR_VIEW_STATE_POSITION_VALID_BIT | XR_VIEW_STATE_ORIENTATION_VALID_BIT;
+		return ( viewState.viewStateFlags & needed ) == needed;
+	}
+
+	bool OpenXRRuntime::LocateNextViews( EyePose localOut[ 2 ], EyePose viewSpaceOut[ 2 ] )
+	{
+		if( !m_frameStarted || !m_space || !m_viewSpace )
+		{
+			return false;
+		}
+		const XrSession session = static_cast< XrSession >( m_session );
+		const XrTime time = m_displayTime + m_displayPeriod;
+		XrView localViews[ 2 ]{};
+		XrView viewViews[ 2 ]{};
+		if( !LocateViewsInSpace( session, static_cast< XrSpace >( m_space ), time, localViews ) )
+		{
+			return false;
+		}
+		if( !LocateViewsInSpace( session, static_cast< XrSpace >( m_viewSpace ), time, viewViews ) )
+		{
+			return false;
+		}
+		CopyXrViewsToEyePoses( localViews, localOut );
+		CopyXrViewsToEyePoses( viewViews, viewSpaceOut );
 		return true;
 	}
 
@@ -945,13 +966,7 @@ namespace PSUVR
 				XrView located[ 2 ]{ { XR_TYPE_VIEW }, { XR_TYPE_VIEW } };
 				if( clearOnly )
 				{
-					XrViewLocateInfo locateInfo{ XR_TYPE_VIEW_LOCATE_INFO };
-					locateInfo.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
-					locateInfo.displayTime = m_displayTime;
-					locateInfo.space = localSpace;
-					XrViewState viewState{ XR_TYPE_VIEW_STATE };
-					uint32_t viewCount = 2;
-					xrLocateViews( session, &locateInfo, &viewState, 2, &viewCount, located );
+					LocateViewsInSpace( session, localSpace, m_displayTime, located );
 				}
 
 				for( int eye = 0; eye < 2; ++eye )
@@ -959,12 +974,13 @@ namespace PSUVR
 					projViews[ eye ] = { XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW };
 					if( stereo )
 					{
-						// Submit the pose each eye was rendered with so the compositor
-						// reprojects from where the image was actually drawn.
-						const EyePose &p = m_submittedPoses[ eye ];
+						// Head-locked (VIEW space): game stereo is not a photo of the
+						// play space, so LOCAL-space ATW/ASW warps sky and water into ghosts.
+						const EyePose &fov = m_submittedPoses[ eye ];
+						const EyePose &p = m_submittedViewSpacePoses[ eye ];
 						projViews[ eye ].pose.position = { p.position[ 0 ], p.position[ 1 ], p.position[ 2 ] };
 						projViews[ eye ].pose.orientation = { p.orientation[ 0 ], p.orientation[ 1 ], p.orientation[ 2 ], p.orientation[ 3 ] };
-						projViews[ eye ].fov = { p.fovAngleLeft, p.fovAngleRight, p.fovAngleUp, p.fovAngleDown };
+						projViews[ eye ].fov = { fov.fovAngleLeft, fov.fovAngleRight, fov.fovAngleUp, fov.fovAngleDown };
 					}
 					else
 					{
@@ -976,7 +992,7 @@ namespace PSUVR
 					projViews[ eye ].subImage.imageRect.extent = { m_swapchainWidth, m_swapchainHeight };
 				}
 
-				projLayer.space = localSpace;
+				projLayer.space = stereo ? viewSpace : localSpace;
 				projLayer.viewCount = 2;
 				projLayer.views = projViews;
 				layers[ layerCount++ ] = reinterpret_cast< const XrCompositionLayerBaseHeader * >( &projLayer );

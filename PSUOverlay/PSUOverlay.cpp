@@ -2,6 +2,7 @@
 
 #include "../PSUExConfig.h"
 #include "../PSUVR/VRSystem.h"
+#include "../PSUVR/StereoRenderer.h"
 #include "../PSUVR/D3D9ExUpgrade.h"
 #include "../PSUVR/D3D9ExCompat.h"
 #include "../Misc/Log.h"
@@ -240,6 +241,7 @@ HRESULT APIENTRY PSUOverlay::Hook_CreateDevice( IDirect3D9 *pD3D, UINT Adapter, 
 			m_pOriginalCreateAdditionalSwapChain = ( FunctionCreateAdditionalSwapChain )vTable[ 13 ];
 
 			m_pOriginalSetRenderTarget = ( FunctionSetRenderTarget )vTable[ 37 ];
+			m_pOriginalStretchRect = ( FunctionStretchRect )vTable[ 34 ];
 			m_pOriginalBeginScene = ( FunctionD3DBeginScene )vTable[ 41 ];
 			m_pOriginalEndScene = ( FunctionD3DEndScene )vTable[ 42 ];
 			m_pOriginalSetTransform = ( FunctionSetTransform )vTable[ 44 ];
@@ -272,6 +274,11 @@ HRESULT APIENTRY PSUOverlay::Hook_CreateDevice( IDirect3D9 *pD3D, UINT Adapter, 
 			if( DetourAttach( &( PVOID & )m_pOriginalSetRenderTarget, Hook_SetRenderTarget ) != NO_ERROR )
 			{
 				PSU_LOG( "Failed to hook SetRenderTarget!\n" );
+			}
+
+			if( DetourAttach( &( PVOID & )m_pOriginalStretchRect, Hook_StretchRect ) != NO_ERROR )
+			{
+				PSU_LOG( "Failed to hook StretchRect!\n" );
 			}
 
 			// Gated DIP sampling while inside PSU_SceneMode1_Callback (pre-UI only).
@@ -328,6 +335,10 @@ HRESULT APIENTRY PSUOverlay::Hook_Reset( LPDIRECT3DDEVICE9 pDevice, D3DPRESENT_P
 HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitive( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, UINT StartVertex, UINT PrimitiveCount )
 {
 	FrameTrace::OnDrawPrimitive( false );
+	if( PSUVR::StereoRenderer::ShouldSkipScreenQuad( pDevice, _ReturnAddress(), PrimitiveCount, false ) )
+	{
+		return D3D_OK;
+	}
 	return m_pOriginalDrawPrimitive( pDevice, PrimitiveType, StartVertex, PrimitiveCount );
 }
 
@@ -340,6 +351,10 @@ HRESULT APIENTRY PSUOverlay::Hook_SetVertexShaderConstantF( LPDIRECT3DDEVICE9 pD
 HRESULT APIENTRY PSUOverlay::Hook_DrawIndexedPrimitive( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, INT BaseVertexIndex, UINT MinIndex, UINT NumVertices, UINT StartIndex, UINT PrimitiveCount )
 {
 	FrameTrace::OnDrawIndexed( _ReturnAddress() );
+	if( PSUVR::StereoRenderer::ShouldSkipScreenQuad( pDevice, _ReturnAddress(), PrimitiveCount, false ) )
+	{
+		return D3D_OK;
+	}
 	return m_pOriginalDrawIndexedPrimitive(
 		pDevice, PrimitiveType, BaseVertexIndex, MinIndex, NumVertices, StartIndex, PrimitiveCount
 	);
@@ -348,6 +363,10 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawIndexedPrimitive( LPDIRECT3DDEVICE9 pDevic
 HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount, const void *pVertexStreamZeroData, UINT VertexStreamZeroStride )
 {
 	FrameTrace::OnDrawPrimitive( true );
+	if( PSUVR::StereoRenderer::ShouldSkipScreenQuad( pDevice, _ReturnAddress(), PrimitiveCount, true ) )
+	{
+		return D3D_OK;
+	}
 	return m_pOriginalDrawPrimitiveUP( pDevice, PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride );
 }
 
@@ -548,7 +567,17 @@ HRESULT APIENTRY PSUOverlay::Hook_SetViewport( LPDIRECT3DDEVICE9 pDevice, CONST 
 HRESULT APIENTRY PSUOverlay::Hook_SetRenderTarget( LPDIRECT3DDEVICE9 pDevice, DWORD RenderTargetIndex, IDirect3DSurface9 *pRenderTarget )
 {
 	FrameTrace::OnSetRenderTarget( pDevice, RenderTargetIndex, pRenderTarget, _ReturnAddress() );
+	if( RenderTargetIndex == 0 )
+	{
+		PSUVR::StereoRenderer::OnSetRenderTarget( pRenderTarget );
+	}
 	return m_pOriginalSetRenderTarget( pDevice, RenderTargetIndex, pRenderTarget );
+}
+
+HRESULT APIENTRY PSUOverlay::Hook_StretchRect( LPDIRECT3DDEVICE9 pDevice, IDirect3DSurface9 *pSourceSurface, CONST RECT *pSourceRect, IDirect3DSurface9 *pDestSurface, CONST RECT *pDestRect, D3DTEXTUREFILTERTYPE Filter )
+{
+	PSUVR::StereoRenderer::OnStretchRect( pSourceSurface, pDestSurface, _ReturnAddress() );
+	return m_pOriginalStretchRect( pDevice, pSourceSurface, pSourceRect, pDestSurface, pDestRect, Filter );
 }
 
 HRESULT APIENTRY PSUOverlay::Hook_SetScissorRect( LPDIRECT3DDEVICE9 pDevice, CONST RECT *pRect )

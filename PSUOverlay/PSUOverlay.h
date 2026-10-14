@@ -49,6 +49,7 @@ private:
 	typedef HRESULT( APIENTRY *FunctionSetTransform )( LPDIRECT3DDEVICE9 pDevice, D3DTRANSFORMSTATETYPE State, CONST D3DMATRIX *pMatrix );
 	typedef HRESULT( APIENTRY *FunctionSetViewport )( LPDIRECT3DDEVICE9 pDevice, CONST D3DVIEWPORT9 *pViewport );
 	typedef HRESULT( APIENTRY *FunctionSetRenderTarget )( LPDIRECT3DDEVICE9 pDevice, DWORD RenderTargetIndex, IDirect3DSurface9 *pRenderTarget );
+	typedef HRESULT( APIENTRY *FunctionStretchRect )( LPDIRECT3DDEVICE9 pDevice, IDirect3DSurface9 *pSourceSurface, CONST RECT *pSourceRect, IDirect3DSurface9 *pDestSurface, CONST RECT *pDestRect, D3DTEXTUREFILTERTYPE Filter );
 	typedef HRESULT( APIENTRY *FunctionSetScissorRect )( LPDIRECT3DDEVICE9 pDevice, CONST RECT *pRect );
 	typedef HRESULT( APIENTRY *FunctionSetVertexShaderConstantF )( LPDIRECT3DDEVICE9 pDevice, UINT StartRegister, CONST float *pConstantData, UINT Vector4fCount );
 
@@ -79,6 +80,7 @@ private:
 	static inline FunctionSetTransform m_pOriginalSetTransform;
 	static inline FunctionSetViewport m_pOriginalSetViewport;
 	static inline FunctionSetRenderTarget m_pOriginalSetRenderTarget;
+	static inline FunctionStretchRect m_pOriginalStretchRect;
 	static inline FunctionSetScissorRect m_pOriginalSetScissorRect;
 	static inline FunctionSetVertexShaderConstantF m_pOriginalSetVertexShaderConstantF;
 
@@ -159,6 +161,7 @@ private:
 	static HRESULT APIENTRY Hook_SetTransform( LPDIRECT3DDEVICE9 pDevice, D3DTRANSFORMSTATETYPE State, CONST D3DMATRIX *pMatrix );
 	static HRESULT APIENTRY Hook_SetViewport( LPDIRECT3DDEVICE9 pDevice, const D3DVIEWPORT9 *pViewport );
 	static HRESULT APIENTRY Hook_SetRenderTarget( LPDIRECT3DDEVICE9 pDevice, DWORD RenderTargetIndex, IDirect3DSurface9 *pRenderTarget );
+	static HRESULT APIENTRY Hook_StretchRect( LPDIRECT3DDEVICE9 pDevice, IDirect3DSurface9 *pSourceSurface, CONST RECT *pSourceRect, IDirect3DSurface9 *pDestSurface, CONST RECT *pDestRect, D3DTEXTUREFILTERTYPE Filter );
 	static HRESULT APIENTRY Hook_SetScissorRect( LPDIRECT3DDEVICE9 pDevice, const RECT *pRect );
 	static HRESULT APIENTRY Hook_SetVertexShaderConstantF( LPDIRECT3DDEVICE9 pDevice, UINT StartRegister, CONST float *pConstantData, UINT Vector4fCount );
 
