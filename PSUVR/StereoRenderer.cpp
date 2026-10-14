@@ -8,6 +8,8 @@
 
 #include <d3d9.h>
 
+#include <algorithm>
+#include <cstring>
 #include <unordered_set>
 
 namespace PSUVR
@@ -19,11 +21,20 @@ namespace PSUVR
 	namespace
 	{
 		bool s_inEyePass = false;
+		IDirect3DSurface9 *s_eyeSurface = nullptr;
+		unsigned s_eyeW = 0;
+		unsigned s_eyeH = 0;
+		unsigned s_gameW = 0;
+		unsigned s_gameH = 0;
+		unsigned s_stretchQuadLogCount = 0;
+		alignas( 16 ) unsigned char s_stretchQuadBuf[ 64 * 64 ]{};
 		std::unordered_set< IDirect3DBaseTexture9 * > s_writtenTextures;
 		unsigned s_screenQuadLogCount = 0;
 		unsigned s_stretchLogCount = 0;
 		constexpr unsigned kMaxScreenQuadLogs = 24;
 		constexpr unsigned kMaxStretchLogs = 16;
+		constexpr unsigned kMaxStretchVerts = 64;
+		constexpr unsigned kMaxStretchStride = 64;
 
 		bool HasStencil( D3DFORMAT format )
 		{
@@ -56,9 +67,15 @@ namespace PSUVR
 		}
 	}
 
-	void StereoRenderer::BeginEyePass( IDirect3DSurface9 *eyeTarget )
+	void StereoRenderer::BeginEyePass( IDirect3DSurface9 *eyeTarget, unsigned eyeW, unsigned eyeH,
+		unsigned gameW, unsigned gameH )
 	{
 		s_writtenTextures.clear();
+		s_eyeSurface = eyeTarget;
+		s_eyeW = eyeW;
+		s_eyeH = eyeH;
+		s_gameW = gameW;
+		s_gameH = gameH;
 		MarkSurfaceTexture( eyeTarget );
 		s_inEyePass = true;
 	}
@@ -66,7 +83,46 @@ namespace PSUVR
 	void StereoRenderer::EndEyePass()
 	{
 		s_inEyePass = false;
+		s_eyeSurface = nullptr;
+		s_eyeW = 0;
+		s_eyeH = 0;
+		s_gameW = 0;
+		s_gameH = 0;
 		s_writtenTextures.clear();
+	}
+
+	bool StereoRenderer::EyeColorTargetIs( IDirect3DSurface9 *surface )
+	{
+		return s_inEyePass && surface && surface == s_eyeSurface && s_eyeW > 0 && s_eyeH > 0;
+	}
+
+	bool StereoRenderer::EyeColorTargetBound( IDirect3DDevice9 *device )
+	{
+		if( !s_inEyePass || !device || !s_eyeSurface || s_eyeW == 0 || s_eyeH == 0 )
+		{
+			return false;
+		}
+		IDirect3DSurface9 *rt = nullptr;
+		if( FAILED( device->GetRenderTarget( 0, &rt ) ) || !rt )
+		{
+			return false;
+		}
+		const bool match = ( rt == s_eyeSurface );
+		rt->Release();
+		return match;
+	}
+
+	void StereoRenderer::GetEyeViewport( D3DVIEWPORT9 &out )
+	{
+		out = { 0, 0, s_eyeW, s_eyeH, 0.0f, 1.0f };
+	}
+
+	void StereoRenderer::GetEyeScissor( RECT &out )
+	{
+		out.left = 0;
+		out.top = 0;
+		out.right = static_cast< LONG >( s_eyeW );
+		out.bottom = static_cast< LONG >( s_eyeH );
 	}
 
 	void StereoRenderer::OnSetRenderTarget( IDirect3DSurface9 *target )
@@ -163,6 +219,88 @@ namespace PSUVR
 		return skip;
 	}
 
+	const void *StereoRenderer::StretchScreenQuadIfNeeded( IDirect3DDevice9 *device, unsigned primitiveType,
+		unsigned primitiveCount, const void *verts, unsigned stride, void *ret )
+	{
+		if( !verts || stride < 16 || stride > kMaxStretchStride || !device )
+		{
+			return nullptr;
+		}
+		if( !s_inEyePass || s_gameW < 1 || s_gameH < 1 || s_eyeW < 1 || s_eyeH < 1 )
+		{
+			return nullptr;
+		}
+		if( s_gameW == s_eyeW && s_gameH == s_eyeH )
+		{
+			return nullptr;
+		}
+		if( !EyeColorTargetBound( device ) )
+		{
+			return nullptr;
+		}
+
+		DWORD fvf = 0;
+		if( FAILED( device->GetFVF( &fvf ) ) || ( fvf & D3DFVF_POSITION_MASK ) != D3DFVF_XYZRHW )
+		{
+			return nullptr;
+		}
+
+		unsigned vertCount = 0;
+		switch( static_cast< D3DPRIMITIVETYPE >( primitiveType ) )
+		{
+			case D3DPT_TRIANGLELIST: vertCount = primitiveCount * 3; break;
+			case D3DPT_TRIANGLESTRIP:
+			case D3DPT_TRIANGLEFAN: vertCount = primitiveCount + 2; break;
+			case D3DPT_LINELIST: vertCount = primitiveCount * 2; break;
+			case D3DPT_LINESTRIP: vertCount = primitiveCount + 1; break;
+			case D3DPT_POINTLIST: vertCount = primitiveCount; break;
+			default: return nullptr;
+		}
+		if( vertCount < 3 || vertCount > kMaxStretchVerts )
+		{
+			return nullptr;
+		}
+		if( vertCount * stride > sizeof( s_stretchQuadBuf ) )
+		{
+			return nullptr;
+		}
+
+		float minX = 1.0e30f, minY = 1.0e30f, maxX = -1.0e30f, maxY = -1.0e30f;
+		const auto *bytes = static_cast< const unsigned char * >( verts );
+		for( unsigned i = 0; i < vertCount; ++i )
+		{
+			const float *xy = reinterpret_cast< const float * >( bytes + i * stride );
+			minX = ( std::min )( minX, xy[ 0 ] );
+			maxX = ( std::max )( maxX, xy[ 0 ] );
+			minY = ( std::min )( minY, xy[ 1 ] );
+			maxY = ( std::max )( maxY, xy[ 1 ] );
+		}
+		const float boxW = maxX - minX;
+		const float boxH = maxY - minY;
+		if( boxW < 0.8f * static_cast< float >( s_gameW ) || boxH < 0.8f * static_cast< float >( s_gameH ) )
+		{
+			return nullptr;
+		}
+
+		const float sx = static_cast< float >( s_eyeW ) / static_cast< float >( s_gameW );
+		const float sy = static_cast< float >( s_eyeH ) / static_cast< float >( s_gameH );
+		std::memcpy( s_stretchQuadBuf, verts, vertCount * stride );
+		for( unsigned i = 0; i < vertCount; ++i )
+		{
+			float *xy = reinterpret_cast< float * >( s_stretchQuadBuf + i * stride );
+			xy[ 0 ] *= sx;
+			xy[ 1 ] *= sy;
+		}
+
+		if( s_stretchQuadLogCount < 8 )
+		{
+			++s_stretchQuadLogCount;
+			PSU_LOG( "StereoStretchQuad: game=%ux%u eye=%ux%u verts=%u box=%.0fx%.0f ret=%p\n",
+				s_gameW, s_gameH, s_eyeW, s_eyeH, vertCount, boxW, boxH, ret );
+		}
+		return s_stretchQuadBuf;
+	}
+
 	void StereoRenderer::RenderEyes( IDirect3DDevice9 *device, Pass pass )
 	{
 		const auto &vr = Config::Get().vr;
@@ -239,7 +377,7 @@ namespace PSUVR
 				device->SetTransform( D3DTS_VIEW, &eyeView );
 				device->SetTransform( D3DTS_PROJECTION, &eyeProj );
 
-				BeginEyePass( eyeSurface );
+				BeginEyePass( eyeSurface, eyeW, eyeH, targetDesc.Width, targetDesc.Height );
 				pass();
 				EndEyePass();
 

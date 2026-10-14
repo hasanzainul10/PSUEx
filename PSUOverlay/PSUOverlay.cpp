@@ -245,6 +245,7 @@ HRESULT APIENTRY PSUOverlay::Hook_CreateDevice( IDirect3D9 *pD3D, UINT Adapter, 
 			m_pOriginalBeginScene = ( FunctionD3DBeginScene )vTable[ 41 ];
 			m_pOriginalEndScene = ( FunctionD3DEndScene )vTable[ 42 ];
 			m_pOriginalSetTransform = ( FunctionSetTransform )vTable[ 44 ];
+			m_pOriginalSetScissorRect = ( FunctionSetScissorRect )vTable[ 75 ];
 			m_pOriginalSetViewport = ( FunctionSetViewport )vTable[ 47 ];
 			m_pOriginalSetVertexShaderConstantF = ( FunctionSetVertexShaderConstantF )vTable[ 94 ];
 
@@ -274,6 +275,16 @@ HRESULT APIENTRY PSUOverlay::Hook_CreateDevice( IDirect3D9 *pD3D, UINT Adapter, 
 			if( DetourAttach( &( PVOID & )m_pOriginalSetRenderTarget, Hook_SetRenderTarget ) != NO_ERROR )
 			{
 				PSU_LOG( "Failed to hook SetRenderTarget!\n" );
+			}
+
+			if( DetourAttach( &( PVOID & )m_pOriginalSetViewport, Hook_SetViewport ) != NO_ERROR )
+			{
+				PSU_LOG( "Failed to hook SetViewport!\n" );
+			}
+
+			if( DetourAttach( &( PVOID & )m_pOriginalSetScissorRect, Hook_SetScissorRect ) != NO_ERROR )
+			{
+				PSU_LOG( "Failed to hook SetScissorRect!\n" );
 			}
 
 			if( DetourAttach( &( PVOID & )m_pOriginalStretchRect, Hook_StretchRect ) != NO_ERROR )
@@ -367,7 +378,14 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3
 	{
 		return D3D_OK;
 	}
-	return m_pOriginalDrawPrimitiveUP( pDevice, PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride );
+	const void *verts = pVertexStreamZeroData;
+	if( const void *stretched = PSUVR::StereoRenderer::StretchScreenQuadIfNeeded(
+			pDevice, static_cast< unsigned >( PrimitiveType ), PrimitiveCount,
+			pVertexStreamZeroData, VertexStreamZeroStride, _ReturnAddress() ) )
+	{
+		verts = stretched;
+	}
+	return m_pOriginalDrawPrimitiveUP( pDevice, PrimitiveType, PrimitiveCount, verts, VertexStreamZeroStride );
 }
 
 HRESULT APIENTRY PSUOverlay::Hook_DrawIndexedPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE Type, UINT MinVertexIndex, UINT NumVertices, UINT PrimitiveCount, const void *pIndexData, D3DFORMAT IndexDataFormat, const void *pVertexStreamZeroData, UINT VertexStreamZeroStride )
@@ -560,7 +578,22 @@ HRESULT APIENTRY PSUOverlay::Hook_SetTransform( LPDIRECT3DDEVICE9 pDevice, D3DTR
 
 HRESULT APIENTRY PSUOverlay::Hook_SetViewport( LPDIRECT3DDEVICE9 pDevice, CONST D3DVIEWPORT9 *pViewport )
 {
-	// Call the original function with unmodified data if conditions are not met
+	// Pass A restores the game 16:9 viewport after shadows; on an OpenXR-sized eye RT
+	// that leaves the lower band black. Keep the full eye viewport whenever the eye RT is bound.
+	if( pViewport && PSUVR::StereoRenderer::EyeColorTargetBound( pDevice ) )
+	{
+		D3DVIEWPORT9 eyeVp{};
+		PSUVR::StereoRenderer::GetEyeViewport( eyeVp );
+		static unsigned s_vpLogs = 0;
+		if( s_vpLogs < 8 &&
+			( pViewport->Width != eyeVp.Width || pViewport->Height != eyeVp.Height ) )
+		{
+			++s_vpLogs;
+			PSU_LOG( "StereoViewport: override %ux%u -> %ux%u\n",
+				pViewport->Width, pViewport->Height, eyeVp.Width, eyeVp.Height );
+		}
+		return m_pOriginalSetViewport( pDevice, &eyeVp );
+	}
 	return m_pOriginalSetViewport( pDevice, pViewport );
 }
 
@@ -571,7 +604,20 @@ HRESULT APIENTRY PSUOverlay::Hook_SetRenderTarget( LPDIRECT3DDEVICE9 pDevice, DW
 	{
 		PSUVR::StereoRenderer::OnSetRenderTarget( pRenderTarget );
 	}
-	return m_pOriginalSetRenderTarget( pDevice, RenderTargetIndex, pRenderTarget );
+	const HRESULT hr = m_pOriginalSetRenderTarget( pDevice, RenderTargetIndex, pRenderTarget );
+	if( SUCCEEDED( hr ) && RenderTargetIndex == 0 && PSUVR::StereoRenderer::EyeColorTargetIs( pRenderTarget ) )
+	{
+		D3DVIEWPORT9 eyeVp{};
+		RECT eyeScissor{};
+		PSUVR::StereoRenderer::GetEyeViewport( eyeVp );
+		PSUVR::StereoRenderer::GetEyeScissor( eyeScissor );
+		m_pOriginalSetViewport( pDevice, &eyeVp );
+		if( m_pOriginalSetScissorRect )
+		{
+			m_pOriginalSetScissorRect( pDevice, &eyeScissor );
+		}
+	}
+	return hr;
 }
 
 HRESULT APIENTRY PSUOverlay::Hook_StretchRect( LPDIRECT3DDEVICE9 pDevice, IDirect3DSurface9 *pSourceSurface, CONST RECT *pSourceRect, IDirect3DSurface9 *pDestSurface, CONST RECT *pDestRect, D3DTEXTUREFILTERTYPE Filter )
@@ -582,7 +628,12 @@ HRESULT APIENTRY PSUOverlay::Hook_StretchRect( LPDIRECT3DDEVICE9 pDevice, IDirec
 
 HRESULT APIENTRY PSUOverlay::Hook_SetScissorRect( LPDIRECT3DDEVICE9 pDevice, CONST RECT *pRect )
 {
-	// Call the original function safely
+	if( PSUVR::StereoRenderer::EyeColorTargetBound( pDevice ) )
+	{
+		RECT eyeScissor{};
+		PSUVR::StereoRenderer::GetEyeScissor( eyeScissor );
+		return m_pOriginalSetScissorRect( pDevice, &eyeScissor );
+	}
 	return m_pOriginalSetScissorRect( pDevice, pRect );
 }
 

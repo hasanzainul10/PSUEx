@@ -4,6 +4,9 @@
 
 struct IDirect3DDevice9;
 struct IDirect3DSurface9;
+struct _D3DVIEWPORT9;
+typedef struct _D3DVIEWPORT9 D3DVIEWPORT9;
+typedef struct tagRECT RECT;
 
 namespace PSUVR
 {
@@ -35,10 +38,22 @@ namespace PSUVR
 		// XYZRHW draws that sample an RT texture not written this eye pass → skip.
 		static bool ShouldSkipScreenQuad( IDirect3DDevice9 *device, void *ret, unsigned primitiveCount, bool userPointer );
 
+		// If this DP-UP is a near-full-screen XYZRHW quad sized for the game RT, return a
+		// rewritten vertex buffer scaled to the eye RT. Otherwise return nullptr (use original).
+		static const void *StretchScreenQuadIfNeeded( IDirect3DDevice9 *device, unsigned primitiveType,
+			unsigned primitiveCount, const void *verts, unsigned stride, void *ret );
+
+		// True when RT0 is the current eye color target (shadow RTs return false).
+		static bool EyeColorTargetBound( IDirect3DDevice9 *device );
+		static bool EyeColorTargetIs( IDirect3DSurface9 *surface );
+		static void GetEyeViewport( D3DVIEWPORT9 &out );
+		static void GetEyeScissor( RECT &out );
+
 	private:
 		StereoRenderer() = default;
 
-		static void BeginEyePass( IDirect3DSurface9 *eyeTarget );
+		static void BeginEyePass( IDirect3DSurface9 *eyeTarget, unsigned eyeW, unsigned eyeH,
+			unsigned gameW, unsigned gameH );
 		static void EndEyePass();
 		static void MarkSurfaceTexture( IDirect3DSurface9 *surface );
 
