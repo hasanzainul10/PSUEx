@@ -367,9 +367,19 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawIndexedPrimitive( LPDIRECT3DDEVICE9 pDevic
 	{
 		return D3D_OK;
 	}
-	return m_pOriginalDrawIndexedPrimitive(
+	const HRESULT hr = m_pOriginalDrawIndexedPrimitive(
 		pDevice, PrimitiveType, BaseVertexIndex, MinIndex, NumVertices, StartIndex, PrimitiveCount
 	);
+	// Font DIP only during Pass B or nested UI — avoid flat BB composites over stereo.
+	auto &hudDip = PSUVR::VRHud::Get();
+	if( SUCCEEDED( hr ) && hudDip.Active() &&
+		( FrameTrace::CurrentPassAddress() == 0x004FDBC0 || hudDip.InUiDraw() ) )
+	{
+		hudDip.CaptureXyzrhwIndexed( pDevice,
+			static_cast< unsigned >( PrimitiveType ), BaseVertexIndex, MinIndex, NumVertices,
+			StartIndex, PrimitiveCount, _ReturnAddress() );
+	}
+	return hr;
 }
 
 HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount, const void *pVertexStreamZeroData, UINT VertexStreamZeroStride )
@@ -387,18 +397,21 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3
 		verts = stretched;
 	}
 	const HRESULT hr = m_pOriginalDrawPrimitiveUP( pDevice, PrimitiveType, PrimitiveCount, verts, VertexStreamZeroStride );
-	if( SUCCEEDED( hr ) && FrameTrace::CurrentPassAddress() == 0x004FDBC0 )
+	// Pass B chrome, or DP-UP nested inside 0x793C40 — not every post-frame fullscreen blit.
+	auto &hud = PSUVR::VRHud::Get();
+	if( SUCCEEDED( hr ) && hud.Active() &&
+		( FrameTrace::CurrentPassAddress() == 0x004FDBC0 || hud.InUiDraw() ) )
 	{
-		PSUVR::VRHud::Get().CapturePassBDraw( pDevice,
+		hud.CapturePassBDraw( pDevice,
 			static_cast< unsigned >( PrimitiveType ), PrimitiveCount,
-			pVertexStreamZeroData, VertexStreamZeroStride );
+			pVertexStreamZeroData, VertexStreamZeroStride, _ReturnAddress() );
 	}
 	return hr;
 }
 
 HRESULT APIENTRY PSUOverlay::Hook_DrawIndexedPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE Type, UINT MinVertexIndex, UINT NumVertices, UINT PrimitiveCount, const void *pIndexData, D3DFORMAT IndexDataFormat, const void *pVertexStreamZeroData, UINT VertexStreamZeroStride )
 {
-	return m_pOriginalDrawIndexedPrimitiveUP(
+	const HRESULT hr = m_pOriginalDrawIndexedPrimitiveUP(
 		pDevice,
 		Type,
 		MinVertexIndex,
@@ -409,6 +422,16 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawIndexedPrimitiveUP( LPDIRECT3DDEVICE9 pDev
 		pVertexStreamZeroData,
 		VertexStreamZeroStride
 	);
+	auto &hudDipUp = PSUVR::VRHud::Get();
+	if( SUCCEEDED( hr ) && hudDipUp.Active() &&
+		( FrameTrace::CurrentPassAddress() == 0x004FDBC0 || hudDipUp.InUiDraw() ) )
+	{
+		hudDipUp.CaptureXyzrhwIndexedUp( pDevice,
+			static_cast< unsigned >( Type ), MinVertexIndex, NumVertices, PrimitiveCount,
+			pIndexData, static_cast< unsigned >( IndexDataFormat ),
+			pVertexStreamZeroData, VertexStreamZeroStride, _ReturnAddress() );
+	}
+	return hr;
 }
 
 void PrintMatrix( const Matrix4x4 &matrix, const char *name )

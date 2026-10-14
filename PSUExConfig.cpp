@@ -58,6 +58,8 @@ Config::Config()
 	vr.m_ipdScale = 1.0f;
 	vr.m_hudDistance = 2.5f;
 	vr.m_hudSize = 1.0f;
+	vr.m_uiScale = 1.5f;
+	vr.m_hudWorldPanel = false;
 	vr.m_stereoMode = 5;
 	vr.m_snapTurn = true;
 	vr.m_comfortVignette = true;
@@ -142,6 +144,8 @@ void Config::SaveToFile()
 	root[ "vr" ][ "ipdScale" ] = vr.m_ipdScale;
 	root[ "vr" ][ "hudDistance" ] = vr.m_hudDistance;
 	root[ "vr" ][ "hudSize" ] = vr.m_hudSize;
+	root[ "vr" ][ "uiScale" ] = vr.m_uiScale;
+	root[ "vr" ][ "hudWorldPanel" ] = vr.m_hudWorldPanel;
 	root[ "vr" ][ "snapTurn" ] = vr.m_snapTurn;
 	root[ "vr" ][ "comfortVignette" ] = vr.m_comfortVignette;
 	root[ "vr" ][ "stereo" ] = vr.m_stereo;
@@ -401,6 +405,10 @@ void Config::LoadFromFile()
 			vr.m_hudDistance = vrNode[ "hudDistance" ].get<float>();
 		if( vrNode.contains( "hudSize" ) && vrNode[ "hudSize" ].is_number() )
 			vr.m_hudSize = vrNode[ "hudSize" ].get<float>();
+		if( vrNode.contains( "uiScale" ) && vrNode[ "uiScale" ].is_number() )
+			vr.m_uiScale = vrNode[ "uiScale" ].get<float>();
+		if( vrNode.contains( "hudWorldPanel" ) && vrNode[ "hudWorldPanel" ].is_boolean() )
+			vr.m_hudWorldPanel = vrNode[ "hudWorldPanel" ].get<bool>();
 		if( vrNode.contains( "snapTurn" ) && vrNode[ "snapTurn" ].is_boolean() )
 			vr.m_snapTurn = vrNode[ "snapTurn" ].get<bool>();
 		if( vrNode.contains( "comfortVignette" ) && vrNode[ "comfortVignette" ].is_boolean() )

@@ -55,6 +55,7 @@ Create (or edit) **`psuex_vr.json`** next to `PSUC.exe`:
     "stereoMode": 5,
     "hudDistance": 2.5,
     "hudSize": 1.0,
+    "uiScale": 1.5,
     "worldScale": 1.0,
     "stereoPanel": false,
     "stereoSkipScreenQuads": true,
@@ -69,7 +70,9 @@ Create (or edit) **`psuex_vr.json`** next to `PSUC.exe`:
 | `stereo` | Per-eye 3D in supported scenes (default town). |
 | `stereoMode` | Scene mode that gets stereo. **`5` = town**. `0` = every mode (old / experimental). Login and menus stay on a large head-locked virtual screen. |
 | `hudDistance` | Distance in meters for the virtual screen / HUD panels (~2.5 is a good start). |
-| `hudSize` | Scale of those panels. |
+| `hudSize` | Scale of those floating panels. The town visor HUD is 1.4 m × `hudSize` tall; lower it (e.g. `0.85`) if corner UI sits too far out in your view. |
+| `hudWorldPanel` | Default **false**: all town UI (HUD, menus, shop windows) sits on the head-locked visor exactly as the game lays it out. `true` enables the experimental world-locked kiosk panel for centered windows. |
+| `uiScale` | Enlarge HUD widgets / nameplates when capturing for VR (default **1.5**). Useful at high game resolutions. Try `1.3`–`2.0`. Does not change the flat monitor. |
 | `stereoPanel` | Leave **`false`**. Turning it on also shows a flat PiP of the monitor frame in stereo (usually worse). |
 
 You can also put a `"vr"` object inside `config.json`, but Clementine or other tools sometimes rewrite that file. **`psuex_vr.json` overrides it** and is the safer place for VR settings.

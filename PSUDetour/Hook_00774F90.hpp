@@ -29,12 +29,16 @@ namespace sub_774F90
 	int __fastcall Hook_sub_793C40( void *thisPtr, void * /*dummy*/, int a4, int vertexCount, void *vertexPtr, int drawType )
 	{
 		FrameTrace::OnUiDraw( _ReturnAddress() );
+		auto &hud = PSUVR::VRHud::Get();
+		// Pass B DP-UPs inside this call are captured; only replay the function if none fired.
+		hud.BeginUiDraw();
 		const int result = Original_sub_793C40( thisPtr, a4, vertexCount, vertexPtr, drawType );
-		if( Config::Get().vr.m_enabled && Config::Get().vr.m_stereo )
+		if( Config::Get().vr.m_enabled && Config::Get().vr.m_stereo && hud.UiPassBCaptures() == 0 )
 		{
-			PSUVR::VRHud::Get().CaptureUiDraw( PSUOverlay::Device(),
+			hud.CaptureUiDraw( PSUOverlay::Device(),
 				thisPtr, a4, vertexCount, vertexPtr, drawType, Original_sub_793C40 );
 		}
+		hud.EndUiDraw();
 		return result;
 	}
 

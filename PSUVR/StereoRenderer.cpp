@@ -433,7 +433,6 @@ namespace PSUVR
 		const float gh = static_cast< float >( m_lastGameH );
 		const float ew = static_cast< float >( m_lastEyeW );
 		const float eh = static_cast< float >( m_lastEyeH );
-		const auto *srcBytes = static_cast< const unsigned char * >( verts );
 
 		s_inNameplateDraw = true;
 		for( int eye = 0; eye < 2; ++eye )
@@ -475,6 +474,37 @@ namespace PSUVR
 				xyzw[ 1 ] = ( 0.5f - eyeClip[ 1 ] * invW * 0.5f ) * eh;
 				xyzw[ 2 ] = eyeClip[ 2 ] * invW;
 				xyzw[ 3 ] = invW;
+			}
+
+			// Grow around the remapped AABB center so tags stay above the avatar.
+			float uiScale = Config::Get().vr.m_uiScale;
+			if( uiScale < 1.0f )
+			{
+				uiScale = 1.0f;
+			}
+			else if( uiScale > 2.5f )
+			{
+				uiScale = 2.5f;
+			}
+			if( uiScale > 1.001f )
+			{
+				float minX = 1.0e30f, minY = 1.0e30f, maxX = -1.0e30f, maxY = -1.0e30f;
+				for( unsigned i = 0; i < vertCount; ++i )
+				{
+					const float *xy = reinterpret_cast< const float * >( s_nameplateVertBuf + i * stride );
+					minX = ( std::min )( minX, xy[ 0 ] );
+					maxX = ( std::max )( maxX, xy[ 0 ] );
+					minY = ( std::min )( minY, xy[ 1 ] );
+					maxY = ( std::max )( maxY, xy[ 1 ] );
+				}
+				const float cx = ( minX + maxX ) * 0.5f;
+				const float cy = ( minY + maxY ) * 0.5f;
+				for( unsigned i = 0; i < vertCount; ++i )
+				{
+					float *xy = reinterpret_cast< float * >( s_nameplateVertBuf + i * stride );
+					xy[ 0 ] = cx + ( xy[ 0 ] - cx ) * uiScale;
+					xy[ 1 ] = cy + ( xy[ 1 ] - cy ) * uiScale;
+				}
 			}
 
 			device->SetRenderTarget( 0, eyeSurf );

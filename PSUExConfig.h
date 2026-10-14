@@ -95,6 +95,10 @@ public:
 		float m_ipdScale = 1.0f;
 		float m_hudDistance = 2.5f;
 		float m_hudSize = 1.0f;
+		// Scale XYZRHW UI when capturing to VR HUD layers / nameplates (1 = native).
+		float m_uiScale = 1.5f;
+		// Town UI: false = everything on the head-locked visor; true = also use the world-locked kiosk panel.
+		bool m_hudWorldPanel = false;
 		bool m_snapTurn = true;
 		bool m_comfortVignette = true;
 		// Render the 3D pass per eye (projection layer) with the game frame as a panel.

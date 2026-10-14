@@ -372,8 +372,8 @@ namespace PSUVR
 				{
 					const float dist = Config::Get().vr.m_hudDistance;
 					const float hudSize = Config::Get().vr.m_hudSize > 0.1f ? Config::Get().vr.m_hudSize : 1.0f;
-					const float userH = 0.8f * hudSize;
-					const float worldH = 1.1f * hudSize;
+					const float userH = 1.4f * hudSize;
+					const float worldH = 1.35f * hudSize;
 					float worldPos[ 3 ]{};
 					float worldOri[ 4 ]{ 0.0f, 0.0f, 0.0f, 1.0f };
 					VRCamera::PanelPose( dist, 0.2f, worldPos, worldOri );

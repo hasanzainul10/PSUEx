@@ -117,8 +117,8 @@ namespace PSUVR
 		float m_quadDistance = 2.0f;
 		float m_quadHeight = 1.2f;
 		float m_userHudDistance = 2.5f;
-		float m_userHudHeight = 0.8f;
-		float m_worldHudHeight = 1.1f;
+		float m_userHudHeight = 1.4f;
+		float m_worldHudHeight = 1.35f;
 
 		uint64_t m_panelSwapchain = 0;
 		void *m_panelImages = nullptr; // XrSwapchainImageD3D11KHR*
