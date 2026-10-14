@@ -145,6 +145,7 @@ void Config::SaveToFile()
 	root[ "vr" ][ "comfortVignette" ] = vr.m_comfortVignette;
 	root[ "vr" ][ "stereo" ] = vr.m_stereo;
 	root[ "vr" ][ "stereoSkipScreenQuads" ] = vr.m_stereoSkipScreenQuads;
+	root[ "vr" ][ "stereoPanel" ] = vr.m_stereoPanel;
 	root[ "vr" ][ "debugEyeShift" ] = vr.m_debugEyeShift;
 	root[ "vr" ][ "debugDoublePass" ] = vr.m_debugDoublePass;
 
@@ -406,6 +407,8 @@ void Config::LoadFromFile()
 			vr.m_stereo = vrNode[ "stereo" ].get<bool>();
 		if( vrNode.contains( "stereoSkipScreenQuads" ) && vrNode[ "stereoSkipScreenQuads" ].is_boolean() )
 			vr.m_stereoSkipScreenQuads = vrNode[ "stereoSkipScreenQuads" ].get<bool>();
+		if( vrNode.contains( "stereoPanel" ) && vrNode[ "stereoPanel" ].is_boolean() )
+			vr.m_stereoPanel = vrNode[ "stereoPanel" ].get<bool>();
 		if( vrNode.contains( "debugEyeShift" ) && vrNode[ "debugEyeShift" ].is_number() )
 			vr.m_debugEyeShift = vrNode[ "debugEyeShift" ].get<float>();
 		if( vrNode.contains( "debugDoublePass" ) && vrNode[ "debugDoublePass" ].is_boolean() )

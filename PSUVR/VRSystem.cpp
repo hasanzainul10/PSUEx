@@ -343,14 +343,26 @@ namespace PSUVR
 
 			bool stereoSubmitted = false;
 			StereoRenderer &stereo = StereoRenderer::Get();
-			if( !m_solidColorPrototype && stereo.HasFrame() && m_bridge )
+			const bool hadStereoFrame = stereo.HasFrame();
+			if( !m_solidColorPrototype && hadStereoFrame && m_bridge )
 			{
+				// Eye RTs are filled earlier in the tick; do not rely only on the BB blit fence.
+				m_bridge->Fence( m_device );
 				ID3D11Texture2D *eyes[ 2 ] = { m_bridge->EyeTexture( 0 ), m_bridge->EyeTexture( 1 ) };
 				stereoSubmitted = m_xr->SubmitStereo( eyes, stereo.RenderedPoses(), stereo.RenderedViewSpacePoses() );
 				if( stereoSubmitted && !m_loggedStereo )
 				{
 					m_loggedStereo = true;
 					PSU_LOG( "VR: stereo projection layer active (head-locked submit, F9 = recenter)\n" );
+				}
+				else if( !stereoSubmitted )
+				{
+					static unsigned s_stereoMisses = 0;
+					++s_stereoMisses;
+					if( s_stereoMisses <= 8 || ( s_stereoMisses % 120 ) == 0 )
+					{
+						PSU_LOG( "VR: stereo submit miss #%u (sky may flicker)\n", s_stereoMisses );
+					}
 				}
 			}
 			stereo.ConsumeFrame();
@@ -367,10 +379,10 @@ namespace PSUVR
 					}
 				}
 			}
-			else if( m_capturedThisFrame && m_bridge )
+			else if( m_capturedThisFrame && m_bridge &&
+				( !stereoSubmitted || Config::Get().vr.m_stereoPanel ) )
 			{
 				const float dist = Config::Get().vr.m_hudDistance;
-				// With stereo the panel is a smaller world-locked screen below eye level.
 				const float height = ( stereoSubmitted ? 0.6f : 1.2f ) * Config::Get().vr.m_hudSize;
 				m_xr->SetVirtualScreenPlacement( dist, height );
 				float panelPosition[ 3 ]{};

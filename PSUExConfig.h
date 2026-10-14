@@ -102,6 +102,9 @@ public:
 		// During eye passes, skip XYZRHW quads that sample an RT filled only by the flat pass
 		// (glare / afterimage ghosts the mono camera over stereo). Shadows rewritten per eye stay.
 		bool m_stereoSkipScreenQuads = true;
+		// When stereo is on, also submit the flat game frame as a world-locked quad (HUD stand-in).
+		// Default off — the panel reads as a dark PiP sliding over the stereo floor.
+		bool m_stereoPanel = false;
 		// Debug: shift the 3D pass sideways by ±this many view units, alternating each second.
 		float m_debugEyeShift = 0.0f;
 		// Debug: run the 3D pass twice per frame to test repeat-safety.
