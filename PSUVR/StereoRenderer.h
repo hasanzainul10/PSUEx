@@ -2,6 +2,8 @@
 
 #include "VRRuntime.h"
 
+#include <d3d9.h>
+
 struct IDirect3DDevice9;
 struct IDirect3DSurface9;
 struct _D3DVIEWPORT9;
@@ -25,7 +27,7 @@ namespace PSUVR
 		bool HasFrame() const { return m_hasFrame; }
 		const EyePose *RenderedPoses() const { return m_poses; }
 		const EyePose *RenderedViewSpacePoses() const { return m_viewSpacePoses; }
-		void ConsumeFrame() { m_hasFrame = false; }
+		void ConsumeFrame() { m_hasFrame = false; m_haveEyeMatrices = false; }
 
 		unsigned EyeWidth() const { return m_lastEyeW; }
 		unsigned EyeHeight() const { return m_lastEyeH; }
@@ -35,6 +37,12 @@ namespace PSUVR
 		// True while pass() runs for an eye. Used by D3D hooks to skip flat-sourced
 		// screen-space effect quads that would ghost the mono camera over stereo.
 		static bool InEyePass();
+		// True while remapping Pass B nameplates/bubbles onto eye RTs (skip HUD capture).
+		static bool InNameplateDraw();
+
+		// Unproject game XYZRHW (Pass B nameplate/bubble) and draw onto both eye RTs.
+		void DrawNameplateToEyes( IDirect3DDevice9 *device, unsigned primitiveType,
+			unsigned primitiveCount, const void *verts, unsigned stride );
 
 		// Track RT textures written during the current eye pass (SetRT / StretchRect dest).
 		static void OnSetRenderTarget( IDirect3DSurface9 *target );
@@ -64,10 +72,16 @@ namespace PSUVR
 
 		bool m_hasFrame = false;
 		bool m_loggedFirst = false;
+		bool m_haveEyeMatrices = false;
+		bool m_loggedNameplate = false;
 		unsigned m_lastEyeW = 0;
 		unsigned m_lastEyeH = 0;
 		unsigned m_lastGameW = 0;
 		unsigned m_lastGameH = 0;
+		D3DMATRIX m_gameProj{};
+		D3DMATRIX m_invGameProj{};
+		D3DMATRIX m_eyeView[ 2 ]{};
+		D3DMATRIX m_eyeProj[ 2 ]{};
 		EyePose m_poses[ 2 ]{};
 		EyePose m_viewSpacePoses[ 2 ]{};
 	};

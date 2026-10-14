@@ -124,6 +124,46 @@ namespace PSUVR
 		return bridge ? bridge->HudWorldTexture() : nullptr;
 	}
 
+	namespace
+	{
+		bool ComputeAabb( const void *verts, unsigned vertCount, unsigned stride,
+			float &minX, float &minY, float &maxX, float &maxY )
+		{
+			if( !verts || vertCount < 1 || stride < 16 )
+			{
+				return false;
+			}
+			minX = 1.0e30f;
+			minY = 1.0e30f;
+			maxX = -1.0e30f;
+			maxY = -1.0e30f;
+			const auto *bytes = static_cast< const unsigned char * >( verts );
+			for( unsigned i = 0; i < vertCount; ++i )
+			{
+				const float *xy = reinterpret_cast< const float * >( bytes + i * stride );
+				minX = ( std::min )( minX, xy[ 0 ] );
+				maxX = ( std::max )( maxX, xy[ 0 ] );
+				minY = ( std::min )( minY, xy[ 1 ] );
+				maxY = ( std::max )( maxY, xy[ 1 ] );
+			}
+			return true;
+		}
+
+		unsigned VertCountForPrimitive( unsigned primitiveType, unsigned primitiveCount )
+		{
+			switch( static_cast< D3DPRIMITIVETYPE >( primitiveType ) )
+			{
+				case D3DPT_TRIANGLELIST: return primitiveCount * 3;
+				case D3DPT_TRIANGLESTRIP:
+				case D3DPT_TRIANGLEFAN: return primitiveCount + 2;
+				case D3DPT_LINELIST: return primitiveCount * 2;
+				case D3DPT_LINESTRIP: return primitiveCount + 1;
+				case D3DPT_POINTLIST: return primitiveCount;
+				default: return 0;
+			}
+		}
+	}
+
 	bool VRHud::IsWorldUiWidget( const void *verts, int vertexCount, unsigned stride,
 		unsigned gameW, unsigned gameH )
 	{
@@ -131,16 +171,10 @@ namespace PSUVR
 		{
 			return false;
 		}
-		float minX = 1.0e30f, minY = 1.0e30f, maxX = -1.0e30f, maxY = -1.0e30f;
-		const auto *bytes = static_cast< const unsigned char * >( verts );
-		const unsigned count = static_cast< unsigned >( vertexCount );
-		for( unsigned i = 0; i < count; ++i )
+		float minX = 0, minY = 0, maxX = 0, maxY = 0;
+		if( !ComputeAabb( verts, static_cast< unsigned >( vertexCount ), stride, minX, minY, maxX, maxY ) )
 		{
-			const float *xy = reinterpret_cast< const float * >( bytes + i * stride );
-			minX = ( std::min )( minX, xy[ 0 ] );
-			maxX = ( std::max )( maxX, xy[ 0 ] );
-			minY = ( std::min )( minY, xy[ 1 ] );
-			maxY = ( std::max )( maxY, xy[ 1 ] );
+			return false;
 		}
 		const float gw = static_cast< float >( gameW );
 		const float gh = static_cast< float >( gameH );
@@ -155,6 +189,38 @@ namespace PSUVR
 		const float cy = ( minY + maxY ) * 0.5f;
 		const bool centered = ( cx > gw * 0.25f && cx < gw * 0.75f && cy > gh * 0.25f && cy < gh * 0.75f );
 		return centered && areaFrac >= 0.15f;
+	}
+
+	bool VRHud::IsAvatarAnchoredPassB( const void *verts, unsigned primitiveType,
+		unsigned primitiveCount, unsigned stride, unsigned gameW, unsigned gameH )
+	{
+		if( !verts || stride < 16 || gameW < 1 || gameH < 1 )
+		{
+			return false;
+		}
+		const unsigned vertCount = VertCountForPrimitive( primitiveType, primitiveCount );
+		float minX = 0, minY = 0, maxX = 0, maxY = 0;
+		if( !ComputeAabb( verts, vertCount, stride, minX, minY, maxX, maxY ) )
+		{
+			return false;
+		}
+		const float gw = static_cast< float >( gameW );
+		const float gh = static_cast< float >( gameH );
+		const float boxW = maxX - minX;
+		const float boxH = maxY - minY;
+		if( boxW <= 0.0f || boxH <= 0.0f )
+		{
+			return false;
+		}
+		const float areaFrac = ( boxW * boxH ) / ( gw * gh );
+		// Shop windows are larger; nameplates/bubbles stay under ~28% of the screen.
+		if( areaFrac >= 0.28f )
+		{
+			return false;
+		}
+		const float cy = ( minY + maxY ) * 0.5f;
+		// Lower-third interact prompts stay on the world HUD panel.
+		return cy < gh * 0.72f;
 	}
 
 	void VRHud::ReplayOnto( IDirect3DDevice9 *device, bool worldLayer,
@@ -278,12 +344,19 @@ namespace PSUVR
 	void VRHud::CapturePassBDraw( IDirect3DDevice9 *device, unsigned primitiveType,
 		unsigned primitiveCount, const void *verts, unsigned stride )
 	{
-		if( m_capturing || !m_active || !device || !verts || StereoRenderer::InEyePass() )
+		if( m_capturing || !m_active || !device || !verts ||
+			StereoRenderer::InEyePass() || StereoRenderer::InNameplateDraw() )
 		{
 			return;
 		}
-		if( !StereoRenderer::Get().HasFrame() )
+		auto &stereo = StereoRenderer::Get();
+		if( !stereo.HasFrame() )
 		{
+			return;
+		}
+		if( IsAvatarAnchoredPassB( verts, primitiveType, primitiveCount, stride, m_w, m_h ) )
+		{
+			stereo.DrawNameplateToEyes( device, primitiveType, primitiveCount, verts, stride );
 			return;
 		}
 		ReplayPassBOntoWorld( device, primitiveType, primitiveCount, verts, stride );

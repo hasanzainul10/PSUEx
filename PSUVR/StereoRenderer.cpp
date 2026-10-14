@@ -22,6 +22,7 @@ namespace PSUVR
 	namespace
 	{
 		bool s_inEyePass = false;
+		bool s_inNameplateDraw = false;
 		IDirect3DSurface9 *s_eyeSurface = nullptr;
 		unsigned s_eyeW = 0;
 		unsigned s_eyeH = 0;
@@ -29,6 +30,7 @@ namespace PSUVR
 		unsigned s_gameH = 0;
 		unsigned s_stretchQuadLogCount = 0;
 		alignas( 16 ) unsigned char s_stretchQuadBuf[ 64 * 64 ]{};
+		alignas( 16 ) unsigned char s_nameplateVertBuf[ 64 * 64 ]{};
 		std::unordered_set< IDirect3DBaseTexture9 * > s_writtenTextures;
 		unsigned s_screenQuadLogCount = 0;
 		unsigned s_stretchLogCount = 0;
@@ -41,6 +43,79 @@ namespace PSUVR
 		{
 			return format == D3DFMT_D24S8 || format == D3DFMT_D24X4S4 || format == D3DFMT_D15S1 || format == D3DFMT_D24FS8;
 		}
+
+		bool InvertMatrix( const D3DMATRIX &m, D3DMATRIX &out )
+		{
+			const float *a = &m._11;
+			float inv[ 16 ]{};
+			inv[ 0 ] = a[ 5 ] * a[ 10 ] * a[ 15 ] - a[ 5 ] * a[ 11 ] * a[ 14 ] - a[ 9 ] * a[ 6 ] * a[ 15 ]
+				+ a[ 9 ] * a[ 7 ] * a[ 14 ] + a[ 13 ] * a[ 6 ] * a[ 11 ] - a[ 13 ] * a[ 7 ] * a[ 10 ];
+			inv[ 4 ] = -a[ 4 ] * a[ 10 ] * a[ 15 ] + a[ 4 ] * a[ 11 ] * a[ 14 ] + a[ 8 ] * a[ 6 ] * a[ 15 ]
+				- a[ 8 ] * a[ 7 ] * a[ 14 ] - a[ 12 ] * a[ 6 ] * a[ 11 ] + a[ 12 ] * a[ 7 ] * a[ 10 ];
+			inv[ 8 ] = a[ 4 ] * a[ 9 ] * a[ 15 ] - a[ 4 ] * a[ 11 ] * a[ 13 ] - a[ 8 ] * a[ 5 ] * a[ 15 ]
+				+ a[ 8 ] * a[ 7 ] * a[ 13 ] + a[ 12 ] * a[ 5 ] * a[ 11 ] - a[ 12 ] * a[ 7 ] * a[ 9 ];
+			inv[ 12 ] = -a[ 4 ] * a[ 9 ] * a[ 14 ] + a[ 4 ] * a[ 10 ] * a[ 13 ] + a[ 8 ] * a[ 5 ] * a[ 14 ]
+				- a[ 8 ] * a[ 6 ] * a[ 13 ] - a[ 12 ] * a[ 5 ] * a[ 10 ] + a[ 12 ] * a[ 6 ] * a[ 9 ];
+			inv[ 1 ] = -a[ 1 ] * a[ 10 ] * a[ 15 ] + a[ 1 ] * a[ 11 ] * a[ 14 ] + a[ 9 ] * a[ 2 ] * a[ 15 ]
+				- a[ 9 ] * a[ 3 ] * a[ 14 ] - a[ 13 ] * a[ 2 ] * a[ 11 ] + a[ 13 ] * a[ 3 ] * a[ 10 ];
+			inv[ 5 ] = a[ 0 ] * a[ 10 ] * a[ 15 ] - a[ 0 ] * a[ 11 ] * a[ 14 ] - a[ 8 ] * a[ 2 ] * a[ 15 ]
+				+ a[ 8 ] * a[ 3 ] * a[ 14 ] + a[ 12 ] * a[ 2 ] * a[ 11 ] - a[ 12 ] * a[ 3 ] * a[ 10 ];
+			inv[ 9 ] = -a[ 0 ] * a[ 9 ] * a[ 15 ] + a[ 0 ] * a[ 11 ] * a[ 13 ] + a[ 8 ] * a[ 1 ] * a[ 15 ]
+				- a[ 8 ] * a[ 3 ] * a[ 13 ] - a[ 12 ] * a[ 1 ] * a[ 11 ] + a[ 12 ] * a[ 3 ] * a[ 9 ];
+			inv[ 13 ] = a[ 0 ] * a[ 9 ] * a[ 14 ] - a[ 0 ] * a[ 10 ] * a[ 13 ] - a[ 8 ] * a[ 1 ] * a[ 14 ]
+				+ a[ 8 ] * a[ 2 ] * a[ 13 ] + a[ 12 ] * a[ 1 ] * a[ 10 ] - a[ 12 ] * a[ 2 ] * a[ 9 ];
+			inv[ 2 ] = a[ 1 ] * a[ 6 ] * a[ 15 ] - a[ 1 ] * a[ 7 ] * a[ 14 ] - a[ 5 ] * a[ 2 ] * a[ 15 ]
+				+ a[ 5 ] * a[ 3 ] * a[ 14 ] + a[ 13 ] * a[ 2 ] * a[ 7 ] - a[ 13 ] * a[ 3 ] * a[ 6 ];
+			inv[ 6 ] = -a[ 0 ] * a[ 6 ] * a[ 15 ] + a[ 0 ] * a[ 7 ] * a[ 14 ] + a[ 4 ] * a[ 2 ] * a[ 15 ]
+				- a[ 4 ] * a[ 3 ] * a[ 14 ] - a[ 12 ] * a[ 2 ] * a[ 7 ] + a[ 12 ] * a[ 3 ] * a[ 6 ];
+			inv[ 10 ] = a[ 0 ] * a[ 5 ] * a[ 15 ] - a[ 0 ] * a[ 7 ] * a[ 13 ] - a[ 4 ] * a[ 1 ] * a[ 15 ]
+				+ a[ 4 ] * a[ 3 ] * a[ 13 ] + a[ 12 ] * a[ 1 ] * a[ 7 ] - a[ 12 ] * a[ 3 ] * a[ 5 ];
+			inv[ 14 ] = -a[ 0 ] * a[ 5 ] * a[ 14 ] + a[ 0 ] * a[ 6 ] * a[ 13 ] + a[ 4 ] * a[ 1 ] * a[ 14 ]
+				- a[ 4 ] * a[ 2 ] * a[ 13 ] - a[ 12 ] * a[ 1 ] * a[ 6 ] + a[ 12 ] * a[ 2 ] * a[ 5 ];
+			inv[ 3 ] = -a[ 1 ] * a[ 6 ] * a[ 11 ] + a[ 1 ] * a[ 7 ] * a[ 10 ] + a[ 5 ] * a[ 2 ] * a[ 11 ]
+				- a[ 5 ] * a[ 3 ] * a[ 10 ] - a[ 9 ] * a[ 2 ] * a[ 7 ] + a[ 9 ] * a[ 3 ] * a[ 6 ];
+			inv[ 7 ] = a[ 0 ] * a[ 6 ] * a[ 11 ] - a[ 0 ] * a[ 7 ] * a[ 10 ] - a[ 4 ] * a[ 2 ] * a[ 11 ]
+				+ a[ 4 ] * a[ 3 ] * a[ 10 ] + a[ 8 ] * a[ 2 ] * a[ 7 ] - a[ 8 ] * a[ 3 ] * a[ 6 ];
+			inv[ 11 ] = -a[ 0 ] * a[ 5 ] * a[ 11 ] + a[ 0 ] * a[ 7 ] * a[ 9 ] + a[ 4 ] * a[ 1 ] * a[ 11 ]
+				- a[ 4 ] * a[ 3 ] * a[ 9 ] - a[ 8 ] * a[ 1 ] * a[ 7 ] + a[ 8 ] * a[ 3 ] * a[ 5 ];
+			inv[ 15 ] = a[ 0 ] * a[ 5 ] * a[ 10 ] - a[ 0 ] * a[ 6 ] * a[ 9 ] - a[ 4 ] * a[ 1 ] * a[ 10 ]
+				+ a[ 4 ] * a[ 2 ] * a[ 9 ] + a[ 8 ] * a[ 1 ] * a[ 6 ] - a[ 8 ] * a[ 2 ] * a[ 5 ];
+
+			const float det = a[ 0 ] * inv[ 0 ] + a[ 1 ] * inv[ 4 ] + a[ 2 ] * inv[ 8 ] + a[ 3 ] * inv[ 12 ];
+			if( det > -1.0e-12f && det < 1.0e-12f )
+			{
+				return false;
+			}
+			const float idet = 1.0f / det;
+			float *o = &out._11;
+			for( int i = 0; i < 16; ++i )
+			{
+				o[ i ] = inv[ i ] * idet;
+			}
+			return true;
+		}
+
+		void MulVec4Mat( const float v[ 4 ], const D3DMATRIX &m, float out[ 4 ] )
+		{
+			out[ 0 ] = v[ 0 ] * m._11 + v[ 1 ] * m._21 + v[ 2 ] * m._31 + v[ 3 ] * m._41;
+			out[ 1 ] = v[ 0 ] * m._12 + v[ 1 ] * m._22 + v[ 2 ] * m._32 + v[ 3 ] * m._42;
+			out[ 2 ] = v[ 0 ] * m._13 + v[ 1 ] * m._23 + v[ 2 ] * m._33 + v[ 3 ] * m._43;
+			out[ 3 ] = v[ 0 ] * m._14 + v[ 1 ] * m._24 + v[ 2 ] * m._34 + v[ 3 ] * m._44;
+		}
+
+		unsigned VertCountForPrimitive( unsigned primitiveType, unsigned primitiveCount )
+		{
+			switch( static_cast< D3DPRIMITIVETYPE >( primitiveType ) )
+			{
+				case D3DPT_TRIANGLELIST: return primitiveCount * 3;
+				case D3DPT_TRIANGLESTRIP:
+				case D3DPT_TRIANGLEFAN: return primitiveCount + 2;
+				case D3DPT_LINELIST: return primitiveCount * 2;
+				case D3DPT_LINESTRIP: return primitiveCount + 1;
+				case D3DPT_POINTLIST: return primitiveCount;
+				default: return 0;
+			}
+		}
 	}
 
 	StereoRenderer &StereoRenderer::Get()
@@ -52,6 +127,11 @@ namespace PSUVR
 	bool StereoRenderer::InEyePass()
 	{
 		return s_inEyePass;
+	}
+
+	bool StereoRenderer::InNameplateDraw()
+	{
+		return s_inNameplateDraw;
 	}
 
 	void StereoRenderer::MarkSurfaceTexture( IDirect3DSurface9 *surface )
@@ -303,6 +383,134 @@ namespace PSUVR
 		return s_stretchQuadBuf;
 	}
 
+	void StereoRenderer::DrawNameplateToEyes( IDirect3DDevice9 *device, unsigned primitiveType,
+		unsigned primitiveCount, const void *verts, unsigned stride )
+	{
+		if( s_inNameplateDraw || s_inEyePass || !device || !verts || !m_hasFrame || !m_haveEyeMatrices )
+		{
+			return;
+		}
+		if( stride < 16 || stride > kMaxStretchStride )
+		{
+			return;
+		}
+		const unsigned vertCount = VertCountForPrimitive( primitiveType, primitiveCount );
+		if( vertCount < 3 || vertCount > kMaxStretchVerts || vertCount * stride > sizeof( s_nameplateVertBuf ) )
+		{
+			return;
+		}
+		D3D11Bridge *bridge = System::Get().StereoBridge();
+		if( !bridge || m_lastEyeW < 1 || m_lastEyeH < 1 || m_lastGameW < 1 || m_lastGameH < 1 )
+		{
+			return;
+		}
+
+		DWORD fvf = 0;
+		device->GetFVF( &fvf );
+		if( ( fvf & D3DFVF_POSITION_MASK ) != D3DFVF_XYZRHW )
+		{
+			return;
+		}
+
+		IDirect3DSurface9 *savedRt = nullptr;
+		IDirect3DSurface9 *savedDs = nullptr;
+		D3DVIEWPORT9 savedVp{};
+		RECT savedScissor{};
+		DWORD zEnable = 0, zWrite = 0, scissorEnable = 0;
+		device->GetRenderTarget( 0, &savedRt );
+		device->GetDepthStencilSurface( &savedDs );
+		device->GetViewport( &savedVp );
+		device->GetScissorRect( &savedScissor );
+		device->GetRenderState( D3DRS_ZENABLE, &zEnable );
+		device->GetRenderState( D3DRS_ZWRITEENABLE, &zWrite );
+		device->GetRenderState( D3DRS_SCISSORTESTENABLE, &scissorEnable );
+
+		device->SetRenderState( D3DRS_ZENABLE, FALSE );
+		device->SetRenderState( D3DRS_ZWRITEENABLE, FALSE );
+		device->SetDepthStencilSurface( nullptr );
+
+		const float gw = static_cast< float >( m_lastGameW );
+		const float gh = static_cast< float >( m_lastGameH );
+		const float ew = static_cast< float >( m_lastEyeW );
+		const float eh = static_cast< float >( m_lastEyeH );
+		const auto *srcBytes = static_cast< const unsigned char * >( verts );
+
+		s_inNameplateDraw = true;
+		for( int eye = 0; eye < 2; ++eye )
+		{
+			IDirect3DSurface9 *eyeSurf = bridge->EyeSurface( eye );
+			if( !eyeSurf )
+			{
+				continue;
+			}
+
+			std::memcpy( s_nameplateVertBuf, verts, vertCount * stride );
+			for( unsigned i = 0; i < vertCount; ++i )
+			{
+				float *xyzw = reinterpret_cast< float * >( s_nameplateVertBuf + i * stride );
+				const float sx = xyzw[ 0 ];
+				const float sy = xyzw[ 1 ];
+				const float sz = xyzw[ 2 ];
+				float rhw = xyzw[ 3 ];
+				if( rhw > -1.0e-8f && rhw < 1.0e-8f )
+				{
+					continue;
+				}
+				const float w = 1.0f / rhw;
+				const float ndcX = ( sx / gw ) * 2.0f - 1.0f;
+				const float ndcY = 1.0f - ( sy / gh ) * 2.0f;
+				const float clipIn[ 4 ] = { ndcX * w, ndcY * w, sz * w, w };
+				float cam[ 4 ]{};
+				MulVec4Mat( clipIn, m_invGameProj, cam );
+				float viewClip[ 4 ]{};
+				MulVec4Mat( cam, m_eyeView[ eye ], viewClip );
+				float eyeClip[ 4 ]{};
+				MulVec4Mat( viewClip, m_eyeProj[ eye ], eyeClip );
+				if( eyeClip[ 3 ] > -1.0e-8f && eyeClip[ 3 ] < 1.0e-8f )
+				{
+					continue;
+				}
+				const float invW = 1.0f / eyeClip[ 3 ];
+				xyzw[ 0 ] = ( eyeClip[ 0 ] * invW * 0.5f + 0.5f ) * ew;
+				xyzw[ 1 ] = ( 0.5f - eyeClip[ 1 ] * invW * 0.5f ) * eh;
+				xyzw[ 2 ] = eyeClip[ 2 ] * invW;
+				xyzw[ 3 ] = invW;
+			}
+
+			device->SetRenderTarget( 0, eyeSurf );
+			D3DVIEWPORT9 eyeVp{ 0, 0, m_lastEyeW, m_lastEyeH, 0.0f, 1.0f };
+			device->SetViewport( &eyeVp );
+			RECT scissor{ 0, 0, static_cast< LONG >( m_lastEyeW ), static_cast< LONG >( m_lastEyeH ) };
+			device->SetScissorRect( &scissor );
+			device->DrawPrimitiveUP( static_cast< D3DPRIMITIVETYPE >( primitiveType ),
+				primitiveCount, s_nameplateVertBuf, stride );
+		}
+		s_inNameplateDraw = false;
+
+		device->SetRenderTarget( 0, savedRt );
+		device->SetDepthStencilSurface( savedDs );
+		device->SetViewport( &savedVp );
+		device->SetScissorRect( &savedScissor );
+		device->SetRenderState( D3DRS_SCISSORTESTENABLE, scissorEnable );
+		device->SetRenderState( D3DRS_ZENABLE, zEnable );
+		device->SetRenderState( D3DRS_ZWRITEENABLE, zWrite );
+		device->SetFVF( fvf );
+		if( savedRt )
+		{
+			savedRt->Release();
+		}
+		if( savedDs )
+		{
+			savedDs->Release();
+		}
+
+		if( !m_loggedNameplate )
+		{
+			m_loggedNameplate = true;
+			PSU_LOG( "VR: Pass B nameplates/bubbles remapped to stereo eyes\n" );
+		}
+	}
+
 	void StereoRenderer::RenderEyes( IDirect3DDevice9 *device, Pass pass )
 	{
 		const auto &vr = Config::Get().vr;
@@ -369,11 +577,16 @@ namespace PSUVR
 			const float unitsPerMeter = kUnitsPerMeter * ( vr.m_worldScale > 0.01f ? vr.m_worldScale : 1.0f );
 			const DWORD clearFlags = D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER | ( HasStencil( depthFormat ) ? D3DCLEAR_STENCIL : 0 );
 
+			m_gameProj = gameProj;
+			m_haveEyeMatrices = InvertMatrix( gameProj, m_invGameProj );
+
 			for( int eye = 0; eye < 2; ++eye )
 			{
 				D3DMATRIX eyeView{};
 				D3DMATRIX eyeProj{};
 				VRCamera::BuildEye( views[ eye ], unitsPerMeter, gameProj, eyeView, eyeProj );
+				m_eyeView[ eye ] = eyeView;
+				m_eyeProj[ eye ] = eyeProj;
 
 				IDirect3DSurface9 *eyeSurface = bridge->EyeSurface( eye );
 				device->SetRenderTarget( 0, eyeSurface );

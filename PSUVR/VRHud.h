@@ -45,6 +45,9 @@ namespace PSUVR
 			unsigned primitiveCount, const void *verts, unsigned stride );
 		static bool IsWorldUiWidget( const void *verts, int vertexCount, unsigned stride,
 			unsigned gameW, unsigned gameH );
+		// Nameplates / speech bubbles: small-to-medium Pass B quads above mid-screen.
+		static bool IsAvatarAnchoredPassB( const void *verts, unsigned primitiveType,
+			unsigned primitiveCount, unsigned stride, unsigned gameW, unsigned gameH );
 
 		bool m_active = false;
 		bool m_capturing = false;
