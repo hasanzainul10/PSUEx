@@ -1,0 +1,345 @@
+#include "VRSettingsPanel.h"
+
+#include "VRGamepad.h"
+
+#include <imgui.h>
+
+#include <Windows.h>
+#include <Xinput.h>
+
+#include <cstdio>
+
+namespace PSUVR
+{
+	namespace
+	{
+		// Rebind capture: which action and whether a key or a pad button is awaited.
+		int s_captureAction = -1;
+		bool s_captureKey = true;
+		bool s_heldAtStart[ 256 ]{};
+		unsigned short s_padAtStart = 0;
+
+		bool KeyDown( int vk )
+		{
+			return ( GetAsyncKeyState( vk ) & 0x8000 ) != 0;
+		}
+
+		void BeginCapture( int action, bool key )
+		{
+			s_captureAction = action;
+			s_captureKey = key;
+			for( int vk = 0; vk < 256; ++vk )
+			{
+				s_heldAtStart[ vk ] = KeyDown( vk );
+			}
+			VRGamepad::Buttons( s_padAtStart );
+		}
+
+		// Polls for the binding being captured. Escape cancels.
+		void UpdateCapture( VRSettings &settings )
+		{
+			if( s_captureAction < 0 )
+			{
+				return;
+			}
+			for( int vk = 8; vk < 256; ++vk )
+			{
+				if( vk == VK_LBUTTON || vk == VK_RBUTTON || vk == VK_MBUTTON || vk == VK_XBUTTON1 || vk == VK_XBUTTON2 )
+				{
+					continue;
+				}
+				const bool down = KeyDown( vk );
+				if( !down )
+				{
+					s_heldAtStart[ vk ] = false;
+					continue;
+				}
+				if( s_heldAtStart[ vk ] )
+				{
+					continue;
+				}
+				if( vk == VK_ESCAPE )
+				{
+					s_captureAction = -1;
+					return;
+				}
+				// Generic modifiers repeat as left/right variants; take the specific one.
+				if( vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU )
+				{
+					continue;
+				}
+				if( s_captureKey )
+				{
+					settings.m_bindings[ s_captureAction ].key = vk;
+					s_captureAction = -1;
+					return;
+				}
+			}
+			if( !s_captureKey )
+			{
+				unsigned short buttons = 0;
+				VRGamepad::Buttons( buttons );
+				const unsigned short pressed = static_cast< unsigned short >( buttons & ~s_padAtStart ) &
+					static_cast< unsigned short >( ~XINPUT_GAMEPAD_BACK );
+				s_padAtStart = buttons;
+				if( pressed )
+				{
+					// Lowest newly pressed button.
+					settings.m_bindings[ s_captureAction ].pad = static_cast< unsigned short >( pressed & ( ~pressed + 1 ) );
+					s_captureAction = -1;
+				}
+			}
+		}
+
+		bool Combo( const char *label, std::string &value, const char *const *ids, const char *const *names, int count )
+		{
+			int current = 0;
+			for( int i = 0; i < count; ++i )
+			{
+				if( value == ids[ i ] )
+				{
+					current = i;
+				}
+			}
+			if( ImGui::Combo( label, &current, names, count ) )
+			{
+				value = ids[ current ];
+				return true;
+			}
+			return false;
+		}
+
+		void Help( const char *text )
+		{
+			ImGui::SameLine();
+			ImGui::TextDisabled( "(?)" );
+			if( ImGui::IsItemHovered() )
+			{
+				ImGui::SetTooltip( "%s", text );
+			}
+		}
+	}
+
+	std::string VRKeyName( int virtualKey )
+	{
+		if( virtualKey <= 0 )
+		{
+			return "-";
+		}
+		UINT scan = MapVirtualKeyA( static_cast< UINT >( virtualKey ), MAPVK_VK_TO_VSC );
+		LONG param = static_cast< LONG >( scan << 16 );
+		switch( virtualKey )
+		{
+			// Extended keys need bit 24 for the right name.
+			case VK_INSERT: case VK_DELETE: case VK_HOME: case VK_END: case VK_PRIOR: case VK_NEXT:
+			case VK_LEFT: case VK_RIGHT: case VK_UP: case VK_DOWN: case VK_RCONTROL: case VK_RMENU:
+			case VK_DIVIDE: case VK_NUMLOCK:
+				param |= 1 << 24;
+				break;
+			default:
+				break;
+		}
+		char name[ 64 ]{};
+		if( scan && GetKeyNameTextA( param, name, sizeof( name ) ) > 0 )
+		{
+			return name;
+		}
+		char fallback[ 16 ];
+		std::snprintf( fallback, sizeof( fallback ), "VK 0x%02X", virtualKey );
+		return fallback;
+	}
+
+	std::string VRPadName( unsigned short padButton )
+	{
+		switch( padButton )
+		{
+			case 0: return "-";
+			case XINPUT_GAMEPAD_A: return "Back + A";
+			case XINPUT_GAMEPAD_B: return "Back + B";
+			case XINPUT_GAMEPAD_X: return "Back + X";
+			case XINPUT_GAMEPAD_Y: return "Back + Y";
+			case XINPUT_GAMEPAD_START: return "Back + Start";
+			case XINPUT_GAMEPAD_LEFT_SHOULDER: return "Back + LB";
+			case XINPUT_GAMEPAD_RIGHT_SHOULDER: return "Back + RB";
+			case XINPUT_GAMEPAD_LEFT_THUMB: return "Back + L3";
+			case XINPUT_GAMEPAD_RIGHT_THUMB: return "Back + R3";
+			case XINPUT_GAMEPAD_DPAD_UP: return "Back + D-pad up";
+			case XINPUT_GAMEPAD_DPAD_DOWN: return "Back + D-pad down";
+			case XINPUT_GAMEPAD_DPAD_LEFT: return "Back + D-pad left";
+			case XINPUT_GAMEPAD_DPAD_RIGHT: return "Back + D-pad right";
+			default:
+			{
+				char text[ 24 ];
+				std::snprintf( text, sizeof( text ), "Back + 0x%04X", padButton );
+				return text;
+			}
+		}
+	}
+
+	void DrawVRSettingsPanel( VRSettings &s, VRPanelContext &context )
+	{
+		UpdateCapture( s );
+
+		if( !context.status.empty() )
+		{
+			for( const std::string &line : context.status )
+			{
+				ImGui::TextUnformatted( line.c_str() );
+			}
+			ImGui::Separator();
+		}
+
+		if( ImGui::CollapsingHeader( "General", ImGuiTreeNodeFlags_DefaultOpen ) )
+		{
+			ImGui::Checkbox( "VR enabled", &s.m_enabled );
+			Help( "Applies on the next game launch (the game's Direct3D device is set up for VR at startup)." );
+			if( context.inGame )
+			{
+				ImGui::Checkbox( "Pause VR", &s.m_paused );
+				Help( "Instantly switch the game to flat play; the headset shows it on a big screen. Not saved." );
+			}
+			ImGui::Checkbox( "Gamepad works when the game isn't focused", &s.m_backgroundInput );
+			Help( "With the headset on, the game window often isn't the focused one. Applies on the next game launch." );
+			if( s.m_backgroundInput )
+			{
+				ImGui::Checkbox( "Keyboard too", &s.m_backgroundKeyboard );
+				Help( "Keys typed in other apps then also reach the game. Applies on the next game launch." );
+			}
+			static const char *const cameraIds[] = { "firstPerson", "thirdPerson" };
+			static const char *const cameraNames[] = { "First person", "Third person" };
+			Combo( "Camera", s.m_cameraMode, cameraIds, cameraNames, 2 );
+			ImGui::SliderFloat( "World scale", &s.m_worldScale, 0.5f, 2.0f, "%.2f" );
+		}
+
+		if( ImGui::CollapsingHeader( "First person", ImGuiTreeNodeFlags_DefaultOpen ) )
+		{
+			static const char *const moveIds[] = { "head", "body" };
+			static const char *const moveNames[] = { "Where you look (head)", "Where the body faces" };
+			Combo( "Left stick forward", s.m_fpMoveDirection, moveIds, moveNames, 2 );
+			static const char *const bodyIds[] = { "headless", "hidden", "full" };
+			static const char *const bodyNames[] = { "Headless (hands, body, legs)", "Hidden", "Full" };
+			Combo( "Own body", s.m_fpBody, bodyIds, bodyNames, 3 );
+			ImGui::SliderFloat( "Eye height (m)", &s.m_fpEyeHeight, 1.2f, 2.0f, "%.2f" );
+			ImGui::SliderFloat( "Eye forward (m)", &s.m_fpEyeForward, 0.0f, 0.3f, "%.2f" );
+			ImGui::SliderFloat( "Neck cut below eyes (m)", &s.m_fpNeckDrop, 0.05f, 0.5f, "%.2f" );
+			ImGui::SliderFloat( "Lean limit (m)", &s.m_fpLeanLimit, 0.0f, 0.5f, "%.2f" );
+			ImGui::SliderFloat( "Crouch limit (m)", &s.m_fpCrouchLimit, 0.0f, 0.5f, "%.2f" );
+		}
+
+		if( ImGui::CollapsingHeader( "Turning", ImGuiTreeNodeFlags_DefaultOpen ) )
+		{
+			ImGui::Checkbox( "Snap turn", &s.m_snapTurn );
+			Help( "Snap turn is the comfort default. Smooth turn can cause motion sickness." );
+			if( s.m_snapTurn )
+			{
+				ImGui::SliderFloat( "Snap step (deg)", &s.m_snapTurnDegrees, 15.0f, 90.0f, "%.0f" );
+			}
+			else
+			{
+				ImGui::SliderFloat( "Smooth speed (deg/s)", &s.m_fpTurnSpeed, 30.0f, 360.0f, "%.0f" );
+			}
+		}
+
+		if( ImGui::CollapsingHeader( "HUD and menus" ) )
+		{
+			ImGui::Checkbox( "Body-locked panel (lazy follow)", &s.m_hudFollow );
+			ImGui::SliderFloat( "Follow angle (deg)", &s.m_hudFollowAngle, 10.0f, 90.0f, "%.0f" );
+			ImGui::SliderFloat( "Distance (m)", &s.m_hudDistance, 1.0f, 4.0f, "%.2f" );
+			ImGui::SliderFloat( "Size", &s.m_hudSize, 0.5f, 2.0f, "%.2f" );
+			ImGui::SliderFloat( "Below eye level (m)", &s.m_hudDrop, -0.3f, 0.6f, "%.2f" );
+			ImGui::SliderFloat( "Map backdrop opacity", &s.m_hudMapBlackAlpha, 0.0f, 1.0f, "%.2f" );
+			ImGui::SliderFloat( "Nameplate scale", &s.m_uiScale, 1.0f, 2.5f, "%.2f" );
+			ImGui::Checkbox( "World-locked kiosk panel (experimental)", &s.m_hudWorldPanel );
+		}
+
+		if( ImGui::CollapsingHeader( "Comfort" ) )
+		{
+			ImGui::Checkbox( "Vignette while moving / smooth turning", &s.m_comfortVignette );
+			ImGui::SliderFloat( "Vignette strength", &s.m_vignetteStrength, 0.0f, 1.0f, "%.2f" );
+		}
+
+		if( ImGui::CollapsingHeader( "Controls", ImGuiTreeNodeFlags_DefaultOpen ) )
+		{
+			ImGui::TextDisabled( "Pad chords: hold Back/Select, then press the button." );
+			if( ImGui::BeginTable( "vr_bindings", 4, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg ) )
+			{
+				ImGui::TableSetupColumn( "Action" );
+				ImGui::TableSetupColumn( "Key" );
+				ImGui::TableSetupColumn( "Pad" );
+				ImGui::TableSetupColumn( "" );
+				ImGui::TableHeadersRow();
+				for( int i = 0; i < kVRActionCount; ++i )
+				{
+					VRBinding &binding = s.m_bindings[ i ];
+					ImGui::PushID( i );
+					ImGui::TableNextRow();
+					ImGui::TableNextColumn();
+					ImGui::TextUnformatted( VRActionLabel( static_cast< VRAction >( i ) ) );
+
+					ImGui::TableNextColumn();
+					const bool capturingKey = s_captureAction == i && s_captureKey;
+					const std::string keyText = capturingKey ? std::string( "press a key..." ) : VRKeyName( binding.key );
+					if( ImGui::Button( ( keyText + "##key" ).c_str() ) )
+					{
+						BeginCapture( i, true );
+					}
+
+					ImGui::TableNextColumn();
+					const bool capturingPad = s_captureAction == i && !s_captureKey;
+					const std::string padText = capturingPad ? std::string( "press a button..." ) : VRPadName( binding.pad );
+					if( ImGui::Button( ( padText + "##pad" ).c_str() ) )
+					{
+						BeginCapture( i, false );
+					}
+
+					ImGui::TableNextColumn();
+					if( ImGui::SmallButton( "Clear" ) )
+					{
+						binding = VRBinding{};
+						s_captureAction = -1;
+					}
+					ImGui::PopID();
+				}
+				ImGui::EndTable();
+			}
+			if( s_captureAction >= 0 )
+			{
+				ImGui::TextDisabled( "Esc cancels." );
+			}
+			if( ImGui::Button( "Reset controls" ) )
+			{
+				s.m_bindings = DefaultVRBindings();
+				s_captureAction = -1;
+			}
+		}
+
+		ImGui::Separator();
+		if( context.save && ImGui::Button( "Save" ) )
+		{
+			context.message = context.save() ? "Saved." : "Save failed.";
+		}
+		if( context.inGame && context.reload )
+		{
+			ImGui::SameLine();
+			if( ImGui::Button( "Reload from file" ) )
+			{
+				context.message = context.reload() ? "Reloaded psuex_vr.json." : "psuex_vr.json not found.";
+			}
+		}
+		ImGui::SameLine();
+		if( ImGui::Button( "Reset VR defaults" ) )
+		{
+			// Keep whether VR is on and the session pause; reset everything else.
+			const bool enabled = s.m_enabled;
+			const bool paused = s.m_paused;
+			s = VRSettings{};
+			s.m_enabled = enabled;
+			s.m_paused = paused;
+			context.message = "Defaults restored (not saved yet).";
+		}
+		if( !context.message.empty() )
+		{
+			ImGui::TextDisabled( "%s", context.message.c_str() );
+		}
+	}
+}

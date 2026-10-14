@@ -161,7 +161,8 @@ namespace TCameraTaskPlay
 		// OpenXR session is active. Kill orbit rates until VR input is owned by us.
 		// First person keeps them only when XInput is missing and the orbit is read back as turning.
 		const bool firstPerson = PSUVR::VRCamera::FirstPersonMode();
-		if( Config::Get().vr.m_enabled && ( !firstPerson || PSUVR::VRCamera::TurnFromStick() ) )
+		if( Config::Get().vr.m_enabled && !Config::Get().vr.m_paused &&
+			( !firstPerson || PSUVR::VRCamera::TurnFromStick() ) )
 		{
 			static bool s_loggedVrCam = false;
 			if( !s_loggedVrCam )

@@ -17,6 +17,11 @@ if( -not $dll ) { throw "PSUExD.dll not found. Build Debug|x86 first." }
 
 Copy-Item $dll ( Join-Path $GameDir "PSUExD.dll" ) -Force
 
+$vrConfig = Join-Path ( Split-Path -Parent $dll ) "PSUExVRConfig.exe"
+if( Test-Path $vrConfig ) {
+    Copy-Item $vrConfig $GameDir -Force
+}
+
 $loaderDll = Join-Path $root "tools\dinput8_proxy\dinput8.dll"
 if( Test-Path $loaderDll ) {
     Copy-Item $loaderDll ( Join-Path $GameDir "dinput8.dll" ) -Force

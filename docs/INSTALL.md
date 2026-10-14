@@ -28,6 +28,7 @@ Put these files in the **same folder as `PSUC.exe` / `online.exe`**:
 | `openxr_loader.dll` | For VR | OpenXR loader (x86). Needed when `vr.enabled` is true. |
 | `D3DX9_43.dll` | Often | DirectX helper used by the overlay / VR path. Copy if the game folder does not already have a working D3DX9. |
 | `psuex_vr.json` | For VR | Sidecar VR settings (recommended — survives the game rewriting `config.json`). |
+| `PSUExVRConfig.exe` | Optional | VR settings app that works without starting the game (edits `psuex_vr.json` in its folder). |
 | `translation.txt` | Optional | Japanese translation overlay (see [README](../README.md)). |
 
 ### Where to get the binaries
@@ -71,6 +72,8 @@ Create (or edit) **`psuex_vr.json`** next to `PSUC.exe`:
 | `stereoMode` | Scene mode that gets stereo. **`5` = town**. `0` = every mode (old / experimental). Login and menus stay on a large head-locked virtual screen. |
 | `hudDistance` | Distance in meters for the virtual screen / HUD panels (~2.5 is a good start). |
 | `hudSize` | Scale of those floating panels. The town visor HUD is 1.4 m × `hudSize` tall; lower it (e.g. `0.85`) if corner UI sits too far out in your view. |
+| `backgroundInput` | Keep the gamepad working when the game window isn't focused (default **true** with VR; read by `dinput8.dll` at launch). In the headset the game window is often not the focused one. |
+| `backgroundKeyboard` | Also keep the keyboard working unfocused (default **false**: keys typed in other apps would reach the game). |
 | `hudFollow` | HUD and menus sit on a panel in front of your body instead of following your head (default **true**). Turn your head to read the corners; look away for a moment and the panel glides back in front. `false` = the old head-locked visor. |
 | `hudFollowAngle` | How far (degrees) you can look away before the panel follows (default **35**). |
 | `hudDrop` | How far below eye level the panel sits, in meters (default **0.1**). |
@@ -90,15 +93,39 @@ Create (or edit) **`psuex_vr.json`** next to `PSUC.exe`:
 | `fpNeckDrop` | How far below your eyes the headless cut sits, in meters (default **0.22**). Raise it if hair or the head still shows; lower it if the shoulders disappear. |
 | `fpLeanLimit` | How far you can physically lean before your character's body follows, in meters (default **0.15**). Walking around your room no longer pulls the view out of the body. `0` locks the view to the body. |
 | `fpCrouchLimit` | The same for ducking and standing up, in meters (default **0.2**). |
+| `stereoPanel` | Leave **`false`**. Turning it on also shows a flat PiP of the monitor frame in stereo (usually worse). |
 
 **Comfort:** the mod never moves your view on its own. Only the stick and your own head move it: game camera re-aims (NPC talk), smoothing and auto-follow are cancelled, and the horizon stays level, also in third person. If you get motion sick, use first person with snap turn (the defaults), keep `hudFollow` on, try `comfortVignette: true`, and press F9 whenever "forward" feels off.
 
-**First-person controls (gamepad):** the right stick turns your body and view. By default the left stick moves where you look, and the right stick adds turning on top. `fpMoveDirection: "body"` gives FPS-style body-relative movement instead. F9 recenters. Turning reads the right stick through XInput (Xbox-style pads). Without XInput it falls back to the game's own camera orbit.
-| `stereoPanel` | Leave **`false`**. Turning it on also shows a flat PiP of the monitor frame in stereo (usually worse). |
+**First-person controls (gamepad):** the right stick turns your body and view. By default the left stick moves where you look, and the right stick adds turning on top. `fpMoveDirection: "body"` gives FPS-style body-relative movement instead. Recenter with F9 or Back+X. Turning reads the right stick through XInput (Xbox-style pads). Without XInput it falls back to the game's own camera orbit.
 
 You can also put a `"vr"` object inside `config.json`, but Clementine or other tools sometimes rewrite that file. **`psuex_vr.json` overrides it** and is the safer place for VR settings.
 
 To play **without** VR, set `"enabled": false` (or delete `psuex_vr.json` and leave VR off in `config.json`).
+
+### VR settings UI
+
+You don't have to edit JSON by hand:
+
+- **Without the game:** run `PSUExVRConfig.exe` from the game folder (or point it at the folder with Browse). It edits `psuex_vr.json`. Close the game first: the game rewrites that file when it saves.
+- **In game:** press **F10** (or hold **Back** and press **Start**), or open the PSUEx menu with **Insert** → Window → **VR Settings**. In the headset the window shows on the HUD panel, with a mouse pointer drawn for you. Changes apply immediately; **Save** writes `psuex_vr.json`. **Reload from file** picks up edits made in `PSUExVRConfig.exe`.
+
+**VR on/off:** "VR enabled" applies on the **next launch** (the game's graphics device is set up for VR at startup). **Pause VR** works instantly: the game turns flat and the headset shows it on a big screen. Pause is not saved.
+
+### VR controls
+
+Rebind them under **Controls** in either UI. Pad shortcuts are chords: **hold Back/Select, then press the button**.
+
+| Action | Key | Pad |
+|---|---|---|
+| Recenter | F9 | Back + X |
+| Switch first / third person | F7 | Back + Y |
+| Show / hide VR settings | F10 | Back + Start |
+| Pause VR | F8 | — |
+| Snap / smooth turn | — | — |
+| Body-locked HUD on / off | — | — |
+
+Each shortcut shows a short message in the headset. The game still sees the Back and button presses (PSUEx can't block pad input yet), so pick chords you don't need in the moment.
 
 ---
 
@@ -110,9 +137,9 @@ To play **without** VR, set `"enabled": false` (or delete `psuex_vr.json` and le
 
 ### In-headset tips
 
-- **F9** recenters the VR camera (game window must be focused).
+- **F9** or **Back+X** recenters the VR camera (keys need the game window focused). See [VR controls](#vr-controls).
 - Use a **gamepad** for now (`inputMode": "gamepad"`). Motion controllers are not finished.
-- Town HUD/personal chrome is a **head-locked visor**; shop / terminal prompts prefer a **world-locked** panel in front of you.
+- The HUD and menus sit on a panel in front of your body (`hudFollow`); turn your head to read its corners.
 
 ---
 

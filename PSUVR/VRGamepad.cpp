@@ -43,6 +43,27 @@ namespace PSUVR
 
 	namespace VRGamepad
 	{
+		bool Buttons( unsigned short &buttons )
+		{
+			buttons = 0;
+			if( !EnsureXInput() )
+			{
+				return false;
+			}
+			for( DWORD i = 0; i < XUSER_MAX_COUNT; ++i )
+			{
+				const DWORD user = ( s_lastUser + i ) % XUSER_MAX_COUNT;
+				XINPUT_STATE state{};
+				if( s_getState( user, &state ) == ERROR_SUCCESS )
+				{
+					s_lastUser = user;
+					buttons = state.Gamepad.wButtons;
+					return true;
+				}
+			}
+			return false;
+		}
+
 		bool RightStickX( float &x )
 		{
 			x = 0.0f;

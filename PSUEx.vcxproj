@@ -229,6 +229,10 @@
     <ClInclude Include="PSUVR\VRHud.h" />
     <ClInclude Include="PSUVR\VRCamera.h" />
     <ClInclude Include="PSUVR\VRGamepad.h" />
+    <ClInclude Include="PSUOverlay\Interface\VRDisplay.h" />
+    <ClInclude Include="PSUVR\VRBindings.h" />
+    <ClInclude Include="PSUVR\VRSettingsPanel.h" />
+    <ClInclude Include="PSUVR\VRSettings.h" />
     <ClInclude Include="PSUVR\VRPlayerDraw.h" />
     <ClInclude Include="PSUStructs\Item.h" />
     <ClInclude Include="PSUStructs\Matrix4x4.hpp" />
@@ -268,6 +272,10 @@
     <ClCompile Include="PSUVR\VRHud.cpp" />
     <ClCompile Include="PSUVR\VRCamera.cpp" />
     <ClCompile Include="PSUVR\VRGamepad.cpp" />
+    <ClCompile Include="PSUOverlay\Interface\VRDisplay.cpp" />
+    <ClCompile Include="PSUVR\VRBindings.cpp" />
+    <ClCompile Include="PSUVR\VRSettingsPanel.cpp" />
+    <ClCompile Include="PSUVR\VRSettings.cpp" />
     <ClCompile Include="PSUVR\VRPlayerDraw.cpp" />
     <ClCompile Include="PSUOverlay\ImageMng.cpp" />
     <ClCompile Include="PSUOverlay\Interface\CameraDisplay.cpp" />

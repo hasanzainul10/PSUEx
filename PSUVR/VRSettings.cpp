@@ -1,0 +1,149 @@
+#include "VRSettings.h"
+
+#include "../Json.hpp"
+
+#include <Windows.h>
+#include <Xinput.h>
+
+using json = nlohmann::json;
+
+namespace
+{
+	// One list of (member, json key) so load and save can't drift apart.
+#define PSUEX_VR_FIELDS( X ) \
+	X( m_enabled, "enabled" ) \
+	X( m_forceD3D9Ex, "forceD3D9Ex" ) \
+	X( m_d3d9exOnly, "d3d9exOnly" ) \
+	X( m_solidColorPrototype, "solidColorPrototype" ) \
+	X( m_runtime, "runtime" ) \
+	X( m_cameraMode, "cameraMode" ) \
+	X( m_inputMode, "inputMode" ) \
+	X( m_backgroundInput, "backgroundInput" ) \
+	X( m_backgroundKeyboard, "backgroundKeyboard" ) \
+	X( m_worldScale, "worldScale" ) \
+	X( m_ipdScale, "ipdScale" ) \
+	X( m_hudDistance, "hudDistance" ) \
+	X( m_hudSize, "hudSize" ) \
+	X( m_uiScale, "uiScale" ) \
+	X( m_hudWorldPanel, "hudWorldPanel" ) \
+	X( m_hudMapBlackAlpha, "hudMapBlackAlpha" ) \
+	X( m_hudFollow, "hudFollow" ) \
+	X( m_hudFollowAngle, "hudFollowAngle" ) \
+	X( m_hudDrop, "hudDrop" ) \
+	X( m_fpEyeHeight, "fpEyeHeight" ) \
+	X( m_fpEyeForward, "fpEyeForward" ) \
+	X( m_snapTurnDegrees, "snapTurnDegrees" ) \
+	X( m_fpTurnSpeed, "fpTurnSpeed" ) \
+	X( m_fpMoveDirection, "fpMoveDirection" ) \
+	X( m_fpBody, "fpBody" ) \
+	X( m_fpNeckDrop, "fpNeckDrop" ) \
+	X( m_fpLeanLimit, "fpLeanLimit" ) \
+	X( m_fpCrouchLimit, "fpCrouchLimit" ) \
+	X( m_snapTurn, "snapTurn" ) \
+	X( m_comfortVignette, "comfortVignette" ) \
+	X( m_vignetteStrength, "vignetteStrength" ) \
+	X( m_stereo, "stereo" ) \
+	X( m_stereoMode, "stereoMode" ) \
+	X( m_stereoSkipScreenQuads, "stereoSkipScreenQuads" ) \
+	X( m_stereoPanel, "stereoPanel" ) \
+	X( m_debugEyeShift, "debugEyeShift" ) \
+	X( m_debugDoublePass, "debugDoublePass" )
+
+	void Read( const json &node, const char *key, bool &value )
+	{
+		if( node.contains( key ) && node[ key ].is_boolean() )
+			value = node[ key ].get< bool >();
+	}
+
+	void Read( const json &node, const char *key, float &value )
+	{
+		if( node.contains( key ) && node[ key ].is_number() )
+			value = node[ key ].get< float >();
+	}
+
+	void Read( const json &node, const char *key, unsigned &value )
+	{
+		if( node.contains( key ) && node[ key ].is_number() )
+			value = node[ key ].get< unsigned >();
+	}
+
+	void Read( const json &node, const char *key, std::string &value )
+	{
+		if( node.contains( key ) && node[ key ].is_string() )
+			value = node[ key ].get< std::string >();
+	}
+
+	// Stable JSON keys for the bindings (labels are for display only).
+	const char *const kActionKeys[ kVRActionCount ] = {
+		"recenter", "toggleCameraMode", "toggleSettings", "togglePause", "toggleSnapTurn", "toggleHudFollow" };
+}
+
+const char *VRActionLabel( VRAction action )
+{
+	switch( action )
+	{
+		case VRAction::Recenter: return "Recenter";
+		case VRAction::ToggleCameraMode: return "Switch first / third person";
+		case VRAction::ToggleSettings: return "Show / hide VR settings";
+		case VRAction::TogglePause: return "Pause VR";
+		case VRAction::ToggleSnapTurn: return "Snap / smooth turn";
+		case VRAction::ToggleHudFollow: return "Body-locked HUD on / off";
+		default: return "?";
+	}
+}
+
+std::array< VRBinding, kVRActionCount > DefaultVRBindings()
+{
+	std::array< VRBinding, kVRActionCount > bindings{};
+	bindings[ static_cast< int >( VRAction::Recenter ) ] = { VK_F9, XINPUT_GAMEPAD_X };
+	bindings[ static_cast< int >( VRAction::ToggleCameraMode ) ] = { VK_F7, XINPUT_GAMEPAD_Y };
+	bindings[ static_cast< int >( VRAction::ToggleSettings ) ] = { VK_F10, XINPUT_GAMEPAD_START };
+	bindings[ static_cast< int >( VRAction::TogglePause ) ] = { VK_F8, 0 };
+	return bindings;
+}
+
+bool LoadVRSettingsJson( VRSettings &settings, const std::string &jsonText )
+{
+	const json node = json::parse( jsonText, nullptr, false );
+	if( node.is_discarded() || !node.is_object() )
+	{
+		return false;
+	}
+#define PSUEX_VR_READ( member, key ) Read( node, key, settings.member );
+	PSUEX_VR_FIELDS( PSUEX_VR_READ )
+#undef PSUEX_VR_READ
+
+	if( node.contains( "bindings" ) && node[ "bindings" ].is_object() )
+	{
+		const json &bindings = node[ "bindings" ];
+		for( int i = 0; i < kVRActionCount; ++i )
+		{
+			if( !bindings.contains( kActionKeys[ i ] ) || !bindings[ kActionKeys[ i ] ].is_object() )
+			{
+				continue;
+			}
+			const json &entry = bindings[ kActionKeys[ i ] ];
+			if( entry.contains( "key" ) && entry[ "key" ].is_number_integer() )
+				settings.m_bindings[ i ].key = entry[ "key" ].get< int >();
+			if( entry.contains( "pad" ) && entry[ "pad" ].is_number_integer() )
+				settings.m_bindings[ i ].pad = static_cast< uint16_t >( entry[ "pad" ].get< int >() );
+		}
+	}
+	return true;
+}
+
+std::string SaveVRSettingsJson( const VRSettings &settings )
+{
+	json node = json::object();
+#define PSUEX_VR_WRITE( member, key ) node[ key ] = settings.member;
+	PSUEX_VR_FIELDS( PSUEX_VR_WRITE )
+#undef PSUEX_VR_WRITE
+
+	json bindings = json::object();
+	for( int i = 0; i < kVRActionCount; ++i )
+	{
+		bindings[ kActionKeys[ i ] ] = { { "key", settings.m_bindings[ i ].key }, { "pad", settings.m_bindings[ i ].pad } };
+	}
+	node[ "bindings" ] = bindings;
+	return node.dump( 4 );
+}

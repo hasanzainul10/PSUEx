@@ -50,6 +50,8 @@ namespace PSUVR
 		ID3D11Texture2D *UserTexture() const;
 		ID3D11Texture2D *WorldTexture() const;
 		bool HasUserContent() const { return m_hasUser; }
+		// Something else (the PSUEx ImGui overlay) drew into the user HUD RT this frame.
+		void MarkUserContent() { m_hasUser = true; }
 		bool HasWorldContent() const { return m_hasWorld; }
 
 		void EndStereoFrame() { m_active = false; }

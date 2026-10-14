@@ -702,7 +702,7 @@ namespace PSUVR
 	bool StereoRenderer::SceneAllowsStereo()
 	{
 		const auto &vr = Config::Get().vr;
-		if( !vr.m_enabled || !vr.m_stereo )
+		if( !vr.m_enabled || !vr.m_stereo || vr.m_paused )
 		{
 			return false;
 		}

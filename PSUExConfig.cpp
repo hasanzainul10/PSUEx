@@ -47,36 +47,6 @@ Config::Config()
 	camera.m_turnAcceleration = Constant::Camera::TURN_ACCELERATION;
 
 	// VR (disabled by default — flat PSUEx unchanged)
-	vr.m_enabled = false;
-	vr.m_forceD3D9Ex = false; // only with CreateDeviceEx when vr.enabled
-	vr.m_d3d9exOnly = false;
-	vr.m_solidColorPrototype = false;
-	vr.m_runtime = "openxr";
-	vr.m_cameraMode = "thirdPerson";
-	vr.m_inputMode = "gamepad";
-	vr.m_worldScale = 1.0f;
-	vr.m_ipdScale = 1.0f;
-	vr.m_hudDistance = 2.5f;
-	vr.m_hudSize = 1.0f;
-	vr.m_uiScale = 1.5f;
-	vr.m_hudWorldPanel = false;
-	vr.m_hudMapBlackAlpha = 0.15f;
-	vr.m_hudFollow = true;
-	vr.m_hudFollowAngle = 35.0f;
-	vr.m_hudDrop = 0.1f;
-	vr.m_fpEyeHeight = 1.6f;
-	vr.m_fpEyeForward = 0.12f;
-	vr.m_snapTurnDegrees = 30.0f;
-	vr.m_fpTurnSpeed = 120.0f;
-	vr.m_fpMoveDirection = "head";
-	vr.m_fpBody = "headless";
-	vr.m_fpNeckDrop = 0.22f;
-	vr.m_fpLeanLimit = 0.15f;
-	vr.m_fpCrouchLimit = 0.2f;
-	vr.m_stereoMode = 5;
-	vr.m_snapTurn = true;
-	vr.m_comfortVignette = false;
-	vr.m_vignetteStrength = 0.7f;
 }
 
 Config::~Config()
@@ -147,41 +117,7 @@ void Config::SaveToFile()
 
 	root[ "camera" ][ "fov" ] = camera.m_fov;
 
-	root[ "vr" ][ "enabled" ] = vr.m_enabled;
-	root[ "vr" ][ "forceD3D9Ex" ] = vr.m_forceD3D9Ex;
-	root[ "vr" ][ "d3d9exOnly" ] = vr.m_d3d9exOnly;
-	root[ "vr" ][ "solidColorPrototype" ] = vr.m_solidColorPrototype;
-	root[ "vr" ][ "runtime" ] = vr.m_runtime;
-	root[ "vr" ][ "cameraMode" ] = vr.m_cameraMode;
-	root[ "vr" ][ "inputMode" ] = vr.m_inputMode;
-	root[ "vr" ][ "worldScale" ] = vr.m_worldScale;
-	root[ "vr" ][ "ipdScale" ] = vr.m_ipdScale;
-	root[ "vr" ][ "hudDistance" ] = vr.m_hudDistance;
-	root[ "vr" ][ "hudSize" ] = vr.m_hudSize;
-	root[ "vr" ][ "uiScale" ] = vr.m_uiScale;
-	root[ "vr" ][ "hudWorldPanel" ] = vr.m_hudWorldPanel;
-	root[ "vr" ][ "hudMapBlackAlpha" ] = vr.m_hudMapBlackAlpha;
-	root[ "vr" ][ "hudFollow" ] = vr.m_hudFollow;
-	root[ "vr" ][ "hudFollowAngle" ] = vr.m_hudFollowAngle;
-	root[ "vr" ][ "hudDrop" ] = vr.m_hudDrop;
-	root[ "vr" ][ "fpEyeHeight" ] = vr.m_fpEyeHeight;
-	root[ "vr" ][ "fpEyeForward" ] = vr.m_fpEyeForward;
-	root[ "vr" ][ "snapTurnDegrees" ] = vr.m_snapTurnDegrees;
-	root[ "vr" ][ "fpTurnSpeed" ] = vr.m_fpTurnSpeed;
-	root[ "vr" ][ "fpMoveDirection" ] = vr.m_fpMoveDirection;
-	root[ "vr" ][ "fpBody" ] = vr.m_fpBody;
-	root[ "vr" ][ "fpNeckDrop" ] = vr.m_fpNeckDrop;
-	root[ "vr" ][ "fpLeanLimit" ] = vr.m_fpLeanLimit;
-	root[ "vr" ][ "fpCrouchLimit" ] = vr.m_fpCrouchLimit;
-	root[ "vr" ][ "snapTurn" ] = vr.m_snapTurn;
-	root[ "vr" ][ "comfortVignette" ] = vr.m_comfortVignette;
-	root[ "vr" ][ "vignetteStrength" ] = vr.m_vignetteStrength;
-	root[ "vr" ][ "stereo" ] = vr.m_stereo;
-	root[ "vr" ][ "stereoMode" ] = vr.m_stereoMode;
-	root[ "vr" ][ "stereoSkipScreenQuads" ] = vr.m_stereoSkipScreenQuads;
-	root[ "vr" ][ "stereoPanel" ] = vr.m_stereoPanel;
-	root[ "vr" ][ "debugEyeShift" ] = vr.m_debugEyeShift;
-	root[ "vr" ][ "debugDoublePass" ] = vr.m_debugDoublePass;
+	root[ "vr" ] = json::parse( SaveVRSettingsJson( vr ) );
 
 	// Sidecar so Clementine/other writers that rewrite config.json cannot wipe VR.
 	{
@@ -409,99 +345,15 @@ void Config::LoadFromFile()
 			camera.m_fov = cameraNode[ "fov" ].get<float>();
 	}
 
-	auto loadVrNode = [ this ]( const json &vrNode )
-	{
-		if( vrNode.contains( "enabled" ) && vrNode[ "enabled" ].is_boolean() )
-			vr.m_enabled = vrNode[ "enabled" ].get<bool>();
-		if( vrNode.contains( "forceD3D9Ex" ) && vrNode[ "forceD3D9Ex" ].is_boolean() )
-			vr.m_forceD3D9Ex = vrNode[ "forceD3D9Ex" ].get<bool>();
-		if( vrNode.contains( "d3d9exOnly" ) && vrNode[ "d3d9exOnly" ].is_boolean() )
-			vr.m_d3d9exOnly = vrNode[ "d3d9exOnly" ].get<bool>();
-		if( vrNode.contains( "solidColorPrototype" ) && vrNode[ "solidColorPrototype" ].is_boolean() )
-			vr.m_solidColorPrototype = vrNode[ "solidColorPrototype" ].get<bool>();
-		if( vrNode.contains( "runtime" ) && vrNode[ "runtime" ].is_string() )
-			vr.m_runtime = vrNode[ "runtime" ].get<std::string>();
-		if( vrNode.contains( "cameraMode" ) && vrNode[ "cameraMode" ].is_string() )
-			vr.m_cameraMode = vrNode[ "cameraMode" ].get<std::string>();
-		if( vrNode.contains( "inputMode" ) && vrNode[ "inputMode" ].is_string() )
-			vr.m_inputMode = vrNode[ "inputMode" ].get<std::string>();
-		if( vrNode.contains( "worldScale" ) && vrNode[ "worldScale" ].is_number() )
-			vr.m_worldScale = vrNode[ "worldScale" ].get<float>();
-		if( vrNode.contains( "ipdScale" ) && vrNode[ "ipdScale" ].is_number() )
-			vr.m_ipdScale = vrNode[ "ipdScale" ].get<float>();
-		if( vrNode.contains( "hudDistance" ) && vrNode[ "hudDistance" ].is_number() )
-			vr.m_hudDistance = vrNode[ "hudDistance" ].get<float>();
-		if( vrNode.contains( "hudSize" ) && vrNode[ "hudSize" ].is_number() )
-			vr.m_hudSize = vrNode[ "hudSize" ].get<float>();
-		if( vrNode.contains( "uiScale" ) && vrNode[ "uiScale" ].is_number() )
-			vr.m_uiScale = vrNode[ "uiScale" ].get<float>();
-		if( vrNode.contains( "hudWorldPanel" ) && vrNode[ "hudWorldPanel" ].is_boolean() )
-			vr.m_hudWorldPanel = vrNode[ "hudWorldPanel" ].get<bool>();
-		if( vrNode.contains( "hudMapBlackAlpha" ) && vrNode[ "hudMapBlackAlpha" ].is_number() )
-			vr.m_hudMapBlackAlpha = vrNode[ "hudMapBlackAlpha" ].get<float>();
-		if( vrNode.contains( "hudFollow" ) && vrNode[ "hudFollow" ].is_boolean() )
-			vr.m_hudFollow = vrNode[ "hudFollow" ].get<bool>();
-		if( vrNode.contains( "hudFollowAngle" ) && vrNode[ "hudFollowAngle" ].is_number() )
-			vr.m_hudFollowAngle = vrNode[ "hudFollowAngle" ].get<float>();
-		if( vrNode.contains( "hudDrop" ) && vrNode[ "hudDrop" ].is_number() )
-			vr.m_hudDrop = vrNode[ "hudDrop" ].get<float>();
-		if( vrNode.contains( "fpEyeHeight" ) && vrNode[ "fpEyeHeight" ].is_number() )
-			vr.m_fpEyeHeight = vrNode[ "fpEyeHeight" ].get<float>();
-		if( vrNode.contains( "fpEyeForward" ) && vrNode[ "fpEyeForward" ].is_number() )
-			vr.m_fpEyeForward = vrNode[ "fpEyeForward" ].get<float>();
-		if( vrNode.contains( "snapTurnDegrees" ) && vrNode[ "snapTurnDegrees" ].is_number() )
-			vr.m_snapTurnDegrees = vrNode[ "snapTurnDegrees" ].get<float>();
-		if( vrNode.contains( "fpTurnSpeed" ) && vrNode[ "fpTurnSpeed" ].is_number() )
-			vr.m_fpTurnSpeed = vrNode[ "fpTurnSpeed" ].get<float>();
-		if( vrNode.contains( "fpMoveDirection" ) && vrNode[ "fpMoveDirection" ].is_string() )
-			vr.m_fpMoveDirection = vrNode[ "fpMoveDirection" ].get<std::string>();
-		if( vrNode.contains( "fpBody" ) && vrNode[ "fpBody" ].is_string() )
-			vr.m_fpBody = vrNode[ "fpBody" ].get<std::string>();
-		if( vrNode.contains( "fpNeckDrop" ) && vrNode[ "fpNeckDrop" ].is_number() )
-			vr.m_fpNeckDrop = vrNode[ "fpNeckDrop" ].get<float>();
-		if( vrNode.contains( "fpLeanLimit" ) && vrNode[ "fpLeanLimit" ].is_number() )
-			vr.m_fpLeanLimit = vrNode[ "fpLeanLimit" ].get<float>();
-		if( vrNode.contains( "fpCrouchLimit" ) && vrNode[ "fpCrouchLimit" ].is_number() )
-			vr.m_fpCrouchLimit = vrNode[ "fpCrouchLimit" ].get<float>();
-		if( vrNode.contains( "snapTurn" ) && vrNode[ "snapTurn" ].is_boolean() )
-			vr.m_snapTurn = vrNode[ "snapTurn" ].get<bool>();
-		if( vrNode.contains( "comfortVignette" ) && vrNode[ "comfortVignette" ].is_boolean() )
-			vr.m_comfortVignette = vrNode[ "comfortVignette" ].get<bool>();
-		if( vrNode.contains( "vignetteStrength" ) && vrNode[ "vignetteStrength" ].is_number() )
-			vr.m_vignetteStrength = vrNode[ "vignetteStrength" ].get<float>();
-		if( vrNode.contains( "stereo" ) && vrNode[ "stereo" ].is_boolean() )
-			vr.m_stereo = vrNode[ "stereo" ].get<bool>();
-		if( vrNode.contains( "stereoMode" ) && vrNode[ "stereoMode" ].is_number() )
-			vr.m_stereoMode = vrNode[ "stereoMode" ].get<unsigned>();
-		if( vrNode.contains( "stereoSkipScreenQuads" ) && vrNode[ "stereoSkipScreenQuads" ].is_boolean() )
-			vr.m_stereoSkipScreenQuads = vrNode[ "stereoSkipScreenQuads" ].get<bool>();
-		if( vrNode.contains( "stereoPanel" ) && vrNode[ "stereoPanel" ].is_boolean() )
-			vr.m_stereoPanel = vrNode[ "stereoPanel" ].get<bool>();
-		if( vrNode.contains( "debugEyeShift" ) && vrNode[ "debugEyeShift" ].is_number() )
-			vr.m_debugEyeShift = vrNode[ "debugEyeShift" ].get<float>();
-		if( vrNode.contains( "debugDoublePass" ) && vrNode[ "debugDoublePass" ].is_boolean() )
-			vr.m_debugDoublePass = vrNode[ "debugDoublePass" ].get<bool>();
-	};
-
 	if( root.contains( "vr" ) && root[ "vr" ].is_object() )
 	{
-		loadVrNode( root[ "vr" ] );
+		LoadVRSettingsJson( vr, root[ "vr" ].dump() );
 	}
 
 	// Sidecar overrides config.json (survives Clementine rewriting config.json).
+	if( ReloadVRFromFile() )
 	{
-		std::ifstream vrFile( "psuex_vr.json" );
-		if( vrFile.is_open() )
-		{
-			json vrRoot;
-			vrFile >> vrRoot;
-			vrFile.close();
-			if( vrRoot.is_object() )
-			{
-				loadVrNode( vrRoot );
-				printf( "Loaded psuex_vr.json\n" );
-			}
-		}
+		printf( "Loaded psuex_vr.json\n" );
 	}
 
 	// Load ImGui Style
@@ -552,4 +404,18 @@ void Config::LoadFromFile()
 			}
 		}
 	}
+}
+
+bool Config::ReloadVRFromFile()
+{
+	std::ifstream vrFile( "psuex_vr.json" );
+	if( !vrFile.is_open() )
+	{
+		return false;
+	}
+	const std::string text( ( std::istreambuf_iterator< char >( vrFile ) ), std::istreambuf_iterator< char >() );
+	const bool paused = vr.m_paused;
+	const bool loaded = LoadVRSettingsJson( vr, text );
+	vr.m_paused = paused;
+	return loaded;
 }

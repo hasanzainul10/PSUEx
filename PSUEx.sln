@@ -5,6 +5,8 @@ VisualStudioVersion = 17.11.35222.181
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PSUEx", "PSUEx.vcxproj", "{74AF6A56-0C09-468A-AB1D-F4D2533D161B}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PSUExVRConfig", "tools\PSUExVRConfig\PSUExVRConfig.vcxproj", "{5B1D2C3E-7A44-4F0B-9E2A-6C1D7E8F9A01}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x86 = Debug|x86
@@ -15,6 +17,10 @@ Global
 		{74AF6A56-0C09-468A-AB1D-F4D2533D161B}.Debug|x86.Build.0 = Debug|Win32
 		{74AF6A56-0C09-468A-AB1D-F4D2533D161B}.Release|x86.ActiveCfg = Release|Win32
 		{74AF6A56-0C09-468A-AB1D-F4D2533D161B}.Release|x86.Build.0 = Release|Win32
+		{5B1D2C3E-7A44-4F0B-9E2A-6C1D7E8F9A01}.Debug|x86.ActiveCfg = Debug|Win32
+		{5B1D2C3E-7A44-4F0B-9E2A-6C1D7E8F9A01}.Debug|x86.Build.0 = Debug|Win32
+		{5B1D2C3E-7A44-4F0B-9E2A-6C1D7E8F9A01}.Release|x86.ActiveCfg = Release|Win32
+		{5B1D2C3E-7A44-4F0B-9E2A-6C1D7E8F9A01}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

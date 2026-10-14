@@ -14,6 +14,8 @@
 #include "Interface/LootDisplay.h"
 #include "Interface/LogDisplay.h"
 #include "Interface/CameraDisplay.h"
+#include "Interface/VRDisplay.h"
+#include "../PSUVR/D3D11Bridge.h"
 #include <intrin.h>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam );
@@ -81,6 +83,11 @@ void PSUOverlay::RenderMenuBar()
 			if( ImGui::MenuItem( "Camera Options" ) )
 			{
 				m_Controls[ WINDOW_CONTROL_ID::WINDOW_CAMERA_DISPLAY ]->Toggle();
+			}
+
+			if( ImGui::MenuItem( "VR Settings" ) )
+			{
+				m_Controls[ WINDOW_CONTROL_ID::WINDOW_VR_DISPLAY ]->Toggle();
 			}
 			ImGui::EndMenu();
 		}
@@ -155,6 +162,7 @@ void PSUOverlay::InitializeControls()
 	AddControl( WINDOW_CONTROL_ID::WINDOW_LOOT_DISPLAY, LootDisplay::Create() );
 	//AddControl( WINDOW_CONTROL_ID::WINDOW_LOG_DISPLAY, LogDisplay::Create() );
 	AddControl( WINDOW_CONTROL_ID::WINDOW_CAMERA_DISPLAY, CameraDisplay::Create() );
+	AddControl( WINDOW_CONTROL_ID::WINDOW_VR_DISPLAY, VRDisplay::Create() );
 }
 
 void PSUOverlay::HookWindow()
@@ -505,6 +513,39 @@ HRESULT APIENTRY PSUOverlay::Hook_EndScene( LPDIRECT3DDEVICE9 pDevice )
 	ImGui::EndFrame();
 	ImGui::Render();
 	ImGui_ImplDX9_RenderDrawData( ImGui::GetDrawData() );
+
+	// In stereo the headset never shows the back buffer: draw the overlay into the HUD
+	// panel too (VR settings, toasts, any open PSUEx window).
+	{
+		auto &hud = PSUVR::VRHud::Get();
+		ImDrawData *drawData = ImGui::GetDrawData();
+		PSUVR::D3D11Bridge *bridge = PSUVR::System::Get().StereoBridge();
+		IDirect3DSurface9 *hudSurface = bridge ? bridge->HudUserSurface() : nullptr;
+		if( hud.Active() && hudSurface && drawData && drawData->CmdListsCount > 0 )
+		{
+			IDirect3DSurface9 *savedRt = nullptr;
+			IDirect3DSurface9 *savedDs = nullptr;
+			D3DVIEWPORT9 savedVp{};
+			pDevice->GetRenderTarget( 0, &savedRt );
+			pDevice->GetDepthStencilSurface( &savedDs );
+			pDevice->GetViewport( &savedVp );
+			pDevice->SetRenderTarget( 0, hudSurface );
+			pDevice->SetDepthStencilSurface( nullptr );
+			ImGui_ImplDX9_RenderDrawData( drawData );
+			pDevice->SetRenderTarget( 0, savedRt );
+			pDevice->SetDepthStencilSurface( savedDs );
+			pDevice->SetViewport( &savedVp );
+			if( savedRt )
+			{
+				savedRt->Release();
+			}
+			if( savedDs )
+			{
+				savedDs->Release();
+			}
+			hud.MarkUserContent();
+		}
+	}
 
 	return m_pOriginalEndScene( pDevice );
 }

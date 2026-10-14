@@ -53,7 +53,6 @@ namespace PSUVR
 		bool m_capturedThisFrame = false;
 		bool m_haveNextViews = false;
 		bool m_loggedStereo = false;
-		bool m_recenterKeyDown = false;
 		EyePose m_nextViews[ 2 ]{};
 		EyePose m_nextViewSpacePoses[ 2 ]{};
 

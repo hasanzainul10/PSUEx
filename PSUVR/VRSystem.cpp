@@ -5,6 +5,7 @@
 #include "D3D11Bridge.h"
 #include "OpenXRRuntime.h"
 #include "StereoRenderer.h"
+#include "VRBindings.h"
 #include "VRCamera.h"
 #include "VRHud.h"
 #include "../Misc/Log.h"
@@ -333,14 +334,16 @@ namespace PSUVR
 			// The next game frame renders with poses predicted one display period ahead.
 			m_haveNextViews = m_xr->LocateNextViews( m_nextViews, m_nextViewSpacePoses );
 
+			// VR shortcuts (rebindable keys and Back+button pad chords, see VRBindings).
 			DWORD foregroundPid = 0;
 			GetWindowThreadProcessId( GetForegroundWindow(), &foregroundPid );
-			const bool recenterDown = foregroundPid == GetCurrentProcessId() && ( GetAsyncKeyState( VK_F9 ) & 0x8000 ) != 0;
-			if( recenterDown && !m_recenterKeyDown && m_haveNextViews )
+			const unsigned actions = VRBindings::Poll( foregroundPid == GetCurrentProcessId() );
+			if( ( actions & VRBindings::Bit( VRAction::Recenter ) ) && m_haveNextViews )
 			{
 				VRCamera::Recenter( m_nextViews );
+				VRBindings::ShowToast( "Recentered" );
 			}
-			m_recenterKeyDown = recenterDown;
+			VRBindings::ApplyToggles( actions );
 
 			bool stereoSubmitted = false;
 			StereoRenderer &stereo = StereoRenderer::Get();

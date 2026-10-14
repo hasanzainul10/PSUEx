@@ -1,12 +1,15 @@
 /*
  * Win32 dinput8.dll proxy for Clementine PSUC.exe.
  * Forwards DirectInput8Create to SysWOW64\dinput8.dll and LoadLibrary's PSUEx.
+ * With VR on, also keeps the gamepad (and optionally the keyboard) working while the
+ * game window is not focused (psuex_vr.json: backgroundInput / backgroundKeyboard).
  */
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <dinput.h>
 
 #include <cstdio>
+#include <cstring>
 
 using DirectInput8Create_t = HRESULT( WINAPI * )( HINSTANCE, DWORD, REFIID, LPVOID *, LPUNKNOWN );
 
@@ -215,6 +218,199 @@ PatchEnumDevices( void *object, Fn hook, Fn &original )
 	}
 }
 
+// --- Background input -------------------------------------------------------------
+
+// Minimal reader for top-level booleans in psuex_vr.json (no JSON library here).
+static bool
+ReadJsonBool( const char *text, const char *key, bool fallback )
+{
+	char quoted[ 64 ];
+	sprintf_s( quoted, "\"%s\"", key );
+	const char *at = strstr( text, quoted );
+	if( !at )
+	{
+		return fallback;
+	}
+	at = strchr( at + strlen( quoted ), ':' );
+	if( !at )
+	{
+		return fallback;
+	}
+	++at;
+	while( *at == ' ' || *at == '\t' || *at == '\r' || *at == '\n' )
+	{
+		++at;
+	}
+	if( strncmp( at, "true", 4 ) == 0 )
+	{
+		return true;
+	}
+	if( strncmp( at, "false", 5 ) == 0 )
+	{
+		return false;
+	}
+	return fallback;
+}
+
+static bool g_backgroundPad = false;
+static bool g_backgroundKeyboard = false;
+
+static void
+LoadBackgroundSettings()
+{
+	char path[ MAX_PATH ]{};
+	GetModuleFileNameA( nullptr, path, MAX_PATH );
+	if( char *slash = strrchr( path, '\\' ) )
+	{
+		slash[ 1 ] = '\0';
+	}
+	strcat_s( path, "psuex_vr.json" );
+	FILE *f = nullptr;
+	if( fopen_s( &f, path, "rb" ) != 0 || !f )
+	{
+		return;
+	}
+	static char text[ 64 * 1024 ];
+	const size_t size = fread( text, 1, sizeof( text ) - 1, f );
+	fclose( f );
+	text[ size ] = '\0';
+	// Default on when VR is enabled: in the headset the game window is rarely focused.
+	const bool vr = ReadJsonBool( text, "enabled", false );
+	g_backgroundPad = ReadJsonBool( text, "backgroundInput", vr );
+	g_backgroundKeyboard = g_backgroundPad && ReadJsonBool( text, "backgroundKeyboard", false );
+	char msg[ 160 ];
+	sprintf_s( msg, "Background input: gamepad=%d keyboard=%d (vr=%d)", g_backgroundPad ? 1 : 0,
+		g_backgroundKeyboard ? 1 : 0, vr ? 1 : 0 );
+	Log( msg );
+}
+
+template< typename Device, typename Caps >
+static bool
+WantsBackground( Device *device )
+{
+	Caps caps{};
+	caps.dwSize = sizeof( caps );
+	if( FAILED( device->GetCapabilities( &caps ) ) )
+	{
+		return false;
+	}
+	switch( GET_DIDEVICE_TYPE( caps.dwDevType ) )
+	{
+		case DI8DEVTYPE_KEYBOARD: return g_backgroundKeyboard;
+		case DI8DEVTYPE_MOUSE: return false;  // the mouse belongs to whatever window you click
+		default: return g_backgroundPad;      // gamepads, joysticks, wheels
+	}
+}
+
+using SetCoopA_t = HRESULT( STDMETHODCALLTYPE * )( IDirectInputDevice8A *, HWND, DWORD );
+using SetCoopW_t = HRESULT( STDMETHODCALLTYPE * )( IDirectInputDevice8W *, HWND, DWORD );
+using UnacquireA_t = HRESULT( STDMETHODCALLTYPE * )( IDirectInputDevice8A * );
+using UnacquireW_t = HRESULT( STDMETHODCALLTYPE * )( IDirectInputDevice8W * );
+static SetCoopA_t g_realSetCoopA = nullptr;
+static SetCoopW_t g_realSetCoopW = nullptr;
+static UnacquireA_t g_realUnacquireA = nullptr;
+static UnacquireW_t g_realUnacquireW = nullptr;
+
+static DWORD
+BackgroundFlags( DWORD flags )
+{
+	// Exclusive + background isn't allowed for keyboards; non-exclusive is enough here.
+	return ( flags & ~( DISCL_FOREGROUND | DISCL_EXCLUSIVE ) ) | DISCL_BACKGROUND | DISCL_NONEXCLUSIVE;
+}
+
+template< typename Device, typename Caps, typename Fn >
+static HRESULT
+SetCooperativeLevelBackground( Fn original, Device *self, HWND hwnd, DWORD flags )
+{
+	if( WantsBackground< Device, Caps >( self ) )
+	{
+		const DWORD changed = BackgroundFlags( flags );
+		char msg[ 128 ];
+		sprintf_s( msg, "SetCooperativeLevel 0x%lX -> 0x%lX (background)", flags, changed );
+		Log( msg );
+		flags = changed;
+	}
+	return original( self, hwnd, flags );
+}
+
+static HRESULT STDMETHODCALLTYPE
+SetCooperativeLevelA_Hook( IDirectInputDevice8A *self, HWND hwnd, DWORD flags )
+{
+	return SetCooperativeLevelBackground< IDirectInputDevice8A, DIDEVCAPS >( g_realSetCoopA, self, hwnd, flags );
+}
+
+static HRESULT STDMETHODCALLTYPE
+SetCooperativeLevelW_Hook( IDirectInputDevice8W *self, HWND hwnd, DWORD flags )
+{
+	return SetCooperativeLevelBackground< IDirectInputDevice8W, DIDEVCAPS >( g_realSetCoopW, self, hwnd, flags );
+}
+
+// Games often unacquire on focus loss; keep background devices acquired.
+static HRESULT STDMETHODCALLTYPE
+UnacquireA_Hook( IDirectInputDevice8A *self )
+{
+	return WantsBackground< IDirectInputDevice8A, DIDEVCAPS >( self ) ? DI_OK : g_realUnacquireA( self );
+}
+
+static HRESULT STDMETHODCALLTYPE
+UnacquireW_Hook( IDirectInputDevice8W *self )
+{
+	return WantsBackground< IDirectInputDevice8W, DIDEVCAPS >( self ) ? DI_OK : g_realUnacquireW( self );
+}
+
+template< typename Fn >
+static void
+PatchSlot( void *object, int slot, Fn hook, Fn &original )
+{
+	void **vtable = *static_cast< void *** >( object );
+	if( vtable[ slot ] == reinterpret_cast< void * >( hook ) )
+	{
+		return;
+	}
+	DWORD oldProtect = 0;
+	if( VirtualProtect( &vtable[ slot ], sizeof( void * ), PAGE_EXECUTE_READWRITE, &oldProtect ) )
+	{
+		original = reinterpret_cast< Fn >( vtable[ slot ] );
+		vtable[ slot ] = reinterpret_cast< void * >( hook );
+		VirtualProtect( &vtable[ slot ], sizeof( void * ), oldProtect, &oldProtect );
+	}
+}
+
+// IDirectInputDevice8 vtable: 8 = Unacquire, 13 = SetCooperativeLevel.
+constexpr int kUnacquireSlot = 8;
+constexpr int kSetCooperativeLevelSlot = 13;
+// IDirectInput8 vtable: 3 = CreateDevice.
+constexpr int kCreateDeviceSlot = 3;
+
+using CreateDeviceA_t = HRESULT( STDMETHODCALLTYPE * )( IDirectInput8A *, REFGUID, LPDIRECTINPUTDEVICE8A *, LPUNKNOWN );
+using CreateDeviceW_t = HRESULT( STDMETHODCALLTYPE * )( IDirectInput8W *, REFGUID, LPDIRECTINPUTDEVICE8W *, LPUNKNOWN );
+static CreateDeviceA_t g_realCreateDeviceA = nullptr;
+static CreateDeviceW_t g_realCreateDeviceW = nullptr;
+
+static HRESULT STDMETHODCALLTYPE
+CreateDeviceA_Hook( IDirectInput8A *self, REFGUID guid, LPDIRECTINPUTDEVICE8A *device, LPUNKNOWN outer )
+{
+	const HRESULT hr = g_realCreateDeviceA( self, guid, device, outer );
+	if( SUCCEEDED( hr ) && device && *device )
+	{
+		PatchSlot< SetCoopA_t >( *device, kSetCooperativeLevelSlot, &SetCooperativeLevelA_Hook, g_realSetCoopA );
+		PatchSlot< UnacquireA_t >( *device, kUnacquireSlot, &UnacquireA_Hook, g_realUnacquireA );
+	}
+	return hr;
+}
+
+static HRESULT STDMETHODCALLTYPE
+CreateDeviceW_Hook( IDirectInput8W *self, REFGUID guid, LPDIRECTINPUTDEVICE8W *device, LPUNKNOWN outer )
+{
+	const HRESULT hr = g_realCreateDeviceW( self, guid, device, outer );
+	if( SUCCEEDED( hr ) && device && *device )
+	{
+		PatchSlot< SetCoopW_t >( *device, kSetCooperativeLevelSlot, &SetCooperativeLevelW_Hook, g_realSetCoopW );
+		PatchSlot< UnacquireW_t >( *device, kUnacquireSlot, &UnacquireW_Hook, g_realUnacquireW );
+	}
+	return hr;
+}
+
 extern "C" HRESULT WINAPI
 DirectInput8Create( HINSTANCE hinst, DWORD dwVersion, REFIID riidltf, LPVOID *ppvOut, LPUNKNOWN punkOuter )
 {
@@ -228,10 +424,18 @@ DirectInput8Create( HINSTANCE hinst, DWORD dwVersion, REFIID riidltf, LPVOID *pp
 		if( IsEqualIID( riidltf, IID_IDirectInput8A ) )
 		{
 			PatchEnumDevices< EnumDevicesA_t >( *ppvOut, &EnumDevicesA_Hook, g_realEnumA );
+			if( g_backgroundPad || g_backgroundKeyboard )
+			{
+				PatchSlot< CreateDeviceA_t >( *ppvOut, kCreateDeviceSlot, &CreateDeviceA_Hook, g_realCreateDeviceA );
+			}
 		}
 		else if( IsEqualIID( riidltf, IID_IDirectInput8W ) )
 		{
 			PatchEnumDevices< EnumDevicesW_t >( *ppvOut, &EnumDevicesW_Hook, g_realEnumW );
+			if( g_backgroundPad || g_backgroundKeyboard )
+			{
+				PatchSlot< CreateDeviceW_t >( *ppvOut, kCreateDeviceSlot, &CreateDeviceW_Hook, g_realCreateDeviceW );
+			}
 		}
 	}
 	return hr;
@@ -244,6 +448,10 @@ DllMain( HMODULE hModule, DWORD reason, LPVOID )
 	{
 		DisableThreadLibraryCalls( hModule );
 		Log( "dinput8 proxy attach" );
+		if( HostIsPSUC() )
+		{
+			LoadBackgroundSettings();
+		}
 		LoadPSUEx();
 	}
 	return TRUE;
