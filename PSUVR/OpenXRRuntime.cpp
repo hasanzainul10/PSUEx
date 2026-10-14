@@ -300,13 +300,20 @@ namespace PSUVR
 	bool OpenXRRuntime::CreatePanelSwapchain( int32_t width, int32_t height )
 	{
 		DestroyPanelSwapchain();
+		DestroyVisorSwapchain();
 		if( !CreateSwapchain( width, height, m_panelSwapchain, m_panelImages, m_panelImageCount ) )
 		{
 			return false;
 		}
+		if( !CreateSwapchain( width, height, m_visorSwapchain, m_visorImages, m_visorImageCount ) )
+		{
+			DestroyPanelSwapchain();
+			DestroyVisorSwapchain();
+			return false;
+		}
 		m_panelWidth = width;
 		m_panelHeight = height;
-		PSU_LOG( "OpenXR: panel swapchain %dx%d\n", width, height );
+		PSU_LOG( "OpenXR: panel+visor swapchains %dx%d\n", width, height );
 		return true;
 	}
 
@@ -327,13 +334,28 @@ namespace PSUVR
 		m_panelHeight = 0;
 	}
 
+	void OpenXRRuntime::DestroyVisorSwapchain()
+	{
+		if( m_visorImages )
+		{
+			delete[] reinterpret_cast< XrSwapchainImageD3D11KHR * >( m_visorImages );
+			m_visorImages = nullptr;
+		}
+		m_visorImageCount = 0;
+		if( m_visorSwapchain )
+		{
+			xrDestroySwapchain( static_cast< XrSwapchain >( m_visorSwapchain ) );
+			m_visorSwapchain = 0;
+		}
+	}
+
 	bool OpenXRRuntime::ResizeSwapchains( int32_t width, int32_t height )
 	{
 		if( !m_ready || !m_session )
 		{
 			return false;
 		}
-		if( width == m_panelWidth && height == m_panelHeight && m_panelSwapchain )
+		if( width == m_panelWidth && height == m_panelHeight && m_panelSwapchain && m_visorSwapchain )
 		{
 			return true;
 		}
@@ -365,6 +387,7 @@ namespace PSUVR
 		m_sessionRunning = false;
 		m_loggedSubmitFormats = false;
 
+		DestroyVisorSwapchain();
 		DestroyPanelSwapchain();
 		DestroySwapchains();
 		if( m_blitRS ) { m_blitRS->Release(); m_blitRS = nullptr; }
@@ -793,7 +816,49 @@ namespace PSUVR
 		m_context->Flush();
 		m_clearedThisFrame = true;
 		m_submitQuadLayer = true;
+		m_submitUserHud = false;
+		m_submitWorldHud = false;
 		return true;
+	}
+
+	bool OpenXRRuntime::SubmitHudQuads( ID3D11Texture2D *userTex, float userDistanceM, float userHeightM,
+		ID3D11Texture2D *worldTex, float worldDistanceM, float worldHeightM,
+		const float worldPosition[ 3 ], const float worldOrientation[ 4 ] )
+	{
+		if( !m_context || !m_device || !m_frameStarted || !m_shouldRender )
+		{
+			return false;
+		}
+		bool any = false;
+		if( userTex && m_visorSwapchain && userHeightM > 0.1f )
+		{
+			if( BlitIntoSwapchain( m_visorSwapchain, m_visorImages, userTex ) )
+			{
+				m_userHudDistance = ( userDistanceM > 0.1f ) ? userDistanceM : m_quadDistance;
+				m_userHudHeight = userHeightM;
+				m_submitUserHud = true;
+				any = true;
+			}
+		}
+		if( worldTex && m_panelSwapchain && worldHeightM > 0.1f && worldPosition && worldOrientation )
+		{
+			if( BlitIntoSwapchain( m_panelSwapchain, m_panelImages, worldTex ) )
+			{
+				m_worldHudHeight = worldHeightM;
+				m_panelWorldLocked = true;
+				std::memcpy( m_panelPosition, worldPosition, sizeof( m_panelPosition ) );
+				std::memcpy( m_panelOrientation, worldOrientation, sizeof( m_panelOrientation ) );
+				(void)worldDistanceM;
+				m_submitWorldHud = true;
+				any = true;
+			}
+		}
+		if( any )
+		{
+			m_context->Flush();
+			m_clearedThisFrame = true;
+		}
+		return any;
 	}
 
 	bool OpenXRRuntime::BlitIntoSwapchain( uint64_t swapchainHandle, void *imageList, ID3D11Texture2D *src )
@@ -954,13 +1019,15 @@ namespace PSUVR
 		XrCompositionLayerProjection projLayer{ XR_TYPE_COMPOSITION_LAYER_PROJECTION };
 		XrCompositionLayerProjectionView projViews[ 2 ]{};
 		XrCompositionLayerQuad quadLayer{ XR_TYPE_COMPOSITION_LAYER_QUAD };
-		const XrCompositionLayerBaseHeader *layers[ 2 ]{};
+		XrCompositionLayerQuad userHudLayer{ XR_TYPE_COMPOSITION_LAYER_QUAD };
+		XrCompositionLayerQuad worldHudLayer{ XR_TYPE_COMPOSITION_LAYER_QUAD };
+		const XrCompositionLayerBaseHeader *layers[ 3 ]{};
 		uint32_t layerCount = 0;
 
 		if( m_shouldRender && m_clearedThisFrame )
 		{
 			const bool stereo = m_submitStereo;
-			const bool clearOnly = !m_submitStereo && !m_submitQuadLayer;
+			const bool clearOnly = !m_submitStereo && !m_submitQuadLayer && !m_submitUserHud && !m_submitWorldHud;
 			if( stereo || clearOnly )
 			{
 				XrView located[ 2 ]{ { XR_TYPE_VIEW }, { XR_TYPE_VIEW } };
@@ -998,11 +1065,41 @@ namespace PSUVR
 				layers[ layerCount++ ] = reinterpret_cast< const XrCompositionLayerBaseHeader * >( &projLayer );
 			}
 
-			if( m_submitQuadLayer && m_panelSwapchain && ( viewSpace || m_panelWorldLocked ) )
+			const float aspect = ( m_panelHeight > 0 )
+				? ( static_cast< float >( m_panelWidth ) / static_cast< float >( m_panelHeight ) )
+				: ( 16.0f / 9.0f );
+
+			if( m_submitUserHud && m_visorSwapchain && viewSpace && layerCount < 3 )
 			{
-				const float aspect = ( m_panelHeight > 0 )
-					? ( static_cast< float >( m_panelWidth ) / static_cast< float >( m_panelHeight ) )
-					: ( 16.0f / 9.0f );
+				const float heightM = m_userHudHeight;
+				userHudLayer.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+				userHudLayer.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
+				userHudLayer.subImage.swapchain = static_cast< XrSwapchain >( m_visorSwapchain );
+				userHudLayer.subImage.imageRect.offset = { 0, 0 };
+				userHudLayer.subImage.imageRect.extent = { m_panelWidth, m_panelHeight };
+				userHudLayer.space = viewSpace;
+				userHudLayer.pose.orientation = { 0.0f, 0.0f, 0.0f, 1.0f };
+				userHudLayer.pose.position = { 0.0f, 0.0f, -m_userHudDistance };
+				userHudLayer.size = { heightM * aspect, heightM };
+				layers[ layerCount++ ] = reinterpret_cast< const XrCompositionLayerBaseHeader * >( &userHudLayer );
+			}
+
+			if( m_submitWorldHud && m_panelSwapchain && m_panelWorldLocked && layerCount < 3 )
+			{
+				const float heightM = m_worldHudHeight;
+				worldHudLayer.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+				worldHudLayer.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
+				worldHudLayer.subImage.swapchain = static_cast< XrSwapchain >( m_panelSwapchain );
+				worldHudLayer.subImage.imageRect.offset = { 0, 0 };
+				worldHudLayer.subImage.imageRect.extent = { m_panelWidth, m_panelHeight };
+				worldHudLayer.space = localSpace;
+				worldHudLayer.pose.position = { m_panelPosition[ 0 ], m_panelPosition[ 1 ], m_panelPosition[ 2 ] };
+				worldHudLayer.pose.orientation = { m_panelOrientation[ 0 ], m_panelOrientation[ 1 ], m_panelOrientation[ 2 ], m_panelOrientation[ 3 ] };
+				worldHudLayer.size = { heightM * aspect, heightM };
+				layers[ layerCount++ ] = reinterpret_cast< const XrCompositionLayerBaseHeader * >( &worldHudLayer );
+			}
+			else if( m_submitQuadLayer && m_panelSwapchain && ( viewSpace || m_panelWorldLocked ) && layerCount < 3 )
+			{
 				const float heightM = m_quadHeight;
 				const float widthM = heightM * aspect;
 
@@ -1039,6 +1136,8 @@ namespace PSUVR
 		m_frameStarted = false;
 		m_clearedThisFrame = false;
 		m_submitQuadLayer = false;
+		m_submitUserHud = false;
+		m_submitWorldHud = false;
 		m_submitStereo = false;
 		if( XR_FAILED( r ) )
 		{

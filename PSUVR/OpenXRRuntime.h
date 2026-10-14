@@ -30,6 +30,11 @@ namespace PSUVR
 		// Copies a D3D11 texture into the panel swapchain for a mono quad layer (virtual screen).
 		bool SubmitSharedTexture( ID3D11Texture2D *src );
 
+		// Town HUD: head-locked user visor + world-locked kiosk (alpha quads over stereo).
+		bool SubmitHudQuads( ID3D11Texture2D *userTex, float userDistanceM, float userHeightM,
+			ID3D11Texture2D *worldTex, float worldDistanceM, float worldHeightM,
+			const float worldPosition[ 3 ], const float worldOrientation[ 4 ] );
+
 		// Recreate the panel swapchain to match the game back-buffer.
 		bool ResizeSwapchains( int32_t width, int32_t height );
 
@@ -63,6 +68,7 @@ namespace PSUVR
 		void DestroySwapchains();
 		bool CreatePanelSwapchain( int32_t width, int32_t height );
 		void DestroyPanelSwapchain();
+		void DestroyVisorSwapchain();
 		bool CreateSwapchain( int32_t width, int32_t height, uint64_t &handle, void *&images, uint32_t &imageCount );
 		bool BlitIntoSwapchain( uint64_t swapchain, void *images, ID3D11Texture2D *src );
 		int64_t PickSwapchainFormat( uint64_t sessionHandle );
@@ -98,6 +104,8 @@ namespace PSUVR
 		bool m_shouldRender = false;
 		bool m_clearedThisFrame = false;
 		bool m_submitQuadLayer = false;
+		bool m_submitUserHud = false;
+		bool m_submitWorldHud = false;
 		bool m_submitStereo = false;
 		int m_sessionState = 1; // XR_SESSION_STATE_IDLE
 		int64_t m_displayTime = 0;
@@ -106,6 +114,9 @@ namespace PSUVR
 		bool m_loggedSubmitFormats = false;
 		float m_quadDistance = 2.0f;
 		float m_quadHeight = 1.2f;
+		float m_userHudDistance = 2.5f;
+		float m_userHudHeight = 0.8f;
+		float m_worldHudHeight = 1.1f;
 
 		uint64_t m_panelSwapchain = 0;
 		void *m_panelImages = nullptr; // XrSwapchainImageD3D11KHR*
@@ -115,6 +126,11 @@ namespace PSUVR
 		bool m_panelWorldLocked = false;
 		float m_panelPosition[ 3 ]{};
 		float m_panelOrientation[ 4 ]{ 0.0f, 0.0f, 0.0f, 1.0f };
+
+		// Second panel for the head-locked personal HUD (same size as game BB / world HUD).
+		uint64_t m_visorSwapchain = 0;
+		void *m_visorImages = nullptr;
+		uint32_t m_visorImageCount = 0;
 
 		EyePose m_submittedPoses[ 2 ]{};      // FOV (+ debug); layer uses view-space poses
 		EyePose m_submittedViewSpacePoses[ 2 ]{};

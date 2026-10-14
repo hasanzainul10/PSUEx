@@ -226,6 +226,7 @@
     <ClInclude Include="PSUVR\D3D11Bridge.h" />
     <ClInclude Include="PSUVR\OpenXRRuntime.h" />
     <ClInclude Include="PSUVR\StereoRenderer.h" />
+    <ClInclude Include="PSUVR\VRHud.h" />
     <ClInclude Include="PSUVR\VRCamera.h" />
     <ClInclude Include="PSUStructs\Item.h" />
     <ClInclude Include="PSUStructs\Matrix4x4.hpp" />
@@ -262,6 +263,7 @@
     <ClCompile Include="PSUVR\D3D11Bridge.cpp" />
     <ClCompile Include="PSUVR\OpenXRRuntime.cpp" />
     <ClCompile Include="PSUVR\StereoRenderer.cpp" />
+    <ClCompile Include="PSUVR\VRHud.cpp" />
     <ClCompile Include="PSUVR\VRCamera.cpp" />
     <ClCompile Include="PSUOverlay\ImageMng.cpp" />
     <ClCompile Include="PSUOverlay\Interface\CameraDisplay.cpp" />

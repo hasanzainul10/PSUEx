@@ -2,6 +2,7 @@
 
 #include "D3D11Bridge.h"
 #include "VRCamera.h"
+#include "VRHud.h"
 #include "VRSystem.h"
 #include "../Misc/Log.h"
 #include "../PSUExConfig.h"
@@ -21,7 +22,6 @@ namespace PSUVR
 	namespace
 	{
 		bool s_inEyePass = false;
-		bool s_inHudOverlay = false;
 		IDirect3DSurface9 *s_eyeSurface = nullptr;
 		unsigned s_eyeW = 0;
 		unsigned s_eyeH = 0;
@@ -52,32 +52,6 @@ namespace PSUVR
 	bool StereoRenderer::InEyePass()
 	{
 		return s_inEyePass;
-	}
-
-	bool StereoRenderer::InHudOverlay()
-	{
-		return s_inHudOverlay;
-	}
-
-	void StereoRenderer::BeginHudOverlay( IDirect3DSurface9 *eyeTarget, unsigned eyeW, unsigned eyeH,
-		unsigned gameW, unsigned gameH )
-	{
-		s_eyeSurface = eyeTarget;
-		s_eyeW = eyeW;
-		s_eyeH = eyeH;
-		s_gameW = gameW;
-		s_gameH = gameH;
-		s_inHudOverlay = true;
-	}
-
-	void StereoRenderer::EndHudOverlay()
-	{
-		s_inHudOverlay = false;
-		s_eyeSurface = nullptr;
-		s_eyeW = 0;
-		s_eyeH = 0;
-		s_gameW = 0;
-		s_gameH = 0;
 	}
 
 	void StereoRenderer::MarkSurfaceTexture( IDirect3DSurface9 *surface )
@@ -120,12 +94,12 @@ namespace PSUVR
 
 	bool StereoRenderer::EyeColorTargetIs( IDirect3DSurface9 *surface )
 	{
-		return ( s_inEyePass || s_inHudOverlay ) && surface && surface == s_eyeSurface && s_eyeW > 0 && s_eyeH > 0;
+		return s_inEyePass && surface && surface == s_eyeSurface && s_eyeW > 0 && s_eyeH > 0;
 	}
 
 	bool StereoRenderer::EyeColorTargetBound( IDirect3DDevice9 *device )
 	{
-		if( ( !s_inEyePass && !s_inHudOverlay ) || !device || !s_eyeSurface || s_eyeW == 0 || s_eyeH == 0 )
+		if( !s_inEyePass || !device || !s_eyeSurface || s_eyeW == 0 || s_eyeH == 0 )
 		{
 			return false;
 		}
@@ -253,7 +227,7 @@ namespace PSUVR
 		{
 			return nullptr;
 		}
-		if( ( !s_inEyePass && !s_inHudOverlay ) || s_gameW < 1 || s_gameH < 1 || s_eyeW < 1 || s_eyeH < 1 )
+		if( !s_inEyePass || s_gameW < 1 || s_gameH < 1 || s_eyeW < 1 || s_eyeH < 1 )
 		{
 			return nullptr;
 		}
@@ -304,13 +278,10 @@ namespace PSUVR
 		}
 		const float boxW = maxX - minX;
 		const float boxH = maxY - minY;
-		// Eye-pass tint: only near-fullscreen quads. HUD overlay: every XYZRHW widget.
-		if( !s_inHudOverlay )
+		// Eye-pass tint: only near-fullscreen quads.
+		if( boxW < 0.8f * static_cast< float >( s_gameW ) || boxH < 0.8f * static_cast< float >( s_gameH ) )
 		{
-			if( boxW < 0.8f * static_cast< float >( s_gameW ) || boxH < 0.8f * static_cast< float >( s_gameH ) )
-			{
-				return nullptr;
-			}
+			return nullptr;
 		}
 
 		const float sx = static_cast< float >( s_eyeW ) / static_cast< float >( s_gameW );
@@ -326,91 +297,10 @@ namespace PSUVR
 		if( s_stretchQuadLogCount < 8 )
 		{
 			++s_stretchQuadLogCount;
-			PSU_LOG( "StereoStretchQuad: hud=%d game=%ux%u eye=%ux%u verts=%u box=%.0fx%.0f ret=%p\n",
-				s_inHudOverlay ? 1 : 0, s_gameW, s_gameH, s_eyeW, s_eyeH, vertCount, boxW, boxH, ret );
+			PSU_LOG( "StereoStretchQuad: game=%ux%u eye=%ux%u verts=%u box=%.0fx%.0f ret=%p\n",
+				s_gameW, s_gameH, s_eyeW, s_eyeH, vertCount, boxW, boxH, ret );
 		}
 		return s_stretchQuadBuf;
-	}
-
-	void StereoRenderer::MirrorPassBDrawToEyes( IDirect3DDevice9 *device, unsigned primitiveType,
-		unsigned primitiveCount, const void *verts, unsigned stride )
-	{
-		if( s_inHudOverlay || s_inEyePass || !device || !verts || !Get().HasFrame() )
-		{
-			return;
-		}
-		D3D11Bridge *bridge = System::Get().StereoBridge();
-		if( !bridge )
-		{
-			return;
-		}
-		const unsigned eyeW = Get().EyeWidth();
-		const unsigned eyeH = Get().EyeHeight();
-		const unsigned gameW = Get().GameWidth();
-		const unsigned gameH = Get().GameHeight();
-		if( eyeW < 1 || eyeH < 1 )
-		{
-			return;
-		}
-
-		IDirect3DSurface9 *savedRt = nullptr;
-		IDirect3DSurface9 *savedDs = nullptr;
-		D3DVIEWPORT9 savedVp{};
-		RECT savedScissor{};
-		DWORD zEnable = 0, zWrite = 0, scissorEnable = 0;
-		device->GetRenderTarget( 0, &savedRt );
-		device->GetDepthStencilSurface( &savedDs );
-		device->GetViewport( &savedVp );
-		device->GetScissorRect( &savedScissor );
-		device->GetRenderState( D3DRS_ZENABLE, &zEnable );
-		device->GetRenderState( D3DRS_ZWRITEENABLE, &zWrite );
-		device->GetRenderState( D3DRS_SCISSORTESTENABLE, &scissorEnable );
-
-		device->SetRenderState( D3DRS_ZENABLE, FALSE );
-		device->SetRenderState( D3DRS_ZWRITEENABLE, FALSE );
-		for( int eye = 0; eye < 2; ++eye )
-		{
-			IDirect3DSurface9 *eyeSurf = bridge->EyeSurface( eye );
-			if( !eyeSurf )
-			{
-				continue;
-			}
-			BeginHudOverlay( eyeSurf, eyeW, eyeH, gameW, gameH );
-			device->SetRenderTarget( 0, eyeSurf );
-			device->SetDepthStencilSurface( nullptr );
-			D3DVIEWPORT9 eyeVp{};
-			GetEyeViewport( eyeVp );
-			device->SetViewport( &eyeVp );
-			RECT eyeScissor{};
-			GetEyeScissor( eyeScissor );
-			device->SetScissorRect( &eyeScissor );
-			device->DrawPrimitiveUP( static_cast< D3DPRIMITIVETYPE >( primitiveType ),
-				primitiveCount, verts, stride );
-			EndHudOverlay();
-		}
-
-		device->SetRenderTarget( 0, savedRt );
-		device->SetDepthStencilSurface( savedDs );
-		device->SetViewport( &savedVp );
-		device->SetScissorRect( &savedScissor );
-		device->SetRenderState( D3DRS_SCISSORTESTENABLE, scissorEnable );
-		device->SetRenderState( D3DRS_ZENABLE, zEnable );
-		device->SetRenderState( D3DRS_ZWRITEENABLE, zWrite );
-		if( savedRt )
-		{
-			savedRt->Release();
-		}
-		if( savedDs )
-		{
-			savedDs->Release();
-		}
-
-		static bool s_logged = false;
-		if( !s_logged )
-		{
-			s_logged = true;
-			PSU_LOG( "VR: Pass B draws mirrored to stereo eyes (no extra Pass B)\n" );
-		}
 	}
 
 	void StereoRenderer::RenderEyes( IDirect3DDevice9 *device, Pass pass )
@@ -512,6 +402,7 @@ namespace PSUVR
 			m_lastGameW = targetDesc.Width;
 			m_lastGameH = targetDesc.Height;
 			m_hasFrame = true;
+			VRHud::Get().BeginStereoFrame( device, targetDesc.Width, targetDesc.Height );
 
 			if( !m_loggedFirst )
 			{

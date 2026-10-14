@@ -197,6 +197,37 @@ namespace PSUVR
 		m_eyeDepthFormat = D3DFMT_UNKNOWN;
 	}
 
+	void D3D11Bridge::ShutdownHud()
+	{
+		ReleaseSharedTarget( m_hudUser );
+		ReleaseSharedTarget( m_hudWorld );
+		m_hudWidth = 0;
+		m_hudHeight = 0;
+	}
+
+	bool D3D11Bridge::EnsureHudTargets( IDirect3DDevice9 *d3d9, UINT width, UINT height )
+	{
+		if( !d3d9 || !m_d3d11 || width == 0 || height == 0 )
+		{
+			return false;
+		}
+		if( m_hudUser.texture11 && m_hudWorld.texture11 && m_hudWidth == width && m_hudHeight == height )
+		{
+			return true;
+		}
+		ShutdownHud();
+		if( !CreateSharedTarget( d3d9, width, height, m_hudUser ) ||
+			!CreateSharedTarget( d3d9, width, height, m_hudWorld ) )
+		{
+			ShutdownHud();
+			return false;
+		}
+		m_hudWidth = width;
+		m_hudHeight = height;
+		PSU_LOG( "D3D11Bridge: HUD targets %ux%u (user + world)\n", width, height );
+		return true;
+	}
+
 	bool D3D11Bridge::EnsureEyeTargets( IDirect3DDevice9 *d3d9, UINT width, UINT height, D3DFORMAT depthFormat )
 	{
 		if( !d3d9 || !m_d3d11 || width == 0 || height == 0 )
@@ -234,6 +265,7 @@ namespace PSUVR
 	void D3D11Bridge::Shutdown()
 	{
 		ShutdownEyes();
+		ShutdownHud();
 		if( m_eventQuery )
 		{
 			m_eventQuery->Release();

@@ -3,6 +3,7 @@
 #include "../PSUExConfig.h"
 #include "../PSUVR/VRSystem.h"
 #include "../PSUVR/StereoRenderer.h"
+#include "../PSUVR/VRHud.h"
 #include "../PSUVR/D3D9ExUpgrade.h"
 #include "../PSUVR/D3D9ExCompat.h"
 #include "../Misc/Log.h"
@@ -388,7 +389,7 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3
 	const HRESULT hr = m_pOriginalDrawPrimitiveUP( pDevice, PrimitiveType, PrimitiveCount, verts, VertexStreamZeroStride );
 	if( SUCCEEDED( hr ) && FrameTrace::CurrentPassAddress() == 0x004FDBC0 )
 	{
-		PSUVR::StereoRenderer::MirrorPassBDrawToEyes( pDevice,
+		PSUVR::VRHud::Get().CapturePassBDraw( pDevice,
 			static_cast< unsigned >( PrimitiveType ), PrimitiveCount,
 			pVertexStreamZeroData, VertexStreamZeroStride );
 	}

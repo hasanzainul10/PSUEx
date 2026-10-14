@@ -6,6 +6,7 @@
 #include "OpenXRRuntime.h"
 #include "StereoRenderer.h"
 #include "VRCamera.h"
+#include "VRHud.h"
 #include "../Misc/Log.h"
 #include "../PSUExConfig.h"
 
@@ -343,6 +344,7 @@ namespace PSUVR
 
 			bool stereoSubmitted = false;
 			StereoRenderer &stereo = StereoRenderer::Get();
+			VRHud &hud = VRHud::Get();
 			const bool hadStereoFrame = stereo.HasFrame();
 			if( !m_solidColorPrototype && hadStereoFrame && m_bridge )
 			{
@@ -364,8 +366,32 @@ namespace PSUVR
 						PSU_LOG( "VR: stereo submit miss #%u (sky may flicker)\n", s_stereoMisses );
 					}
 				}
+
+				// Town UI as floating screens (not painted into the eyes).
+				if( stereoSubmitted && ( hud.HasUserContent() || hud.HasWorldContent() ) )
+				{
+					const float dist = Config::Get().vr.m_hudDistance;
+					const float hudSize = Config::Get().vr.m_hudSize > 0.1f ? Config::Get().vr.m_hudSize : 1.0f;
+					const float userH = 0.8f * hudSize;
+					const float worldH = 1.1f * hudSize;
+					float worldPos[ 3 ]{};
+					float worldOri[ 4 ]{ 0.0f, 0.0f, 0.0f, 1.0f };
+					VRCamera::PanelPose( dist, 0.2f, worldPos, worldOri );
+					m_xr->SubmitHudQuads(
+						hud.HasUserContent() ? hud.UserTexture() : nullptr, dist, userH,
+						hud.HasWorldContent() ? hud.WorldTexture() : nullptr, dist, worldH,
+						worldPos, worldOri );
+					static bool s_loggedHudQuads = false;
+					if( !s_loggedHudQuads )
+					{
+						s_loggedHudQuads = true;
+						PSU_LOG( "VR: HUD quads active (user=%d world=%d, dist=%.2f)\n",
+							hud.HasUserContent() ? 1 : 0, hud.HasWorldContent() ? 1 : 0, dist );
+					}
+				}
 			}
 			stereo.ConsumeFrame();
+			hud.EndStereoFrame();
 
 			if( m_solidColorPrototype )
 			{
