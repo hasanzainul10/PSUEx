@@ -204,12 +204,14 @@ namespace PSUVR
 		bool s_switchSent = false;    // R1 sent for this request
 		int s_pulseButton = -1;       // pad button being pressed
 		float s_pulseTime = 0.0f;
-		float s_nudgeTime = 0.0f;     // left stick held toward the look direction
+		float s_nudgeTime = 0.0f;     // turning first: the press waits this long
+		float s_faceHold = 0.0f;      // left stick held toward the look direction (turn + press)
 		constexpr float kSwingRearmSpeed = 0.8f;
 		constexpr float kSwingBufferSeconds = 0.25f;
 		constexpr float kSwitchWaitSeconds = 0.6f;
 		constexpr float kAttackPulseSeconds = 0.08f;
-		constexpr float kNudgeSeconds = 0.06f;
+		constexpr float kNudgeSeconds = 0.1f;
+		constexpr float kFaceHoldAfterSeconds = 0.1f;
 		constexpr float kFaceToleranceRadians = 20.0f * ( 3.14159265f / 180.0f );
 
 		bool MeleeKind( PSUCombat::WeaponKind kind )
@@ -274,7 +276,11 @@ namespace PSUVR
 			s_lastAttackHand = hand;
 			s_pulseButton = button;
 			s_pulseTime = kAttackPulseSeconds;
-			s_nudgeTime = NeedsFacing() ? kNudgeSeconds : 0.0f;
+			// PSU aims an attack along the stick held when it starts, so the stick stays toward
+			// the look direction through the press, not just before it.
+			const bool turn = NeedsFacing();
+			s_nudgeTime = turn ? kNudgeSeconds : 0.0f;
+			s_faceHold = turn ? kNudgeSeconds + kAttackPulseSeconds + kFaceHoldAfterSeconds : 0.0f;
 		}
 
 		// The weapon X / Y use now; 0 (weapon not drawn yet) counts as the right-hand one.
@@ -471,12 +477,16 @@ namespace PSUVR
 			PumpRequest( dt );
 			Gun( dt, roles, pad );
 
-			if( s_nudgeTime > 0.0f )
+			if( s_faceHold > 0.0f )
 			{
-				// Turn first: stick toward the look direction (forward in the camera's frame).
-				s_nudgeTime -= dt;
+				// Stick toward the look direction (forward in the camera's frame).
+				s_faceHold -= dt;
 				pad.lx = 0.0f;
 				pad.ly = 1.0f;
+			}
+			if( s_nudgeTime > 0.0f )
+			{
+				s_nudgeTime -= dt;
 			}
 			else if( s_pulseTime > 0.0f && s_pulseButton >= 0 )
 			{
@@ -687,6 +697,7 @@ namespace PSUVR
 				s_pulseButton = -1;
 				s_pulseTime = 0.0f;
 				s_nudgeTime = 0.0f;
+				s_faceHold = 0.0f;
 				s_gunShot = false;
 				s_gunTail = 0.0f;
 				std::lock_guard lock( s_mutex );
