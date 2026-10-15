@@ -232,6 +232,7 @@
     <ClInclude Include="PSUVR\VRGamepad.h" />
     <ClInclude Include="PSUOverlay\Interface\VRDisplay.h" />
     <ClInclude Include="PSUVR\VRBindings.h" />
+    <ClInclude Include="PSUVR\VRControllers.h" />
     <ClInclude Include="PSUVR\VRSettingsPanel.h" />
     <ClInclude Include="PSUVR\VRSettings.h" />
     <ClInclude Include="PSUVR\VRPlayerDraw.h" />
@@ -275,6 +276,7 @@
     <ClCompile Include="PSUVR\VRGamepad.cpp" />
     <ClCompile Include="PSUOverlay\Interface\VRDisplay.cpp" />
     <ClCompile Include="PSUVR\VRBindings.cpp" />
+    <ClCompile Include="PSUVR\VRControllers.cpp" />
     <ClCompile Include="PSUVR\VRSettingsPanel.cpp" />
     <ClCompile Include="PSUVR\VRSettings.cpp" />
     <ClCompile Include="PSUVR\VRPlayerDraw.cpp" />

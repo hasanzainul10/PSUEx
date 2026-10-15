@@ -1,6 +1,7 @@
 #include "VRCamera.h"
 
 #include "StereoRenderer.h"
+#include "VRControllers.h"
 #include "VRGamepad.h"
 #include "VRSystem.h"
 #include "../Misc/Log.h"
@@ -93,6 +94,41 @@ namespace PSUVR
 		bool s_fpActive = false;
 		bool s_turnArmed = true;
 		bool s_turnFromStick = false;
+
+		// Right stick for turning: the XInput pad's or the right motion controller's,
+		// whichever is pushed further (both may be connected).
+		bool TurnStick( float &x, float &y )
+		{
+			const bool pad = VRGamepad::RightStick( x, y );
+			if( !VRControllers::Active( 1 ) )
+			{
+				return pad;
+			}
+			constexpr float kDeadzone = 0.25f;
+			const float *stick = VRControllers::State( 1 ).stick;
+			float motion[ 2 ]{};
+			for( int i = 0; i < 2; ++i )
+			{
+				const float magnitude = std::fabs( stick[ i ] );
+				const float scaled = magnitude <= kDeadzone ? 0.0f : ( magnitude - kDeadzone ) / ( 1.0f - kDeadzone );
+				motion[ i ] = ( stick[ i ] < 0.0f ? -1.0f : 1.0f ) * ( scaled > 1.0f ? 1.0f : scaled );
+			}
+			if( !pad || motion[ 0 ] * motion[ 0 ] + motion[ 1 ] * motion[ 1 ] > x * x + y * y )
+			{
+				static bool s_logged = false;
+				if( !s_logged && ( motion[ 0 ] != 0.0f || motion[ 1 ] != 0.0f ) )
+				{
+					s_logged = true;
+					PSU_LOG( "VRCamera: turning from the right motion controller stick (%.2f, %.2f)\n", stick[ 0 ], stick[ 1 ] );
+				}
+				x = motion[ 0 ];
+				y = motion[ 1 ];
+			}
+			return true;
+		}
+		// Camera-delta fallback: head yaw last frame, and when the head last turned.
+		float s_prevHeadYaw = 0.0f;
+		DWORD s_headTurnTick = 0;
 		bool s_loggedTurnSource = false;
 		float s_bodyYaw = 0.0f;
 		float s_lastWrittenYaw = 0.0f;
@@ -233,7 +269,7 @@ namespace PSUVR
 				++s_turnLogs;
 				PSU_LOG( "VRCamera FP: turn %.2f deg -> body=%.1f deg (%s, %s)\n",
 					delta * ( 180.0f / kPi ), s_bodyYaw * ( 180.0f / kPi ),
-					Config::Get().vr.m_snapTurn ? "snap" : "smooth", s_turnFromStick ? "XInput" : "camera-delta" );
+					Config::Get().vr.m_snapTurn ? "snap" : "smooth", s_turnFromStick ? "stick" : "camera-delta" );
 			}
 		}
 
@@ -407,12 +443,22 @@ namespace PSUVR
 			const bool haveGameYaw = ( dx * dx + dz * dz ) > 1.0e-6f;
 			const float gameYaw = haveGameYaw ? std::atan2( dx, dz ) : s_lastWrittenYaw;
 			float stickX = 0.0f;
-			s_turnFromStick = VRGamepad::RightStickX( stickX );
+			float stickY = 0.0f;
+			s_turnFromStick = TurnStick( stickX, stickY );
 			if( !s_loggedTurnSource )
 			{
 				s_loggedTurnSource = true;
-				PSU_LOG( "VRCamera FP: turn source = %s\n", s_turnFromStick ? "XInput" : "camera-delta" );
+				PSU_LOG( "VRCamera FP: turn source = %s\n", s_turnFromStick ? "stick" : "camera-delta" );
 			}
+			// The game eases its camera toward the yaw we write, so while (and shortly after)
+			// the head turns, the camera lags it: that lag is not a stick turn.
+			const float headYaw = PoseYaw( views[ 0 ].orientation );
+			if( std::fabs( WrapAngle( headYaw - s_prevHeadYaw ) ) > 0.3f * ( kPi / 180.0f ) )
+			{
+				s_headTurnTick = GetTickCount();
+			}
+			s_prevHeadYaw = headYaw;
+			const bool headSettled = GetTickCount() - s_headTurnTick > 400;
 			if( !s_fpPrimed )
 			{
 				// Body forward = where the camera points now (after recenter: where you look).
@@ -426,7 +472,7 @@ namespace PSUVR
 			{
 				ApplyStickTurn( stickX, dt );
 			}
-			else if( playState && haveGameYaw )
+			else if( playState && haveGameYaw && headSettled )
 			{
 				ApplyCameraDeltaTurn( WrapAngle( gameYaw - s_lastWrittenYaw ) );
 			}
@@ -525,7 +571,8 @@ namespace PSUVR
 			const bool playState = cameraState == 1 || cameraState == 3;
 			float stickX = 0.0f, stickY = 0.0f;
 			unsigned short buttons = 0;
-			const bool havePad = VRGamepad::RightStick( stickX, stickY ) && VRGamepad::Buttons( buttons );
+			VRGamepad::Buttons( buttons );
+			const bool havePad = TurnStick( stickX, stickY );
 			if( playState && havePad )
 			{
 				constexpr unsigned short kBack = 0x0020;  // XINPUT_GAMEPAD_BACK

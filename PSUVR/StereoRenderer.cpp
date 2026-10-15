@@ -2,6 +2,7 @@
 
 #include "D3D11Bridge.h"
 #include "VRCamera.h"
+#include "VRControllers.h"
 #include "VRHud.h"
 #include "VRPlayerDraw.h"
 #include "VRSystem.h"
@@ -810,7 +811,8 @@ namespace PSUVR
 				BeginEyePass( eyeSurface, eyeW, eyeH, targetDesc.Width, targetDesc.Height );
 				pass();
 				EndEyePass();
-				// After the eye pass, so the screen-quad hooks leave it alone.
+				// After the eye pass, so the screen-quad hooks leave them alone.
+				VRControllers::DrawMarkers( device, views[ eye ], eyeW, eyeH );
 				DrawVignette( device, eyeW, eyeH, vignette );
 
 				m_poses[ eye ] = views[ eye ];

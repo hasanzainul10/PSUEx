@@ -19,6 +19,12 @@ namespace PSUVR
 		bool EndFrame() override;
 		bool GetEyePose( int eye, EyePose &out ) override;
 		const char *Name() const override { return "OpenXR"; }
+		bool GetControllerState( int hand, ControllerState &out ) override;
+		void Haptic( int hand, float amplitude, float seconds ) override;
+
+		// Sync controller actions and locate the controllers for the next views' display
+		// time (after BeginFrame, with LocateNextViews).
+		void UpdateInput();
 
 		// Poll events without xrWaitFrame (safe to call before Present).
 		void PumpEvents();
@@ -69,6 +75,9 @@ namespace PSUVR
 		bool CreateSession( ID3D11Device *d3d11 );
 		bool CreateSwapchains( int32_t width, int32_t height );
 		void DestroySwapchains();
+		bool CreateActions();
+		void DestroyActions();
+		void LogInteractionProfiles();
 		bool CreatePanelSwapchain( int32_t width, int32_t height );
 		void DestroyPanelSwapchain();
 		void DestroyVisorSwapchain();
@@ -139,6 +148,23 @@ namespace PSUVR
 		uint64_t m_visorSwapchain = 0;
 		void *m_visorImages = nullptr;
 		uint32_t m_visorImageCount = 0;
+
+		// Motion controllers (OpenXR actions).
+		uint64_t m_actionSet = 0;
+		uint64_t m_actGripPose = 0;
+		uint64_t m_actAimPose = 0;
+		uint64_t m_actTrigger = 0;
+		uint64_t m_actGrip = 0;
+		uint64_t m_actStick = 0;
+		uint64_t m_actStickClick = 0;
+		uint64_t m_actPrimary = 0;
+		uint64_t m_actSecondary = 0;
+		uint64_t m_actMenu = 0;
+		uint64_t m_actHaptic = 0;
+		uint64_t m_handPath[ 2 ]{};
+		uint64_t m_gripSpace[ 2 ]{};
+		uint64_t m_aimSpace[ 2 ]{};
+		ControllerState m_controllers[ 2 ]{};
 
 		EyePose m_submittedPoses[ 2 ]{};      // FOV (+ debug); layer uses view-space poses
 		EyePose m_submittedViewSpacePoses[ 2 ]{};

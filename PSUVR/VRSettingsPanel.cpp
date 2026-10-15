@@ -307,6 +307,12 @@ namespace PSUVR
 			ImGui::SliderFloat( "Vignette strength", &s.m_vignetteStrength, 0.0f, 1.0f, "%.2f" );
 		}
 
+		if( ImGui::CollapsingHeader( "Motion controllers" ) )
+		{
+			ImGui::TextDisabled( "Preview: controllers are tracked and shown; gameplay still uses the gamepad." );
+			ImGui::Checkbox( "Show controllers and pointer rays", &s.m_showControllers );
+		}
+
 		if( ImGui::CollapsingHeader( "Controls", ImGuiTreeNodeFlags_DefaultOpen ) )
 		{
 			ImGui::TextDisabled( "Pad chords: hold Back/Select, then press the button." );

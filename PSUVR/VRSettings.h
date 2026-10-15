@@ -108,6 +108,8 @@ struct VRSettings
 	float m_lbWindowSeconds = 2.0f;
 	bool m_snapTurn = true;
 	bool m_comfortVignette = false;
+	// Motion controllers: draw a marker and pointer ray at each tracked controller.
+	bool m_showControllers = true;
 	// 0..1 how far the vignette closes in at full motion.
 	float m_vignetteStrength = 0.7f;
 	// Render the 3D pass per eye (projection layer) with the game frame as a panel.
