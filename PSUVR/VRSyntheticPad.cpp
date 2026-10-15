@@ -188,22 +188,26 @@ namespace PSUVR
 		}
 
 		// Motion combat (vr.swingAttack): gestures press the game's attack buttons, chosen by
-		// what each hand holds (PSUCombat weapon classes). X = normal attack, Y = Photon Art,
-		// R1 = left-hand weapon. Swing a melee hand to attack, swing with that hand's trigger
-		// held for a Photon Art; pull the trigger of a hand holding a gun to shoot. A press
-		// made during the swing animation waits for the combo window (vr.comboBuffer). The
-		// first hit of a chain can turn the character toward where you look first
-		// (vr.attackFaceLook): the left stick points there for a few frames.
+		// what each hand holds (PSUCombat weapon classes). X = attack and Y = Photon Art with
+		// the active weapon; R1 switches the active weapon between the right and left hand
+		// (+0x1DC). Swing a melee hand to attack, swing with that hand's trigger held for a
+		// Photon Art; pull the trigger of the hand holding a gun to shoot. A request first
+		// switches to that hand's weapon if needed, waits for the combo window when made
+		// during the swing animation (vr.comboBuffer), and on the first hit of a chain turns
+		// the character toward where you look (vr.attackFaceLook).
 		bool s_swingArmed[ 2 ] = { true, true };
 		int s_swingFrames[ 2 ]{};
-		int s_pendingButton = -1;     // pad button waiting for the combo window
-		float s_pendingTime = 0.0f;
+		int s_pendingButton = -1;     // requested attack button (X / Y), not sent yet
+		float s_pendingTime = 0.0f;   // seconds the request may still wait
 		int s_pendingHand = 1;
+		uint32_t s_pendingWeapon = 0; // weapon class that must be active first (0 = any)
+		bool s_switchSent = false;    // R1 sent for this request
 		int s_pulseButton = -1;       // pad button being pressed
 		float s_pulseTime = 0.0f;
 		float s_nudgeTime = 0.0f;     // left stick held toward the look direction
 		constexpr float kSwingRearmSpeed = 0.8f;
 		constexpr float kSwingBufferSeconds = 0.25f;
+		constexpr float kSwitchWaitSeconds = 0.6f;
 		constexpr float kAttackPulseSeconds = 0.08f;
 		constexpr float kNudgeSeconds = 0.06f;
 		constexpr float kFaceToleranceRadians = 20.0f * ( 3.14159265f / 180.0f );
@@ -273,26 +277,64 @@ namespace PSUVR
 			s_nudgeTime = NeedsFacing() ? kNudgeSeconds : 0.0f;
 		}
 
-		// A gesture asked for `button`: now, or when the combo window opens.
-		void RequestAttack( int button, int hand, const char *what )
+		// The weapon X / Y use now; 0 (weapon not drawn yet) counts as the right-hand one.
+		uint32_t ActiveWeapon()
 		{
-			const bool early = s_combatValid && PSUCombat::Swinging( s_combat );
+			return s_combat.activeClass ? s_combat.activeClass : s_combat.weaponClass;
+		}
+
+		// A gesture asked for `button` with `weapon` (0 = whatever is active). Sent by
+		// PumpRequest once that weapon is active and the combo allows it.
+		void RequestAttack( int button, int hand, uint32_t weapon, const char *what )
+		{
 			VRControllers::Haptic( hand, 0.25f, 0.02f );
-			if( early && Config::Get().vr.m_comboBuffer )
-			{
-				s_pendingButton = button;
-				s_pendingHand = hand;
-				s_pendingTime = kSwingBufferSeconds;
-			}
-			else
-			{
-				StartAttack( button, hand );
-			}
+			s_pendingButton = button;
+			s_pendingHand = hand;
+			s_pendingWeapon = weapon;
+			s_switchSent = false;
+			const bool needSwitch = weapon && ActiveWeapon() != weapon;
+			s_pendingTime = needSwitch ? kSwitchWaitSeconds : kSwingBufferSeconds;
 #ifdef _DEBUG
-			PSU_LOG( "VRSwing: %s hand %s -> %s, step %d, %s\n", hand == 0 ? "left" : "right", what,
-				button == kPadY ? "Y (PA)" : ( button == kPadR1 ? "R1 (left weapon)" : "X" ),
-				s_combatValid ? s_combat.comboStep : 0, s_pendingButton >= 0 ? "buffered" : ( early ? "early (sent)" : "sent" ) );
+			PSU_LOG( "VRSwing: %s hand %s -> %s, step %d, active %X%s\n", hand == 0 ? "left" : "right", what,
+				button == kPadY ? "Y (PA)" : "X", s_combatValid ? s_combat.comboStep : 0, ActiveWeapon(),
+				needSwitch ? ", switching weapon (R1)" : "" );
 #endif
+		}
+
+		void PumpRequest( float dt )
+		{
+			if( s_pendingButton < 0 || s_pulseButton >= 0 )
+			{
+				return;
+			}
+			if( s_pendingWeapon && ActiveWeapon() != s_pendingWeapon )
+			{
+				// Switch hands first: R1, then wait for +0x1DC to follow.
+				if( !s_switchSent )
+				{
+					s_switchSent = true;
+					s_pulseButton = kPadR1;
+					s_pulseTime = kAttackPulseSeconds;
+				}
+			}
+			else if( s_switchSent && s_combatValid && ( s_combat.attackState & 0xFF ) == 0x06 )
+			{
+				// Still in the weapon switch animation (+0x710 0x..06): presses would be lost.
+			}
+			else if( !( s_combatValid && PSUCombat::Swinging( s_combat ) ) || !Config::Get().vr.m_comboBuffer )
+			{
+				StartAttack( s_pendingButton, s_pendingHand );
+				s_pendingButton = -1;
+				return;
+			}
+			if( ( s_pendingTime -= dt ) <= 0.0f )
+			{
+#ifdef _DEBUG
+				PSU_LOG( "VRSwing: request dropped (%s)\n", s_switchSent && ActiveWeapon() != s_pendingWeapon ?
+					"weapon didn't switch" : "window didn't open in time" );
+#endif
+				s_pendingButton = -1;
+			}
 		}
 
 		// Swing detection for one hand: fires once per swing, re-arms when the hand slows.
@@ -333,9 +375,11 @@ namespace PSUVR
 				{
 					if( roles.swing[ hand ] && Swung( hand ) )
 					{
-						// Photon Art: swing while holding that hand's trigger.
+						// Photon Art: swing while holding that hand's trigger. With a left-hand
+						// weapon equipped, the right-hand one has to be the active one.
 						const bool pa = vr.m_paGesture && s_triggerDown[ hand ];
-						RequestAttack( pa ? kPadY : kPadX, hand, pa ? "swing+trigger" : "swing" );
+						const uint32_t weapon = roles.shoot[ 0 ] ? s_combat.weaponClass : 0;
+						RequestAttack( pa ? kPadY : kPadX, hand, weapon, pa ? "swing+trigger" : "swing" );
 					}
 					else if( !roles.swing[ hand ] )
 					{
@@ -343,27 +387,12 @@ namespace PSUVR
 					}
 					if( roles.shoot[ hand ] && ( VRControllers::Pressed( hand ) & kControllerTrigger ) )
 					{
-						RequestAttack( kPadR1, hand, "trigger" );
+						RequestAttack( kPadX, hand, s_combat.leftClass, "trigger" );
 					}
 				}
 			}
 
-			if( s_pendingButton >= 0 )
-			{
-				const bool early = s_combatValid && PSUCombat::Swinging( s_combat );
-				if( !early )
-				{
-					StartAttack( s_pendingButton, s_pendingHand );
-					s_pendingButton = -1;
-				}
-				else if( ( s_pendingTime -= dt ) <= 0.0f )
-				{
-					s_pendingButton = -1;
-#ifdef _DEBUG
-					PSU_LOG( "VRSwing: buffered press dropped (window didn't open in time)\n" );
-#endif
-				}
-			}
+			PumpRequest( dt );
 
 			if( s_nudgeTime > 0.0f )
 			{
