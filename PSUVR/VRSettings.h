@@ -114,8 +114,13 @@ struct VRSettings
 	std::string m_motionProfile = "psvr2";
 	// Buzz the right controller when the game's combo window opens (melee).
 	bool m_comboHaptic = true;
-	// Motion mode: a fast right-hand swing presses the attack button (pad X).
+	// Motion mode combat: swing a melee hand to attack (X), pull a gun hand's trigger to
+	// shoot (R1 = left-hand weapon). Weapon per hand comes from the game.
 	bool m_swingAttack = true;
+	// Swing with that hand's trigger held = Photon Art (Y).
+	bool m_paGesture = true;
+	// Before the first hit of a chain, turn the character toward where you look.
+	bool m_attackFaceLook = true;
 	float m_swingSpeed = 1.8f;      // m/s to count as a swing
 	// A swing during the attack animation waits for the combo window (up to 0.25 s).
 	bool m_comboBuffer = true;

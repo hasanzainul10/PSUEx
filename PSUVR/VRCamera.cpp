@@ -675,6 +675,17 @@ namespace PSUVR
 			return s_bodyYaw;
 		}
 
+		bool LookYaw( float &yaw )
+		{
+			if( FirstPersonActive() )
+			{
+				yaw = WrapAngle( s_bodyYaw + s_steerHmdYaw );
+				return true;
+			}
+			float pitch = 0.0f;
+			return RenderCameraAngles( yaw, pitch );
+		}
+
 		void UpdateFirstPersonAnchor( const EyePose views[ 2 ] )
 		{
 			const auto &vr = Config::Get().vr;

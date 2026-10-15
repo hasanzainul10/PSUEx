@@ -58,6 +58,8 @@ namespace
 	X( m_motionProfile, "motionProfile" ) \
 	X( m_comboHaptic, "comboHaptic" ) \
 	X( m_swingAttack, "swingAttack" ) \
+	X( m_paGesture, "paGesture" ) \
+	X( m_attackFaceLook, "attackFaceLook" ) \
 	X( m_swingSpeed, "swingSpeed" ) \
 	X( m_comboBuffer, "comboBuffer" ) \
 	X( m_vignetteStrength, "vignetteStrength" ) \

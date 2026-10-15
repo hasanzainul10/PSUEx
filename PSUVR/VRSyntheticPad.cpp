@@ -1,6 +1,7 @@
 #include "VRSyntheticPad.h"
 
 #include "VRBindings.h"
+#include "VRCamera.h"
 #include "VRControllers.h"
 #include "VRMotionLayout.h"
 #include "../Misc/Log.h"
@@ -72,16 +73,8 @@ namespace PSUVR
 		int s_comboStep = 0;
 		bool s_combatValid = false;
 		PSUCombat::State s_combat;
+		int s_lastAttackHand = 1;     // the combo buzz goes to the hand that attacked
 
-		// Swing to attack: a fast right-hand swing presses X (once per swing; re-arms when
-		// the hand slows down). Swings during the attack animation wait for the window.
-		bool s_swingArmed = true;
-		int s_swingFrames = 0;
-		float s_swingPending = 0.0f;  // seconds a buffered swing may still wait
-		float s_attackPulse = 0.0f;   // seconds X stays pressed
-		constexpr float kSwingRearmSpeed = 0.8f;
-		constexpr float kSwingBufferSeconds = 0.25f;
-		constexpr float kAttackPulseSeconds = 0.08f;
 		bool s_dpadMode = false;          // left stick sends the D-pad
 		bool s_leftClickConsumed = false; // the stick click toggled the D-pad: no SELECT
 
@@ -176,9 +169,10 @@ namespace PSUVR
 			PSUCombat::State combat;
 			const bool valid = PSUCombat::Read( combat );
 			const bool open = valid && PSUCombat::ComboWindowOpen( combat );
-			if( open && !s_comboWindow && Config::Get().vr.m_comboHaptic && VRControllers::Active( 1 ) )
+			const int buzzHand = VRControllers::Active( s_lastAttackHand ) ? s_lastAttackHand : 1;
+			if( open && !s_comboWindow && Config::Get().vr.m_comboHaptic && VRControllers::Active( buzzHand ) )
 			{
-				VRControllers::Haptic( 1, combat.comboStep >= 2 ? 0.8f : 0.5f, 0.03f );
+				VRControllers::Haptic( buzzHand, combat.comboStep >= 2 ? 0.8f : 0.5f, 0.03f );
 			}
 #ifdef _DEBUG
 			if( open != s_comboWindow || ( valid ? combat.comboStep : 0 ) != s_comboStep )
@@ -193,70 +187,201 @@ namespace PSUVR
 			s_combat = combat;
 		}
 
-		// Returns whether X is pressed this frame.
-		bool SwingAttack( float dt, bool modifier )
+		// Motion combat (vr.swingAttack): gestures press the game's attack buttons, chosen by
+		// what each hand holds (PSUCombat weapon classes). X = normal attack, Y = Photon Art,
+		// R1 = left-hand weapon. Swing a melee hand to attack, swing with that hand's trigger
+		// held for a Photon Art; pull the trigger of a hand holding a gun to shoot. A press
+		// made during the swing animation waits for the combo window (vr.comboBuffer). The
+		// first hit of a chain can turn the character toward where you look first
+		// (vr.attackFaceLook): the left stick points there for a few frames.
+		bool s_swingArmed[ 2 ] = { true, true };
+		int s_swingFrames[ 2 ]{};
+		int s_pendingButton = -1;     // pad button waiting for the combo window
+		float s_pendingTime = 0.0f;
+		int s_pendingHand = 1;
+		int s_pulseButton = -1;       // pad button being pressed
+		float s_pulseTime = 0.0f;
+		float s_nudgeTime = 0.0f;     // left stick held toward the look direction
+		constexpr float kSwingRearmSpeed = 0.8f;
+		constexpr float kSwingBufferSeconds = 0.25f;
+		constexpr float kAttackPulseSeconds = 0.08f;
+		constexpr float kNudgeSeconds = 0.06f;
+		constexpr float kFaceToleranceRadians = 20.0f * ( 3.14159265f / 180.0f );
+
+		bool MeleeKind( PSUCombat::WeaponKind kind )
 		{
-			const auto &vr = Config::Get().vr;
-			if( s_attackPulse > 0.0f )
+			return kind == PSUCombat::WeaponKind::Melee1H || kind == PSUCombat::WeaponKind::Melee2H ||
+				kind == PSUCombat::WeaponKind::Twin;
+		}
+
+		// Whether a hand's gestures are melee swings / gun triggers, from both hands' weapons.
+		struct HandRoles
+		{
+			bool swing[ 2 ]{};
+			bool shoot[ 2 ]{};
+		};
+
+		HandRoles Roles()
+		{
+			HandRoles roles;
+			if( !s_combatValid || !Config::Get().vr.m_swingAttack )
 			{
-				s_attackPulse -= dt;
-				return true;
+				return roles;
 			}
-			const ControllerState &right = VRControllers::State( 1 );
-			if( !vr.m_swingAttack || !right.active || !right.velocityValid )
+			const PSUCombat::WeaponKind right = PSUCombat::ClassifyWeapon( s_combat.weaponClass );
+			const PSUCombat::WeaponKind left = PSUCombat::ClassifyWeapon( s_combat.leftClass );
+			roles.swing[ 1 ] = MeleeKind( right );
+			// Two-handed and twin weapons: either hand swings.
+			roles.swing[ 0 ] = right == PSUCombat::WeaponKind::Melee2H || right == PSUCombat::WeaponKind::Twin;
+			roles.shoot[ 0 ] = left == PSUCombat::WeaponKind::Gun1H;
+			return roles;
+		}
+
+		float WrapRadians( float angle )
+		{
+			while( angle > 3.14159265f ) angle -= 6.2831853f;
+			while( angle < -3.14159265f ) angle += 6.2831853f;
+			return angle;
+		}
+
+		// The character faces away from where the player looks (first hit of a chain only).
+		bool NeedsFacing()
+		{
+			if( !Config::Get().vr.m_attackFaceLook || !s_combatValid || s_combat.comboStep > 0 )
 			{
-				s_swingArmed = true;
-				s_swingFrames = 0;
-				s_swingPending = 0.0f;
 				return false;
 			}
-			const float *v = right.linearVelocity;
-			const float speed = std::sqrt( v[ 0 ] * v[ 0 ] + v[ 1 ] * v[ 1 ] + v[ 2 ] * v[ 2 ] );
-			// Presses are early while the swing animation plays (state 0x02).
-			const bool early = s_combatValid && PSUCombat::Swinging( s_combat );
+			float look = 0.0f;
+			if( !VRCamera::LookYaw( look ) )
+			{
+				return false;
+			}
+			const float facing = static_cast< float >( s_combat.facing ) * ( 6.2831853f / 65536.0f );
+			const float off = WrapRadians( look - facing );
+#ifdef _DEBUG
+			PSU_LOG( "VRFace: look %.0f facing %.0f (raw %04X) off %.0f deg\n", look * 57.29578f,
+				facing * 57.29578f, s_combat.facing, off * 57.29578f );
+#endif
+			return std::fabs( off ) > kFaceToleranceRadians;
+		}
 
+		void StartAttack( int button, int hand )
+		{
+			s_lastAttackHand = hand;
+			s_pulseButton = button;
+			s_pulseTime = kAttackPulseSeconds;
+			s_nudgeTime = NeedsFacing() ? kNudgeSeconds : 0.0f;
+		}
+
+		// A gesture asked for `button`: now, or when the combo window opens.
+		void RequestAttack( int button, int hand, const char *what )
+		{
+			const bool early = s_combatValid && PSUCombat::Swinging( s_combat );
+			VRControllers::Haptic( hand, 0.25f, 0.02f );
+			if( early && Config::Get().vr.m_comboBuffer )
+			{
+				s_pendingButton = button;
+				s_pendingHand = hand;
+				s_pendingTime = kSwingBufferSeconds;
+			}
+			else
+			{
+				StartAttack( button, hand );
+			}
+#ifdef _DEBUG
+			PSU_LOG( "VRSwing: %s hand %s -> %s, step %d, %s\n", hand == 0 ? "left" : "right", what,
+				button == kPadY ? "Y (PA)" : ( button == kPadR1 ? "R1 (left weapon)" : "X" ),
+				s_combatValid ? s_combat.comboStep : 0, s_pendingButton >= 0 ? "buffered" : ( early ? "early (sent)" : "sent" ) );
+#endif
+		}
+
+		// Swing detection for one hand: fires once per swing, re-arms when the hand slows.
+		bool Swung( int hand )
+		{
+			const ControllerState &c = VRControllers::State( hand );
+			if( !c.active || !c.velocityValid )
+			{
+				s_swingArmed[ hand ] = true;
+				s_swingFrames[ hand ] = 0;
+				return false;
+			}
+			const float *v = c.linearVelocity;
+			const float speed = std::sqrt( v[ 0 ] * v[ 0 ] + v[ 1 ] * v[ 1 ] + v[ 2 ] * v[ 2 ] );
 			if( speed < kSwingRearmSpeed )
 			{
-				s_swingArmed = true;
-				s_swingFrames = 0;
+				s_swingArmed[ hand ] = true;
+				s_swingFrames[ hand ] = 0;
+				return false;
 			}
-			else if( s_swingArmed && !modifier && speed > vr.m_swingSpeed && ++s_swingFrames >= 2 )
+			if( s_swingArmed[ hand ] && speed > Config::Get().vr.m_swingSpeed && ++s_swingFrames[ hand ] >= 2 )
 			{
-				s_swingArmed = false;
-				VRControllers::Haptic( 1, 0.25f, 0.02f );
-				if( early && vr.m_comboBuffer )
+				s_swingArmed[ hand ] = false;
+				return true;
+			}
+			return false;
+		}
+
+		// Adds the combat presses to the pad. Returns the roles so the caller can keep the
+		// gesture controls (triggers, right grip) from also sending their plain buttons.
+		HandRoles Combat( float dt, bool modifier, PadState &pad )
+		{
+			const HandRoles roles = Roles();
+			const auto &vr = Config::Get().vr;
+			if( !modifier )
+			{
+				for( int hand = 0; hand < 2; ++hand )
 				{
-					s_swingPending = kSwingBufferSeconds;
+					if( roles.swing[ hand ] && Swung( hand ) )
+					{
+						// Photon Art: swing while holding that hand's trigger.
+						const bool pa = vr.m_paGesture && s_triggerDown[ hand ];
+						RequestAttack( pa ? kPadY : kPadX, hand, pa ? "swing+trigger" : "swing" );
+					}
+					else if( !roles.swing[ hand ] )
+					{
+						Swung( hand );  // keep the detector armed state current
+					}
+					if( roles.shoot[ hand ] && ( VRControllers::Pressed( hand ) & kControllerTrigger ) )
+					{
+						RequestAttack( kPadR1, hand, "trigger" );
+					}
 				}
-				else
-				{
-					s_attackPulse = kAttackPulseSeconds;
-				}
-#ifdef _DEBUG
-				PSU_LOG( "VRSwing: %.1f m/s, step %d, %s\n", speed, s_combatValid ? s_combat.comboStep : 0,
-					s_swingPending > 0.0f ? "buffered" : ( early ? "early (sent)" : "sent" ) );
-#endif
 			}
 
-			if( s_swingPending > 0.0f )
+			if( s_pendingButton >= 0 )
 			{
+				const bool early = s_combatValid && PSUCombat::Swinging( s_combat );
 				if( !early )
 				{
-					s_swingPending = 0.0f;
-					s_attackPulse = kAttackPulseSeconds;
-#ifdef _DEBUG
-					PSU_LOG( "VRSwing: buffered swing sent (window %s)\n", s_comboWindow ? "open" : "idle" );
-#endif
+					StartAttack( s_pendingButton, s_pendingHand );
+					s_pendingButton = -1;
 				}
-				else if( ( s_swingPending -= dt ) <= 0.0f )
+				else if( ( s_pendingTime -= dt ) <= 0.0f )
 				{
-					s_swingPending = 0.0f;
+					s_pendingButton = -1;
 #ifdef _DEBUG
-					PSU_LOG( "VRSwing: buffered swing dropped (window didn't open in time)\n" );
+					PSU_LOG( "VRSwing: buffered press dropped (window didn't open in time)\n" );
 #endif
 				}
 			}
-			return s_attackPulse > 0.0f;
+
+			if( s_nudgeTime > 0.0f )
+			{
+				// Turn first: stick toward the look direction (forward in the camera's frame).
+				s_nudgeTime -= dt;
+				pad.lx = 0.0f;
+				pad.ly = 1.0f;
+			}
+			else if( s_pulseTime > 0.0f && s_pulseButton >= 0 )
+			{
+				s_pulseTime -= dt;
+				pad.buttons |= Bit( s_pulseButton );
+				if( s_pulseTime <= 0.0f )
+				{
+					s_pulseButton = -1;
+				}
+			}
+			return roles;
 		}
 
 		using VRMotionLayout::Control;
@@ -452,6 +577,10 @@ namespace PSUVR
 				s_pulse[ 0 ] = s_pulse[ 1 ] = 0.0f;
 				s_dpadMode = false;
 				s_leftClickConsumed = false;
+				s_pendingButton = -1;
+				s_pulseButton = -1;
+				s_pulseTime = 0.0f;
+				s_nudgeTime = 0.0f;
 				std::lock_guard lock( s_mutex );
 				s_active = false;
 				s_out = {};
@@ -496,7 +625,7 @@ namespace PSUVR
 			const bool modifier = s_grip[ 0 ] == Grip::Modifier;
 
 			PadState pad;
-			if( SwingAttack( dt, modifier ) ) pad.buttons |= Bit( kPadX );
+			const HandRoles roles = Roles();
 			if( l1 && !modifier ) pad.buttons |= Bit( kPadL1 );
 			if( r1 && !modifier ) pad.buttons |= Bit( kPadR1 );
 			for( const VRMotionLayout::Entry &entry : VRMotionLayout::kLayout )
@@ -507,6 +636,11 @@ namespace PSUVR
 				}
 				const ControllerState &c = *hands[ entry.hand ];
 				if( entry.hand == 0 && entry.control == Control::StickClick && s_leftClickConsumed )
+				{
+					continue;
+				}
+				// A hand's trigger is its Photon Art modifier (melee) or its gun trigger.
+				if( entry.control == Control::Trigger && ( roles.swing[ entry.hand ] || roles.shoot[ entry.hand ] ) )
 				{
 					continue;
 				}
@@ -538,6 +672,7 @@ namespace PSUVR
 				pad.lx = Deadzone( left.stick[ 0 ], 0.15f );
 				pad.ly = Deadzone( left.stick[ 1 ], 0.15f );
 			}
+			Combat( dt, modifier, pad );
 			pad.rx = Deadzone( right.stick[ 0 ], 0.15f );
 			pad.ry = Deadzone( right.stick[ 1 ], 0.15f );
 

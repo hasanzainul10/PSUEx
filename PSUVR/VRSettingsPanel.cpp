@@ -325,10 +325,16 @@ namespace PSUVR
 			ImGui::Checkbox( "Show controllers and pointer rays", &s.m_showControllers );
 			ImGui::Checkbox( "Buzz when the next combo hit can be pressed", &s.m_comboHaptic );
 			Help( "A short buzz in the right hand the moment the game accepts the next attack of a melee combo." );
-			ImGui::Checkbox( "Swing the right controller to attack", &s.m_swingAttack );
-			Help( "A fast swing presses the attack button (X). Needs 'Play with motion controllers'." );
+			ImGui::Checkbox( "Motion combat (swing / shoot)", &s.m_swingAttack );
+			Help( "Follows what each hand holds: swing a melee hand to attack, pull the trigger of the hand "
+				"holding a gun to shoot. Two-handed and twin weapons swing with either hand. "
+				"Needs 'Play with motion controllers'." );
 			if( s.m_swingAttack )
 			{
+				ImGui::Checkbox( "Swing with the trigger held = Photon Art", &s.m_paGesture );
+				ImGui::Checkbox( "Turn to where I look before attacking", &s.m_attackFaceLook );
+				Help( "If the character faces another way (after strafing or backing up), the first hit "
+					"turns it toward your view first." );
 				ImGui::SliderFloat( "Swing speed (m/s)", &s.m_swingSpeed, 1.0f, 4.0f, "%.1f" );
 				Help( "Lower: gentler swings count. Higher: only big swings count." );
 				ImGui::Checkbox( "Hold early swings for the combo window", &s.m_comboBuffer );

@@ -59,6 +59,9 @@ namespace PSUVR
 		float FirstPersonCameraDistance();
 		// First-person body yaw (game convention, radians); changes only by stick turns.
 		float BodyYaw();
+		// Where the player looks, in the game's yaw convention (atan2(dx, dz) of the camera's
+		// ground forward): body + head yaw in first person, the render camera otherwise.
+		bool LookYaw( float &yaw );
 		// Leash the first-person head to the body: physical lean/crouch beyond
 		// vr.fpLeanLimit / vr.fpCrouchLimit drags the anchor instead of the view.
 		void UpdateFirstPersonAnchor( const EyePose views[ 2 ] );
