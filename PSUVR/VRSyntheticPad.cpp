@@ -5,6 +5,7 @@
 #include "VRMotionLayout.h"
 #include "../Misc/Log.h"
 #include "../PSUExConfig.h"
+#include "../PSUStructs/PSUCombat.h"
 
 #define DIRECTINPUT_VERSION 0x0800
 #include <dinput.h>
@@ -67,6 +68,8 @@ namespace PSUVR
 		float s_gripTime[ 2 ]{};
 		float s_pulse[ 2 ]{};     // short L1 / R1 press left after a quick tap
 		bool s_triggerDown[ 2 ]{};
+		bool s_comboWindow = false;       // last frame's PSUCombat::ComboWindowOpen
+		int s_comboStep = 0;
 		bool s_dpadMode = false;          // left stick sends the D-pad
 		bool s_leftClickConsumed = false; // the stick click toggled the D-pad: no SELECT
 
@@ -152,6 +155,28 @@ namespace PSUVR
 		void Buzz( int hand )
 		{
 			VRControllers::Haptic( hand, 0.5f, 0.04f );
+		}
+
+		// Combo window edges from the player's attack state: a tick in the right hand when
+		// the next hit can be pressed (stronger before the last hit).
+		void ComboFeedback()
+		{
+			PSUCombat::State combat;
+			const bool valid = PSUCombat::Read( combat );
+			const bool open = valid && PSUCombat::ComboWindowOpen( combat );
+			if( open && !s_comboWindow && Config::Get().vr.m_comboHaptic && VRControllers::Active( 1 ) )
+			{
+				VRControllers::Haptic( 1, combat.comboStep >= 2 ? 0.8f : 0.5f, 0.03f );
+			}
+#ifdef _DEBUG
+			if( open != s_comboWindow || ( valid ? combat.comboStep : 0 ) != s_comboStep )
+			{
+				PSU_LOG( "VRCombat: step %d window %s (state 0x%08X%s)\n", valid ? combat.comboStep : 0,
+					open ? "OPEN" : "closed", valid ? combat.attackState : 0u, valid && combat.earlyPress ? ", early press" : "" );
+			}
+#endif
+			s_comboWindow = open;
+			s_comboStep = valid ? combat.comboStep : 0;
 		}
 
 		using VRMotionLayout::Control;
@@ -338,6 +363,8 @@ namespace PSUVR
 		void Update()
 		{
 			const float dt = FrameSeconds();
+			// Also with the gamepad: the buzz needs only an active right controller.
+			ComboFeedback();
 			const bool motion = Config::Get().vr.m_inputMode == "motion";
 			if( !motion || !VRControllers::AnyActive() )
 			{

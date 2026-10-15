@@ -228,6 +228,9 @@
     <ClInclude Include="PSUOverlay\Interface\CameraDisplay.h">
       <Filter>Header Files\PSUOverlay\Interface</Filter>
     </ClInclude>
+    <ClInclude Include="PSUStructs\PSUCombat.h">
+      <Filter>Header Files\PSUStructs</Filter>
+    </ClInclude>
     <ClInclude Include="PSUStructs\PSUPlayerData.h">
       <Filter>Header Files\PSUStructs</Filter>
     </ClInclude>

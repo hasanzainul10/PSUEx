@@ -243,6 +243,7 @@
     <ClInclude Include="PSUStructs\Item.h" />
     <ClInclude Include="PSUStructs\Matrix4x4.hpp" />
     <ClInclude Include="PSUStructs\PSUPlayerData.h" />
+    <ClInclude Include="PSUStructs\PSUCombat.h" />
     <ClInclude Include="PSUStructs\Vector2F.hpp" />
     <ClInclude Include="PSUStructs\Vector3F.hpp" />
     <ClInclude Include="PSUStructs\PSUWorld.hpp" />

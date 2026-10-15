@@ -33,11 +33,12 @@ namespace PSUVR
 			{ "padSlots", 0x00A8DCB0, 0x108 },
 			{ "padMaps", 0x00A8DE00, 0xE0 },
 			{ "input0", 0x00B9CC98, 0x1F8 },
-			{ "inputGlobals", 0x00B9CC78, 0x20 },
+			// 0x00B9CC8C (inputGlobals+0x14) is an idle timer that changes every frame: left out.
+			{ "inputGlobals", 0x00B9CC78, 0x14 },
 		};
 		bool s_watching = false;
 		unsigned s_watchLines = 0;
-		constexpr unsigned kMaxWatchLines = 600;
+		constexpr unsigned kMaxWatchLines = 3000;
 
 		std::vector< uint8_t > s_playerSnapshot;
 		uintptr_t s_playerSnapshotAddress = 0;
@@ -79,6 +80,30 @@ namespace PSUVR
 			return f;
 		}
 
+		// Logical pad bits (0x00870518) as names, for the padState held words.
+		void BitNames( uint32_t bits, char *out, size_t size )
+		{
+			static const struct { uint32_t bit; const char *name; } kBits[] = {
+				{ 0x1, "A" }, { 0x2, "B" }, { 0x4, "X" }, { 0x8, "Y" }, { 0x10, "L1" }, { 0x20, "R1" },
+				{ 0x40, "SELECT" }, { 0x80, "START" }, { 0x100, "L2" }, { 0x200, "R2" }, { 0x400, "L3" },
+				{ 0x800, "R3" }, { 0x10000000, "U" }, { 0x20000000, "D" }, { 0x40000000, "L" }, { 0x80000000, "R" } };
+			out[ 0 ] = '\0';
+			for( const auto &entry : kBits )
+			{
+				if( bits & entry.bit )
+				{
+					strcat_s( out, size, entry.name );
+					strcat_s( out, size, " " );
+				}
+			}
+			if( bits & ~0xF0000FFFu )
+			{
+				char extra[ 24 ];
+				sprintf_s( extra, "other=%08X", bits & ~0xF0000FFFu );
+				strcat_s( out, size, extra );
+			}
+		}
+
 		bool KeyEdge( int key, bool &previous )
 		{
 			const bool ctrl = ( GetAsyncKeyState( VK_CONTROL ) & 0x8000 ) != 0;
@@ -96,6 +121,120 @@ namespace PSUVR
 				return 0;
 			}
 			return *reinterpret_cast< const uintptr_t * >( table );
+		}
+
+		// Live player struct watch: offsets that change during the first kCalibrationFrames
+		// (stand still) are muted, so what is left is what an action changes, frame by frame.
+		std::vector< uint8_t > s_playerLast;
+		std::vector< bool > s_playerMuted;
+		uintptr_t s_playerWatchAddress = 0;
+		unsigned s_calibrationFrames = 0;
+		constexpr unsigned kCalibrationFrames = 120;
+
+		void ResetPlayerWatch()
+		{
+			s_playerLast.clear();
+			s_playerMuted.assign( kPlayerBytes / 4, false );
+			s_playerWatchAddress = 0;
+			s_calibrationFrames = 0;
+		}
+
+		bool AlwaysMuted( size_t offset )
+		{
+			// Rotation matrices (+0x40..+0xBF), position (+0x114..+0x11F), facing (+0x124, +0xD0C).
+			return ( offset >= 0x40 && offset < 0xC0 ) || ( offset >= 0x114 && offset < 0x120 ) ||
+				offset == 0x124 || offset == 0xD0C;
+		}
+
+		// player+0x87C switches to a new object on each attack press and back to an idle one
+		// afterwards: log each new object's first 0x80 bytes (vtable first), then its changes.
+		uintptr_t s_actionObject = 0;
+		std::vector< uint8_t > s_actionLast;
+		constexpr size_t kActionBytes = 0x200;
+
+		void WatchActionObject( DWORD tick, uintptr_t object )
+		{
+			std::vector< uint8_t > now;
+			if( !object || !Copy( object, kActionBytes, now ) )
+			{
+				s_actionObject = 0;
+				return;
+			}
+			if( object != s_actionObject )
+			{
+				PSU_LOG( "Probe %lu action object 0x%08X -> 0x%08X:\n", tick, static_cast< unsigned >( s_actionObject ),
+					static_cast< unsigned >( object ) );
+				for( size_t row = 0; row < 0x80 && s_watchLines < kMaxWatchLines; row += 0x20 )
+				{
+					++s_watchLines;
+					PSU_LOG( "  +0x%02X: %08X %08X %08X %08X %08X %08X %08X %08X\n", static_cast< unsigned >( row ),
+						Dword( now, row ), Dword( now, row + 4 ), Dword( now, row + 8 ), Dword( now, row + 12 ),
+						Dword( now, row + 16 ), Dword( now, row + 20 ), Dword( now, row + 24 ), Dword( now, row + 28 ) );
+				}
+				s_actionObject = object;
+				s_actionLast = std::move( now );
+				return;
+			}
+			for( size_t offset = 0; offset + 4 <= now.size(); offset += 4 )
+			{
+				const uint32_t before = Dword( s_actionLast, offset );
+				const uint32_t after = Dword( now, offset );
+				if( before != after && s_watchLines < kMaxWatchLines )
+				{
+					++s_watchLines;
+					PSU_LOG( "Probe %lu action+0x%03X: %08X -> %08X (float %.3f)\n", tick,
+						static_cast< unsigned >( offset ), before, after, AsFloat( after ) );
+				}
+			}
+			s_actionLast = std::move( now );
+		}
+
+		void WatchPlayer( DWORD tick )
+		{
+			const uintptr_t player = LocalPlayer();
+			std::vector< uint8_t > now;
+			if( !player || !Copy( player, kPlayerBytes, now ) )
+			{
+				return;
+			}
+			if( player != s_playerWatchAddress || s_playerLast.size() != now.size() )
+			{
+				ResetPlayerWatch();
+				s_playerWatchAddress = player;
+				s_playerLast = std::move( now );
+				return;
+			}
+			const bool calibrating = s_calibrationFrames < kCalibrationFrames;
+			for( size_t offset = 0; offset + 4 <= now.size(); offset += 4 )
+			{
+				const uint32_t before = Dword( s_playerLast, offset );
+				const uint32_t after = Dword( now, offset );
+				if( before == after || AlwaysMuted( offset ) )
+				{
+					continue;
+				}
+				if( calibrating )
+				{
+					s_playerMuted[ offset / 4 ] = true;
+				}
+				else if( !s_playerMuted[ offset / 4 ] && s_watchLines < kMaxWatchLines )
+				{
+					++s_watchLines;
+					PSU_LOG( "Probe %lu player+0x%03X: %08X -> %08X (float %.3f)\n", tick,
+						static_cast< unsigned >( offset ), before, after, AsFloat( after ) );
+				}
+			}
+			WatchActionObject( tick, Dword( now, 0x87C ) );
+			if( calibrating && ++s_calibrationFrames == kCalibrationFrames )
+			{
+				unsigned muted = 0;
+				for( bool m : s_playerMuted )
+				{
+					muted += m ? 1 : 0;
+				}
+				PSU_LOG( "Probe: player watch ready (%u noisy dwords muted) - do the actions now\n", muted );
+			}
+			s_playerLast = std::move( now );
 		}
 
 		void WatchFrame()
@@ -118,14 +257,21 @@ namespace PSUVR
 						if( before != after && s_watchLines < kMaxWatchLines )
 						{
 							++s_watchLines;
-							PSU_LOG( "Probe %lu %s+0x%03X (0x%08X): %08X -> %08X\n", tick, region.name,
-								static_cast< unsigned >( offset ), static_cast< unsigned >( region.address + offset ), before, after );
+							char names[ 96 ] = "";
+							// padState: the held word of each pad (+0, +0x24).
+							if( region.address == 0x00A8DDB8 && offset % 0x24 == 0 )
+							{
+								BitNames( after, names, sizeof( names ) );
+							}
+							PSU_LOG( "Probe %lu %s+0x%03X (0x%08X): %08X -> %08X %s\n", tick, region.name,
+								static_cast< unsigned >( offset ), static_cast< unsigned >( region.address + offset ), before, after, names );
 						}
 					}
 				}
 				region.last = std::move( now );
 				region.valid = true;
 			}
+			WatchPlayer( tick );
 			if( s_watchLines == kMaxWatchLines )
 			{
 				++s_watchLines;
@@ -189,7 +335,9 @@ namespace PSUVR
 				{
 					region.valid = false;
 				}
-				PSU_LOG( "Probe: input watch %s\n", s_watching ? "on" : "off" );
+				ResetPlayerWatch();
+				PSU_LOG( "Probe: input watch %s%s\n", s_watching ? "on" : "off",
+					s_watching ? " (stand still ~2 s while the player watch calibrates)" : "" );
 			}
 			if( KeyEdge( VK_F12, s_prevF12 ) )
 			{

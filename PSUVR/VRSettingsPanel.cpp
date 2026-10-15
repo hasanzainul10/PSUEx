@@ -323,6 +323,8 @@ namespace PSUVR
 				ImGui::TextDisabled( "Motion controllers: %s (applies when the game starts)", motion ? "on" : "off" );
 			}
 			ImGui::Checkbox( "Show controllers and pointer rays", &s.m_showControllers );
+			ImGui::Checkbox( "Buzz when the next combo hit can be pressed", &s.m_comboHaptic );
+			Help( "A short buzz in the right hand the moment the game accepts the next attack of a melee combo." );
 			static const char *const profileIds[] = { "psvr2", "generic" };
 			static const char *const profileNames[] = { "PlayStation VR2 Sense", "Other (Touch, Index, ...)" };
 			Combo( "Controllers", s.m_motionProfile, profileIds, profileNames, 2 );

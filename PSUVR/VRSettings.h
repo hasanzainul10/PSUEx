@@ -112,6 +112,8 @@ struct VRSettings
 	bool m_showControllers = true;
 	// Button names in the controller layout picture: "psvr2" (Sense) or "generic" (A/B/X/Y).
 	std::string m_motionProfile = "psvr2";
+	// Buzz the right controller when the game's combo window opens (melee).
+	bool m_comboHaptic = true;
 	// 0..1 how far the vignette closes in at full motion.
 	float m_vignetteStrength = 0.7f;
 	// Render the 3D pass per eye (projection layer) with the game frame as a panel.
