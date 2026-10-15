@@ -76,6 +76,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="..\..\PSUVR\VRSettings.cpp" />
     <ClCompile Include="..\..\PSUVR\VRSettingsPanel.cpp" />
+    <ClCompile Include="..\..\PSUVR\VRControllerDiagram.cpp" />
     <ClCompile Include="..\..\PSUVR\VRGamepad.cpp" />
     <ClCompile Include="..\..\ImGui\imgui.cpp" />
     <ClCompile Include="..\..\ImGui\imgui_draw.cpp" />
@@ -87,6 +88,8 @@
   <ItemGroup>
     <ClInclude Include="..\..\PSUVR\VRSettings.h" />
     <ClInclude Include="..\..\PSUVR\VRSettingsPanel.h" />
+    <ClInclude Include="..\..\PSUVR\VRControllerDiagram.h" />
+    <ClInclude Include="..\..\PSUVR\VRMotionLayout.h" />
     <ClInclude Include="..\..\PSUVR\VRGamepad.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -270,10 +270,19 @@
     <ClInclude Include="PSUVR\VRSettingsPanel.h">
       <Filter>Header Files\PSUVR</Filter>
     </ClInclude>
+    <ClInclude Include="PSUVR\VRControllerDiagram.h">
+      <Filter>Header Files\PSUVR</Filter>
+    </ClInclude>
+    <ClInclude Include="PSUVR\VRMotionLayout.h">
+      <Filter>Header Files\PSUVR</Filter>
+    </ClInclude>
     <ClInclude Include="PSUVR\VRBindings.h">
       <Filter>Header Files\PSUVR</Filter>
     </ClInclude>
     <ClInclude Include="PSUVR\VRControllers.h">
+      <Filter>Header Files\PSUVR</Filter>
+    </ClInclude>
+    <ClInclude Include="PSUVR\VRSyntheticPad.h">
       <Filter>Header Files\PSUVR</Filter>
     </ClInclude>
     <ClInclude Include="PSUOverlay\Interface\VRDisplay.h">
@@ -425,10 +434,16 @@
     <ClCompile Include="PSUVR\VRSettingsPanel.cpp">
       <Filter>Source Files\PSUVR</Filter>
     </ClCompile>
+    <ClCompile Include="PSUVR\VRControllerDiagram.cpp">
+      <Filter>Source Files\PSUVR</Filter>
+    </ClCompile>
     <ClCompile Include="PSUVR\VRBindings.cpp">
       <Filter>Source Files\PSUVR</Filter>
     </ClCompile>
     <ClCompile Include="PSUVR\VRControllers.cpp">
+      <Filter>Source Files\PSUVR</Filter>
+    </ClCompile>
+    <ClCompile Include="PSUVR\VRSyntheticPad.cpp">
       <Filter>Source Files\PSUVR</Filter>
     </ClCompile>
     <ClCompile Include="PSUOverlay\Interface\VRDisplay.cpp">

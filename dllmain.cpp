@@ -2,6 +2,7 @@
 #include "ExceptionHandler.h"
 #include "Misc/Log.h"
 #include "PSUVR/VRSystem.h"
+#include "PSUVR/VRSyntheticPad.h"
 
 // online.exe injects its own PSUEx.dll into PSUC (and its updater rewrites that file on every
 // launch); two copies would hook everything twice. This build ships as PSUExVR.dll (release)
@@ -19,6 +20,14 @@ extern "C" __declspec( dllexport ) const char *PSUEx_LogTail()
 extern "C" __declspec( dllexport ) int PSUEx_LogFileOpen()
 {
 	return PSULog::g_fileOpened ? 1 : 0;
+}
+
+// Called by the dinput8 loader after the game reads its gamepad (DIJOYSTATE2): merges the
+// motion controllers' virtual pad (vr.inputMode "motion"). 1 = merged.
+extern "C" __declspec( dllexport ) int PSUEx_MergeJoystickState( void *state, unsigned size,
+	const long *axisMin, const long *axisMax, int replace )
+{
+	return PSUVR::VRSyntheticPad::MergeJoystickState( state, size, axisMin, axisMax, replace != 0 ) ? 1 : 0;
 }
 static bool s_hooked = false;
 static decltype( &LoadLibraryA ) Original_LoadLibraryA = LoadLibraryA;

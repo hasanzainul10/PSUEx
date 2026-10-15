@@ -110,6 +110,8 @@ struct VRSettings
 	bool m_comfortVignette = false;
 	// Motion controllers: draw a marker and pointer ray at each tracked controller.
 	bool m_showControllers = true;
+	// Button names in the controller layout picture: "psvr2" (Sense) or "generic" (A/B/X/Y).
+	std::string m_motionProfile = "psvr2";
 	// 0..1 how far the vignette closes in at full motion.
 	float m_vignetteStrength = 0.7f;
 	// Render the 3D pass per eye (projection layer) with the game frame as a panel.

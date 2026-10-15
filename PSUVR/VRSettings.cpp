@@ -55,6 +55,7 @@ namespace
 	X( m_snapTurn, "snapTurn" ) \
 	X( m_comfortVignette, "comfortVignette" ) \
 	X( m_showControllers, "showControllers" ) \
+	X( m_motionProfile, "motionProfile" ) \
 	X( m_vignetteStrength, "vignetteStrength" ) \
 	X( m_stereo, "stereo" ) \
 	X( m_stereoMode, "stereoMode" ) \

@@ -1,5 +1,7 @@
 #include "VRSettingsPanel.h"
 
+#include "VRControllerDiagram.h"
+
 #include "VRGamepad.h"
 
 #include <imgui.h>
@@ -307,10 +309,28 @@ namespace PSUVR
 			ImGui::SliderFloat( "Vignette strength", &s.m_vignetteStrength, 0.0f, 1.0f, "%.2f" );
 		}
 
-		if( ImGui::CollapsingHeader( "Motion controllers" ) )
+		if( ImGui::CollapsingHeader( "Motion controllers", ImGuiTreeNodeFlags_DefaultOpen ) )
 		{
-			ImGui::TextDisabled( "Preview: controllers are tracked and shown; gameplay still uses the gamepad." );
+			bool motion = s.m_inputMode == "motion";
+			if( ImGui::Checkbox( "Play with motion controllers", &motion ) )
+			{
+				s.m_inputMode = motion ? "motion" : "gamepad";
+			}
+			Help( "The VR controllers act as a gamepad (a connected gamepad keeps working too). "
+				"See Controller layout below for every button." );
+			if( !context.inGame )
+			{
+				ImGui::TextDisabled( "Motion controllers: %s (applies when the game starts)", motion ? "on" : "off" );
+			}
 			ImGui::Checkbox( "Show controllers and pointer rays", &s.m_showControllers );
+			static const char *const profileIds[] = { "psvr2", "generic" };
+			static const char *const profileNames[] = { "PlayStation VR2 Sense", "Other (Touch, Index, ...)" };
+			Combo( "Controllers", s.m_motionProfile, profileIds, profileNames, 2 );
+			if( ImGui::TreeNodeEx( "Controller layout", context.inGame ? 0 : ImGuiTreeNodeFlags_DefaultOpen ) )
+			{
+				DrawControllerDiagram( s.m_motionProfile );
+				ImGui::TreePop();
+			}
 		}
 
 		if( ImGui::CollapsingHeader( "Controls", ImGuiTreeNodeFlags_DefaultOpen ) )

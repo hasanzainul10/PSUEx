@@ -8,6 +8,7 @@
 #include "VRBindings.h"
 #include "VRCamera.h"
 #include "VRControllers.h"
+#include "VRSyntheticPad.h"
 #include "VRHud.h"
 #include "../Misc/Log.h"
 #include "../PSUExConfig.h"
@@ -337,11 +338,13 @@ namespace PSUVR
 			// Controllers for the same display time as those views.
 			m_xr->UpdateInput();
 			VRControllers::Update( m_xr );
+			VRSyntheticPad::Update();
 
 			// VR shortcuts (rebindable keys and Back+button pad chords, see VRBindings).
 			DWORD foregroundPid = 0;
 			GetWindowThreadProcessId( GetForegroundWindow(), &foregroundPid );
-			const unsigned actions = VRBindings::Poll( foregroundPid == GetCurrentProcessId() );
+			const unsigned actions = VRBindings::Poll( foregroundPid == GetCurrentProcessId() ) |
+				VRSyntheticPad::TakeActions();
 			if( ( actions & VRBindings::Bit( VRAction::Recenter ) ) && m_haveNextViews )
 			{
 				VRCamera::Recenter( m_nextViews );

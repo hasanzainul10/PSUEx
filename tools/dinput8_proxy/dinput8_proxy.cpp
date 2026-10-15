@@ -4,7 +4,8 @@
  * build (PSUExD.dll), then the VR release (PSUExVR.dll), then Clementine's own PSUEx.dll
  * (its launcher re-downloads that file on every start, so PSUEx VR can't use that name).
  * With VR on, also keeps the gamepad (and optionally the keyboard) working while the
- * game window is not focused (psuex_vr.json: backgroundInput / backgroundKeyboard).
+ * game window is not focused (psuex_vr.json: backgroundInput / backgroundKeyboard), and
+ * merges PSUEx's motion-controller virtual pad into the gamepad state the game reads.
  */
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -164,6 +165,133 @@ IsVRController( const char *name )
 	return false;
 }
 
+// --- Motion-controller virtual pad ---------------------------------------------------
+
+// The game creates its gamepads in enumeration order; the first one created after it
+// enumerates is its pad 1 ([gamepad1]), the one the virtual pad is merged into.
+static void *g_gamePad = nullptr;
+static bool g_gamePadIsVR = false;
+static bool g_padSlotOpen = true;
+static bool g_padRangesRead = false;
+static LONG g_axisMin[ 8 ]{};
+static LONG g_axisMax[ 8 ]{};
+
+using MergeJoystickState_t = int ( * )( void *, unsigned, const long *, const long *, int );
+static MergeJoystickState_t g_merge = nullptr;
+static bool g_mergeResolved = false;
+
+static void
+ResetGamePad()
+{
+	g_padSlotOpen = true;
+}
+
+template< typename Device, typename Instance >
+static void
+NoteCreatedDevice( Device *device )
+{
+	Instance instance{};
+	instance.dwSize = sizeof( instance );
+	if( FAILED( device->GetDeviceInfo( &instance ) ) )
+	{
+		return;
+	}
+	const DWORD type = GET_DIDEVICE_TYPE( instance.dwDevType );
+	if( type == DI8DEVTYPE_KEYBOARD || type == DI8DEVTYPE_MOUSE || !g_padSlotOpen )
+	{
+		return;
+	}
+	g_padSlotOpen = false;
+	g_gamePad = device;
+	g_padRangesRead = false;
+	char name[ 128 ]{};
+	ProductName( instance, name, sizeof( name ) );
+	g_gamePadIsVR = IsVRController( name );
+	char msg[ 220 ];
+	sprintf_s( msg, "Game pad 1: %s%s", name, g_gamePadIsVR ? " (VR controller: motion input replaces it)" : "" );
+	Log( msg );
+}
+
+// Axis ranges of lX..lRz and the two sliders, as the game set them up.
+template< typename Device >
+static void
+ReadAxisRanges( Device *device )
+{
+	static const DWORD kOffsets[ 8 ] = { DIJOFS_X, DIJOFS_Y, DIJOFS_Z, DIJOFS_RX, DIJOFS_RY, DIJOFS_RZ,
+		DIJOFS_SLIDER( 0 ), DIJOFS_SLIDER( 1 ) };
+	for( int i = 0; i < 8; ++i )
+	{
+		DIPROPRANGE range{};
+		range.diph.dwSize = sizeof( range );
+		range.diph.dwHeaderSize = sizeof( range.diph );
+		range.diph.dwObj = kOffsets[ i ];
+		range.diph.dwHow = DIPH_BYOFFSET;
+		if( SUCCEEDED( device->GetProperty( DIPROP_RANGE, &range.diph ) ) && range.lMax > range.lMin )
+		{
+			g_axisMin[ i ] = range.lMin;
+			g_axisMax[ i ] = range.lMax;
+		}
+		else
+		{
+			g_axisMin[ i ] = 0;
+			g_axisMax[ i ] = 65535;
+		}
+	}
+	g_padRangesRead = true;
+	char msg[ 160 ];
+	sprintf_s( msg, "Game pad 1 axis range X %ld..%ld, Rx %ld..%ld", g_axisMin[ 0 ], g_axisMax[ 0 ], g_axisMin[ 3 ], g_axisMax[ 3 ] );
+	Log( msg );
+}
+
+template< typename Device, typename Fn >
+static HRESULT
+GetDeviceStateMerged( Fn original, Device *self, DWORD size, LPVOID data )
+{
+	HRESULT hr = original( self, size, data );
+	if( self != g_gamePad || size != sizeof( DIJOYSTATE2 ) || !data || !g_psuex )
+	{
+		return hr;
+	}
+	if( !g_mergeResolved )
+	{
+		g_mergeResolved = true;
+		g_merge = reinterpret_cast< MergeJoystickState_t >( GetProcAddress( g_psuex, "PSUEx_MergeJoystickState" ) );
+		Log( g_merge ? "Motion-controller pad merge available" : "PSUEx has no PSUEx_MergeJoystickState (motion pad off)" );
+	}
+	if( !g_merge )
+	{
+		return hr;
+	}
+	if( !g_padRangesRead )
+	{
+		ReadAxisRanges( self );
+	}
+	// A failed read (device lost / not acquired) still carries the virtual pad.
+	const bool replace = g_gamePadIsVR || FAILED( hr );
+	if( g_merge( data, size, g_axisMin, g_axisMax, replace ? 1 : 0 ) && FAILED( hr ) )
+	{
+		hr = DI_OK;
+	}
+	return hr;
+}
+
+using GetDeviceStateA_t = HRESULT( STDMETHODCALLTYPE * )( IDirectInputDevice8A *, DWORD, LPVOID );
+using GetDeviceStateW_t = HRESULT( STDMETHODCALLTYPE * )( IDirectInputDevice8W *, DWORD, LPVOID );
+static GetDeviceStateA_t g_realGetStateA = nullptr;
+static GetDeviceStateW_t g_realGetStateW = nullptr;
+
+static HRESULT STDMETHODCALLTYPE
+GetDeviceStateA_Hook( IDirectInputDevice8A *self, DWORD size, LPVOID data )
+{
+	return GetDeviceStateMerged( g_realGetStateA, self, size, data );
+}
+
+static HRESULT STDMETHODCALLTYPE
+GetDeviceStateW_Hook( IDirectInputDevice8W *self, DWORD size, LPVOID data )
+{
+	return GetDeviceStateMerged( g_realGetStateW, self, size, data );
+}
+
 template< typename Instance >
 struct DeviceList
 {
@@ -199,6 +327,10 @@ EnumGamepadsFirst( HRESULT( STDMETHODCALLTYPE *original )( Interface *, DWORD, C
 {
 	// Without this the game would never see the gamepad when it asks for joysticks only.
 	const DWORD queryType = ( devType == DI8DEVTYPE_JOYSTICK ) ? DI8DEVCLASS_GAMECTRL : devType;
+	if( queryType == DI8DEVCLASS_GAMECTRL )
+	{
+		ResetGamePad();
+	}
 
 	DeviceList< Instance > list;
 	const HRESULT hr = original( self, queryType, &CollectDevice< Instance >, &list, flags );
@@ -479,8 +611,9 @@ PatchSlot( void *object, int slot, Fn hook, Fn &original )
 	}
 }
 
-// IDirectInputDevice8 vtable: 8 = Unacquire, 13 = SetCooperativeLevel.
+// IDirectInputDevice8 vtable: 8 = Unacquire, 9 = GetDeviceState, 13 = SetCooperativeLevel.
 constexpr int kUnacquireSlot = 8;
+constexpr int kGetDeviceStateSlot = 9;
 constexpr int kSetCooperativeLevelSlot = 13;
 // IDirectInput8 vtable: 3 = CreateDevice.
 constexpr int kCreateDeviceSlot = 3;
@@ -496,8 +629,13 @@ CreateDeviceA_Hook( IDirectInput8A *self, REFGUID guid, LPDIRECTINPUTDEVICE8A *d
 	const HRESULT hr = g_realCreateDeviceA( self, guid, device, outer );
 	if( SUCCEEDED( hr ) && device && *device )
 	{
-		PatchSlot< SetCoopA_t >( *device, kSetCooperativeLevelSlot, &SetCooperativeLevelA_Hook, g_realSetCoopA );
-		PatchSlot< UnacquireA_t >( *device, kUnacquireSlot, &UnacquireA_Hook, g_realUnacquireA );
+		if( g_backgroundPad || g_backgroundKeyboard )
+		{
+			PatchSlot< SetCoopA_t >( *device, kSetCooperativeLevelSlot, &SetCooperativeLevelA_Hook, g_realSetCoopA );
+			PatchSlot< UnacquireA_t >( *device, kUnacquireSlot, &UnacquireA_Hook, g_realUnacquireA );
+		}
+		NoteCreatedDevice< IDirectInputDevice8A, DIDEVICEINSTANCEA >( *device );
+		PatchSlot< GetDeviceStateA_t >( *device, kGetDeviceStateSlot, &GetDeviceStateA_Hook, g_realGetStateA );
 	}
 	return hr;
 }
@@ -508,8 +646,13 @@ CreateDeviceW_Hook( IDirectInput8W *self, REFGUID guid, LPDIRECTINPUTDEVICE8W *d
 	const HRESULT hr = g_realCreateDeviceW( self, guid, device, outer );
 	if( SUCCEEDED( hr ) && device && *device )
 	{
-		PatchSlot< SetCoopW_t >( *device, kSetCooperativeLevelSlot, &SetCooperativeLevelW_Hook, g_realSetCoopW );
-		PatchSlot< UnacquireW_t >( *device, kUnacquireSlot, &UnacquireW_Hook, g_realUnacquireW );
+		if( g_backgroundPad || g_backgroundKeyboard )
+		{
+			PatchSlot< SetCoopW_t >( *device, kSetCooperativeLevelSlot, &SetCooperativeLevelW_Hook, g_realSetCoopW );
+			PatchSlot< UnacquireW_t >( *device, kUnacquireSlot, &UnacquireW_Hook, g_realUnacquireW );
+		}
+		NoteCreatedDevice< IDirectInputDevice8W, DIDEVICEINSTANCEW >( *device );
+		PatchSlot< GetDeviceStateW_t >( *device, kGetDeviceStateSlot, &GetDeviceStateW_Hook, g_realGetStateW );
 	}
 	return hr;
 }
@@ -533,7 +676,7 @@ DirectInput8Create( HINSTANCE hinst, DWORD dwVersion, REFIID riidltf, LPVOID *pp
 		if( IsEqualIID( riidltf, IID_IDirectInput8A ) )
 		{
 			PatchEnumDevices< EnumDevicesA_t >( *ppvOut, &EnumDevicesA_Hook, g_realEnumA );
-			if( g_backgroundPad || g_backgroundKeyboard )
+			if( g_backgroundPad || g_backgroundKeyboard || g_psuex )
 			{
 				PatchSlot< CreateDeviceA_t >( *ppvOut, kCreateDeviceSlot, &CreateDeviceA_Hook, g_realCreateDeviceA );
 			}
@@ -541,7 +684,7 @@ DirectInput8Create( HINSTANCE hinst, DWORD dwVersion, REFIID riidltf, LPVOID *pp
 		else if( IsEqualIID( riidltf, IID_IDirectInput8W ) )
 		{
 			PatchEnumDevices< EnumDevicesW_t >( *ppvOut, &EnumDevicesW_Hook, g_realEnumW );
-			if( g_backgroundPad || g_backgroundKeyboard )
+			if( g_backgroundPad || g_backgroundKeyboard || g_psuex )
 			{
 				PatchSlot< CreateDeviceW_t >( *ppvOut, kCreateDeviceSlot, &CreateDeviceW_Hook, g_realCreateDeviceW );
 			}
