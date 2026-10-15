@@ -8,6 +8,7 @@
 #include "VRBindings.h"
 #include "VRCamera.h"
 #include "VRControllers.h"
+#include "VRProbe.h"
 #include "VRSyntheticPad.h"
 #include "VRHud.h"
 #include "../Misc/Log.h"
@@ -316,6 +317,7 @@ namespace PSUVR
 
 	void System::OnPresentSubmit()
 	{
+		VRProbe::Update();
 		if( !m_enabled || m_d3d9exOnly )
 		{
 			return;
