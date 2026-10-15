@@ -108,10 +108,11 @@ const char *VRActionLabel( VRAction action )
 std::array< VRBinding, kVRActionCount > DefaultVRBindings()
 {
 	std::array< VRBinding, kVRActionCount > bindings{};
-	bindings[ static_cast< int >( VRAction::Recenter ) ] = { VK_F9, XINPUT_GAMEPAD_X };
-	bindings[ static_cast< int >( VRAction::ToggleCameraMode ) ] = { VK_F7, XINPUT_GAMEPAD_Y };
-	bindings[ static_cast< int >( VRAction::ToggleSettings ) ] = { VK_F10, XINPUT_GAMEPAD_START };
-	bindings[ static_cast< int >( VRAction::TogglePause ) ] = { VK_F8, 0 };
+	// Ctrl+F-keys: the game itself uses F1-F7 (main menu shortcuts) and others.
+	bindings[ static_cast< int >( VRAction::Recenter ) ] = { VK_F9, XINPUT_GAMEPAD_X, kVRModCtrl };
+	bindings[ static_cast< int >( VRAction::ToggleCameraMode ) ] = { VK_F7, XINPUT_GAMEPAD_Y, kVRModCtrl };
+	bindings[ static_cast< int >( VRAction::ToggleSettings ) ] = { VK_F10, XINPUT_GAMEPAD_START, kVRModCtrl };
+	bindings[ static_cast< int >( VRAction::TogglePause ) ] = { VK_F8, 0, kVRModCtrl };
 	return bindings;
 }
 
@@ -138,6 +139,10 @@ bool LoadVRSettingsJson( VRSettings &settings, const std::string &jsonText )
 			const json &entry = bindings[ kActionKeys[ i ] ];
 			if( entry.contains( "key" ) && entry[ "key" ].is_number_integer() )
 				settings.m_bindings[ i ].key = entry[ "key" ].get< int >();
+			// Older files have no "mods": plain key.
+			settings.m_bindings[ i ].mods = 0;
+			if( entry.contains( "mods" ) && entry[ "mods" ].is_number_integer() )
+				settings.m_bindings[ i ].mods = static_cast< uint8_t >( entry[ "mods" ].get< int >() );
 			if( entry.contains( "pad" ) && entry[ "pad" ].is_number_integer() )
 				settings.m_bindings[ i ].pad = static_cast< uint16_t >( entry[ "pad" ].get< int >() );
 		}
@@ -155,7 +160,8 @@ std::string SaveVRSettingsJson( const VRSettings &settings )
 	json bindings = json::object();
 	for( int i = 0; i < kVRActionCount; ++i )
 	{
-		bindings[ kActionKeys[ i ] ] = { { "key", settings.m_bindings[ i ].key }, { "pad", settings.m_bindings[ i ].pad } };
+		bindings[ kActionKeys[ i ] ] = { { "key", settings.m_bindings[ i ].key }, { "mods", settings.m_bindings[ i ].mods },
+			{ "pad", settings.m_bindings[ i ].pad } };
 	}
 	node[ "bindings" ] = bindings;
 	return node.dump( 4 );

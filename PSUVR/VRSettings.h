@@ -21,12 +21,20 @@ enum class VRAction : int
 
 constexpr int kVRActionCount = static_cast< int >( VRAction::Count );
 
-// key: Win32 virtual-key code (0 = none). pad: XInput button mask pressed while
-// Back/Select is held (0 = none).
+// key: Win32 virtual-key code (0 = none), with the exact modifiers in mods. pad: XInput
+// button mask pressed while Back/Select is held (0 = none).
+enum VRKeyMod : uint8_t
+{
+	kVRModCtrl = 1,
+	kVRModShift = 2,
+	kVRModAlt = 4,
+};
+
 struct VRBinding
 {
 	int key = 0;
 	uint16_t pad = 0;
+	uint8_t mods = 0;
 };
 
 const char *VRActionLabel( VRAction action );

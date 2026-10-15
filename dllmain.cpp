@@ -3,8 +3,23 @@
 #include "Misc/Log.h"
 #include "PSUVR/VRSystem.h"
 
-// online.exe injects its own PSUEx.dll into PSUC; two copies would hook everything twice.
+// online.exe injects its own PSUEx.dll into PSUC (and its updater rewrites that file on every
+// launch); two copies would hook everything twice. This build ships as PSUExVR.dll (release)
+// or PSUExD.dll (debug) so the updater leaves it alone.
 static HMODULE s_selfModule = nullptr;
+
+// Read by the dinput8 loader: everything PSUEx logged recently, so it reaches
+// dinput8_proxy.log even when psuex.log can't be written.
+extern "C" __declspec( dllexport ) const char *PSUEx_LogTail()
+{
+	return PSULog::g_tail;
+}
+
+// Read by the dinput8 loader: whether psuex.log is being written (if so, no copy needed).
+extern "C" __declspec( dllexport ) int PSUEx_LogFileOpen()
+{
+	return PSULog::g_fileOpened ? 1 : 0;
+}
 static bool s_hooked = false;
 static decltype( &LoadLibraryA ) Original_LoadLibraryA = LoadLibraryA;
 static decltype( &LoadLibraryW ) Original_LoadLibraryW = LoadLibraryW;
@@ -14,7 +29,8 @@ static decltype( &LoadLibraryExW ) Original_LoadLibraryExW = LoadLibraryExW;
 static bool
 IsPSUExName( const char *base )
 {
-	return _stricmp( base, "PSUEx.dll" ) == 0 || _stricmp( base, "PSUExD.dll" ) == 0;
+	return _stricmp( base, "PSUEx.dll" ) == 0 || _stricmp( base, "PSUExD.dll" ) == 0 ||
+		_stricmp( base, "PSUExVR.dll" ) == 0;
 }
 
 static bool
@@ -89,7 +105,7 @@ Hook_LoadLibraryExW( LPCWSTR path, HANDLE file, DWORD flags )
 static HMODULE
 FindOtherPSUEx()
 {
-	for( const char *name : { "PSUEx.dll", "PSUExD.dll" } )
+	for( const char *name : { "PSUEx.dll", "PSUExD.dll", "PSUExVR.dll" } )
 	{
 		HMODULE module = GetModuleHandleA( name );
 		if( module && module != s_selfModule )

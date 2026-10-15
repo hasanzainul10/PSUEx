@@ -1,6 +1,8 @@
 /*
  * Win32 dinput8.dll proxy for Clementine PSUC.exe.
- * Forwards DirectInput8Create to SysWOW64\dinput8.dll and LoadLibrary's PSUEx.
+ * Forwards DirectInput8Create to SysWOW64\dinput8.dll and LoadLibrary's PSUEx: the debug
+ * build (PSUExD.dll), then the VR release (PSUExVR.dll), then Clementine's own PSUEx.dll
+ * (its launcher re-downloads that file on every start, so PSUEx VR can't use that name).
  * With VR on, also keeps the gamepad (and optionally the keyboard) working while the
  * game window is not focused (psuex_vr.json: backgroundInput / backgroundKeyboard).
  */
@@ -8,6 +10,7 @@
 #include <Windows.h>
 #include <dinput.h>
 
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 
@@ -68,7 +71,7 @@ LoadPSUEx()
 		slash[ 1 ] = '\0';
 	}
 
-	const char *candidates[] = { "PSUExD.dll", "PSUEx.dll" };
+	const char *candidates[] = { "PSUExD.dll", "PSUExVR.dll", "PSUEx.dll" };
 	for( const char *name : candidates )
 	{
 		char path[ MAX_PATH ]{};
@@ -83,7 +86,7 @@ LoadPSUEx()
 			return;
 		}
 	}
-	Log( "Failed to load PSUExD.dll / PSUEx.dll" );
+	Log( "Failed to load PSUExD.dll / PSUExVR.dll / PSUEx.dll" );
 }
 
 static bool
@@ -126,12 +129,56 @@ DevicePriority( DWORD devType )
 	}
 }
 
+// Product names for the device log (A and W instances).
+static void
+ProductName( const DIDEVICEINSTANCEA &instance, char *out, size_t size )
+{
+	strncpy_s( out, size, instance.tszProductName, _TRUNCATE );
+}
+
+static void
+ProductName( const DIDEVICEINSTANCEW &instance, char *out, size_t size )
+{
+	WideCharToMultiByte( CP_UTF8, 0, instance.tszProductName, -1, out, static_cast< int >( size ), nullptr, nullptr );
+}
+
+// VR motion controllers (PS VR2 Sense, Index, Touch, Vive...) can enumerate as gamepads.
+// PSU binds the first gamepad, so they go to the end of the list.
+static bool
+IsVRController( const char *name )
+{
+	char lower[ 128 ]{};
+	for( size_t i = 0; name[ i ] && i + 1 < sizeof( lower ); ++i )
+	{
+		lower[ i ] = static_cast< char >( tolower( static_cast< unsigned char >( name[ i ] ) ) );
+	}
+	const char *const markers[] = { "sense controller", "vr2", "index controller", "knuckles", "touch controller",
+		"oculus", "quest", "vive", "reverb", "mixed reality", "openvr", "steamvr" };
+	for( const char *marker : markers )
+	{
+		if( strstr( lower, marker ) )
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 template< typename Instance >
 struct DeviceList
 {
 	Instance items[ 32 ];
 	int count = 0;
 };
+
+template< typename Instance >
+static int
+InstancePriority( const Instance &instance )
+{
+	char name[ 128 ]{};
+	ProductName( instance, name, sizeof( name ) );
+	return IsVRController( name ) ? 3 : DevicePriority( instance.dwDevType );
+}
 
 template< typename Instance >
 static BOOL CALLBACK
@@ -165,11 +212,35 @@ EnumGamepadsFirst( HRESULT( STDMETHODCALLTYPE *original )( Interface *, DWORD, C
 		devType, queryType, flags, list.count );
 	Log( msg );
 
-	for( int priority = 0; priority <= 2; ++priority )
+	// Once per launch: which device the game will bind as its gamepad (the first one).
+	static bool s_loggedDevices = false;
+	if( !s_loggedDevices )
+	{
+		s_loggedDevices = true;
+		int order = 0;
+		for( int priority = 0; priority <= 3; ++priority )
+		{
+			for( int i = 0; i < list.count; ++i )
+			{
+				if( InstancePriority( list.items[ i ] ) != priority )
+				{
+					continue;
+				}
+				char name[ 128 ]{};
+				ProductName( list.items[ i ], name, sizeof( name ) );
+				char line[ 220 ];
+				sprintf_s( line, "  #%d %s (type 0x%02X)", order++, name,
+					static_cast< unsigned >( GET_DIDEVICE_TYPE( list.items[ i ].dwDevType ) ) );
+				Log( line );
+			}
+		}
+	}
+
+	for( int priority = 0; priority <= 3; ++priority )
 	{
 		for( int i = 0; i < list.count; ++i )
 		{
-			if( DevicePriority( list.items[ i ].dwDevType ) != priority )
+			if( InstancePriority( list.items[ i ] ) != priority )
 			{
 				continue;
 			}
@@ -216,6 +287,38 @@ PatchEnumDevices( void *object, Fn hook, Fn &original )
 		vtable[ kEnumDevicesSlot ] = reinterpret_cast< void * >( hook );
 		VirtualProtect( &vtable[ kEnumDevicesSlot ], sizeof( void * ), oldProtect, &oldProtect );
 	}
+}
+
+// Copy what PSUEx logged (its in-memory tail) into this log when psuex.log couldn't be
+// written, so start-up problems are still visible. Builds without the exports (Clementine's
+// stock PSUEx.dll) are noted once.
+static void
+LogPSUExTail( const char *when )
+{
+	if( !g_psuex )
+	{
+		return;
+	}
+	using LogTail_t = const char *( * )();
+	using LogFileOpen_t = int ( * )();
+	const auto tail = reinterpret_cast< LogTail_t >( GetProcAddress( g_psuex, "PSUEx_LogTail" ) );
+	const auto fileOpen = reinterpret_cast< LogFileOpen_t >( GetProcAddress( g_psuex, "PSUEx_LogFileOpen" ) );
+	if( !tail || !fileOpen )
+	{
+		char line[ 96 ];
+		sprintf_s( line, "PSUEx (%s): loaded build has no log exports (not a PSUEx VR build?)", when );
+		Log( line );
+		return;
+	}
+	if( fileOpen() )
+	{
+		return;
+	}
+	char header[ 96 ];
+	sprintf_s( header, "---- PSUEx log (%s): psuex.log not writable ----", when );
+	Log( header );
+	const char *text = tail();
+	Log( text && *text ? text : "(empty: PSUEx logged nothing)" );
 }
 
 // --- Background input -------------------------------------------------------------
@@ -418,6 +521,12 @@ DirectInput8Create( HINSTANCE hinst, DWORD dwVersion, REFIID riidltf, LPVOID *pp
 	{
 		return DIERR_GENERIC;
 	}
+	static bool s_loggedTail = false;
+	if( !s_loggedTail )
+	{
+		s_loggedTail = true;
+		LogPSUExTail( "at DirectInput start" );
+	}
 	const HRESULT hr = g_realCreate( hinst, dwVersion, riidltf, ppvOut, punkOuter );
 	if( SUCCEEDED( hr ) && ppvOut && *ppvOut )
 	{
@@ -453,6 +562,10 @@ DllMain( HMODULE hModule, DWORD reason, LPVOID )
 			LoadBackgroundSettings();
 		}
 		LoadPSUEx();
+	}
+	else if( reason == DLL_PROCESS_DETACH && HostIsPSUC() )
+	{
+		LogPSUExTail( "at exit" );
 	}
 	return TRUE;
 }

@@ -33,11 +33,17 @@ namespace PSUVR
 			const unsigned short newlyPressed = static_cast< unsigned short >( buttons & ~s_padPrevious );
 			s_padPrevious = buttons;
 
+			uint8_t mods = 0;
+			if( GetAsyncKeyState( VK_CONTROL ) & 0x8000 ) mods |= kVRModCtrl;
+			if( GetAsyncKeyState( VK_SHIFT ) & 0x8000 ) mods |= kVRModShift;
+			if( GetAsyncKeyState( VK_MENU ) & 0x8000 ) mods |= kVRModAlt;
+
 			unsigned actions = 0;
 			for( int i = 0; i < kVRActionCount; ++i )
 			{
 				const VRBinding &binding = bindings[ i ];
-				const bool keyDown = windowFocused && binding.key > 0 &&
+				// Exact modifiers: Ctrl+F7 doesn't fire on plain F7 (a game shortcut) and back.
+				const bool keyDown = windowFocused && binding.key > 0 && mods == binding.mods &&
 					( GetAsyncKeyState( binding.key ) & 0x8000 ) != 0;
 				const bool keyEdge = keyDown && !s_keyWasDown[ i ];
 				s_keyWasDown[ i ] = keyDown;

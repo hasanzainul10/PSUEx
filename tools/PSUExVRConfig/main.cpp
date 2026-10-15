@@ -264,8 +264,36 @@ namespace
 	}
 }
 
+// Packaging: PSUExVRConfig.exe --write-defaults <path> writes the release starter
+// psuex_vr.json (VR on, first person) and exits without a window.
+static bool WriteReleaseDefaults( const wchar_t *path )
+{
+	VRSettings starter;
+	starter.m_enabled = true;
+	starter.m_cameraMode = "firstPerson";
+	std::ofstream file( path, std::ios::trunc );
+	if( !file.is_open() )
+	{
+		return false;
+	}
+	file << SaveVRSettingsJson( starter );
+	return true;
+}
+
 int WINAPI wWinMain( HINSTANCE instance, HINSTANCE, PWSTR, int )
 {
+	int argc = 0;
+	if( LPWSTR *argv = CommandLineToArgvW( GetCommandLineW(), &argc ) )
+	{
+		const bool writeDefaults = argc >= 3 && _wcsicmp( argv[ 1 ], L"--write-defaults" ) == 0;
+		const int result = writeDefaults ? ( WriteReleaseDefaults( argv[ 2 ] ) ? 0 : 1 ) : -1;
+		LocalFree( argv );
+		if( result >= 0 )
+		{
+			return result;
+		}
+	}
+
 	CoInitializeEx( nullptr, COINIT_APARTMENTTHREADED );
 	SetFolder( ExeFolder() );
 	LoadSettings();

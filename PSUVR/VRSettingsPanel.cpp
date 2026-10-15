@@ -63,14 +63,20 @@ namespace PSUVR
 					s_captureAction = -1;
 					return;
 				}
-				// Generic modifiers repeat as left/right variants; take the specific one.
-				if( vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU )
+				// Modifiers only qualify the main key.
+				if( vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU ||
+					( vk >= VK_LSHIFT && vk <= VK_RMENU ) || vk == VK_LWIN || vk == VK_RWIN )
 				{
 					continue;
 				}
 				if( s_captureKey )
 				{
+					uint8_t mods = 0;
+					if( KeyDown( VK_CONTROL ) ) mods |= kVRModCtrl;
+					if( KeyDown( VK_SHIFT ) ) mods |= kVRModShift;
+					if( KeyDown( VK_MENU ) ) mods |= kVRModAlt;
 					settings.m_bindings[ s_captureAction ].key = vk;
+					settings.m_bindings[ s_captureAction ].mods = mods;
 					s_captureAction = -1;
 					return;
 				}
@@ -147,6 +153,19 @@ namespace PSUVR
 		char fallback[ 16 ];
 		std::snprintf( fallback, sizeof( fallback ), "VK 0x%02X", virtualKey );
 		return fallback;
+	}
+
+	std::string VRBindingKeyName( const VRBinding &binding )
+	{
+		if( binding.key <= 0 )
+		{
+			return "-";
+		}
+		std::string name;
+		if( binding.mods & kVRModCtrl ) name += "Ctrl + ";
+		if( binding.mods & kVRModShift ) name += "Shift + ";
+		if( binding.mods & kVRModAlt ) name += "Alt + ";
+		return name + VRKeyName( binding.key );
 	}
 
 	std::string VRPadName( unsigned short padButton )
@@ -308,7 +327,7 @@ namespace PSUVR
 
 					ImGui::TableNextColumn();
 					const bool capturingKey = s_captureAction == i && s_captureKey;
-					const std::string keyText = capturingKey ? std::string( "press a key..." ) : VRKeyName( binding.key );
+					const std::string keyText = capturingKey ? std::string( "press a key..." ) : VRBindingKeyName( binding );
 					if( ImGui::Button( ( keyText + "##key" ).c_str() ) )
 					{
 						BeginCapture( i, true );
@@ -334,7 +353,7 @@ namespace PSUVR
 			}
 			if( s_captureAction >= 0 )
 			{
-				ImGui::TextDisabled( "Esc cancels." );
+				ImGui::TextDisabled( s_captureKey ? "Hold Ctrl / Shift / Alt with the key if you want them. Esc cancels." : "Esc cancels." );
 			}
 			if( ImGui::Button( "Reset controls" ) )
 			{

@@ -4,6 +4,8 @@ This guide is for **players** who want to drop PSUEx into an existing **Phantasy
 
 > **Status:** VR is experimental (Phase 1). Expect bugs. Flat (non-VR) PSUEx features still work with VR turned off.
 
+> **Players:** the step-by-step setup is in **[VR_GUIDE.md](VR_GUIDE.md)**. This page is the full reference.
+
 ---
 
 ## Requirements
@@ -24,7 +26,7 @@ Put these files in the **same folder as `PSUC.exe` / `online.exe`**:
 | File | Required? | What it does |
 |------|-----------|--------------|
 | `dinput8.dll` | Yes | Loader proxy. Forwards real DirectInput to Windows and loads PSUEx into `PSUC.exe` only. |
-| `PSUEx.dll` **or** `PSUExD.dll` | Yes | The mod itself. Debug builds are named `PSUExD.dll`; release builds are `PSUEx.dll`. The loader tries **`PSUExD.dll` first**, then `PSUEx.dll`. |
+| `PSUExVR.dll` **or** `PSUExD.dll` | Yes | The mod itself. Release builds are `PSUExVR.dll`, debug builds `PSUExD.dll`. The loader tries **`PSUExD.dll`, then `PSUExVR.dll`, then Clementine's own `PSUEx.dll`** (non-VR). Don't name the VR build `PSUEx.dll`: Clementine's launcher re-downloads that file on every start. |
 | `openxr_loader.dll` | For VR | OpenXR loader (x86). Needed when `vr.enabled` is true. |
 | `D3DX9_43.dll` | Often | DirectX helper used by the overlay / VR path. Copy if the game folder does not already have a working D3DX9. |
 | `psuex_vr.json` | For VR | Sidecar VR settings (recommended — survives the game rewriting `config.json`). |
@@ -102,9 +104,9 @@ Create (or edit) **`psuex_vr.json`** next to `PSUC.exe`:
 | `fpCrouchLimit` | The same for ducking and standing up, in meters (default **0.2**). |
 | `stereoPanel` | Leave **`false`**. Turning it on also shows a flat PiP of the monitor frame in stereo (usually worse). |
 
-**Comfort:** the mod never moves your view on its own. Only the stick and your own head move it: game camera re-aims (NPC talk), smoothing and auto-follow are cancelled, and the horizon stays level, also in third person. If you get motion sick, use first person with snap turn (the defaults), keep `hudFollow` on, try `comfortVignette: true`, and press F9 whenever "forward" feels off.
+**Comfort:** the mod never moves your view on its own. Only the stick and your own head move it: game camera re-aims (NPC talk), smoothing and auto-follow are cancelled, and the horizon stays level, also in third person. If you get motion sick, use first person with snap turn (the defaults), keep `hudFollow` on, try `comfortVignette: true`, and recenter (Ctrl+F9) whenever "forward" feels off.
 
-**First-person controls (gamepad):** the right stick turns your body and view. By default the left stick moves where you look, and the right stick adds turning on top. `fpMoveDirection: "body"` gives FPS-style body-relative movement instead. Recenter with F9 or Back+X. Turning reads the right stick through XInput (Xbox-style pads). Without XInput it falls back to the game's own camera orbit.
+**First-person controls (gamepad):** the right stick turns your body and view. By default the left stick moves where you look, and the right stick adds turning on top. `fpMoveDirection: "body"` gives FPS-style body-relative movement instead. Recenter with Ctrl+F9 or Back+X. Turning reads the right stick through XInput (Xbox-style pads). Without XInput it falls back to the game's own camera orbit.
 
 You can also put a `"vr"` object inside `config.json`, but Clementine or other tools sometimes rewrite that file. **`psuex_vr.json` overrides it** and is the safer place for VR settings.
 
@@ -115,20 +117,20 @@ To play **without** VR, set `"enabled": false` (or delete `psuex_vr.json` and le
 You don't have to edit JSON by hand:
 
 - **Without the game:** run `PSUExVRConfig.exe` from the game folder (or point it at the folder with Browse). It edits `psuex_vr.json`. Close the game first: the game rewrites that file when it saves.
-- **In game:** press **F10** (or hold **Back** and press **Start**), or open the PSUEx menu with **Insert** → Window → **VR Settings**. In the headset the window shows on the HUD panel, with a mouse pointer drawn for you. Changes apply immediately; **Save** writes `psuex_vr.json`. **Reload from file** picks up edits made in `PSUExVRConfig.exe`.
+- **In game:** press **Ctrl+F10** (or hold **Back** and press **Start**), or open the PSUEx menu with **Insert** → Window → **VR Settings**. In the headset the window shows on the HUD panel, with a mouse pointer drawn for you. Changes apply immediately; **Save** writes `psuex_vr.json`. **Reload from file** picks up edits made in `PSUExVRConfig.exe`.
 
 **VR on/off:** "VR enabled" applies on the **next launch** (the game's graphics device is set up for VR at startup). **Pause VR** works instantly: the game turns flat and the headset shows it on a big screen. Pause is not saved.
 
 ### VR controls
 
-Rebind them under **Controls** in either UI. Pad shortcuts are chords: **hold Back/Select, then press the button**.
+Keyboard shortcuts use Ctrl because the game uses the plain F-keys (F1-F7 are main-menu shortcuts). Rebind them under **Controls** in either UI (hold Ctrl/Shift/Alt with the key to include them); after upgrading, **Reset controls** gives these defaults. Pad shortcuts are chords: **hold Back/Select, then press the button**.
 
 | Action | Key | Pad |
 |---|---|---|
-| Recenter | F9 | Back + X |
-| Switch first / third person | F7 | Back + Y |
-| Show / hide VR settings | F10 | Back + Start |
-| Pause VR | F8 | — |
+| Recenter | Ctrl + F9 | Back + X |
+| Switch first / third person | Ctrl + F7 | Back + Y |
+| Show / hide VR settings | Ctrl + F10 | Back + Start |
+| Pause VR | Ctrl + F8 | — |
 | Snap / smooth turn | — | — |
 | Body-locked HUD on / off | — | — |
 
@@ -146,7 +148,7 @@ Each shortcut shows a short message in the headset. The game still sees the Back
 
 ### In-headset tips
 
-- **F9** or **Back+X** recenters the VR camera (keys need the game window focused). See [VR controls](#vr-controls).
+- **Ctrl+F9** or **Back+X** recenters the VR camera (keys need the game window focused). See [VR controls](#vr-controls).
 - Use a **gamepad** for now (`inputMode": "gamepad"`). Motion controllers are not finished.
 - The HUD and menus sit on a panel in front of your body (`hudFollow`); turn your head to read its corners.
 
@@ -158,7 +160,7 @@ After one launch, check these files in the game folder:
 
 | Log | What you want to see |
 |-----|----------------------|
-| `dinput8_proxy.log` | For `online.exe`: `Skip PSUEx (host is not PSUC)`. For the game process: `Loaded PSUExD.dll` or `Loaded PSUEx.dll`. |
+| `dinput8_proxy.log` | For `online.exe`: `Skip PSUEx (host is not PSUC)`. For the game process: `Loaded PSUExVR.dll` (or `Loaded PSUExD.dll` for a debug build). `Loaded PSUEx.dll` means Clementine's stock PSUEx was used, without VR. |
 | `psuex.log` | PSUEx started; with VR on, lines about OpenXR / stereo / HUD quads. |
 
 If `dinput8_proxy.log` says it failed to load PSUEx, the DLL is missing, wrong bitness (must be **x86**), or a dependency is missing.
@@ -170,7 +172,7 @@ If `dinput8_proxy.log` says it failed to load PSUEx, the DLL is missing, wrong b
 **Game starts but no VR / no overlay**
 
 - Confirm `dinput8.dll` is in the game folder (not only `di.dll` — that is Clementine’s own helper and does **not** load PSUEx).
-- Confirm `PSUExD.dll` or `PSUEx.dll` is present and **32-bit**.
+- Confirm `PSUExVR.dll` (or `PSUExD.dll`) is present and **32-bit**.
 - Read `dinput8_proxy.log` and `psuex.log`.
 
 **Crash or black headset**
@@ -181,7 +183,7 @@ If `dinput8_proxy.log` says it failed to load PSUEx, the DLL is missing, wrong b
 
 **Two copies of PSUEx / weird overlay**
 
-- Some launchers also inject `PSUEx.dll`. Prefer one loader: either the `dinput8` proxy + `PSUExD.dll`, or the launcher’s DLL — not conflicting debug/release pairs fighting each other. Check `psuex.log` for duplicate-load messages.
+- Clementine's `online.exe` injects and re-downloads its own `PSUEx.dll`. PSUEx VR blocks that second copy when it is loaded first (`Blocked second PSUEx load` in `psuex.log`); never rename the VR build to `PSUEx.dll`.
 
 **Menus fine, town broken / UI wrong**
 
@@ -190,7 +192,7 @@ If `dinput8_proxy.log` says it failed to load PSUEx, the DLL is missing, wrong b
 
 **Uninstall**
 
-1. Delete `dinput8.dll`, `PSUEx.dll` / `PSUExD.dll`, and optionally `openxr_loader.dll` / `psuex_vr.json` from the game folder.
+1. Delete `dinput8.dll`, `PSUExVR.dll` / `PSUExD.dll` (keep Clementine's `PSUEx.dll`), and optionally `openxr_loader.dll` / `psuex_vr.json` from the game folder.
 2. Leave Clementine’s own files (`di.dll`, `PSUC.exe`, `online.exe`, …) alone.
 3. Launch with `online.exe` as before — the stock client should run without the mod.
 

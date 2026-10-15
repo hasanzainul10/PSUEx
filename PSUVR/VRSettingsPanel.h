@@ -23,5 +23,6 @@ namespace PSUVR
 
 	// Display names for bindings.
 	std::string VRKeyName( int virtualKey );
+	std::string VRBindingKeyName( const VRBinding &binding );  // "Ctrl + F9"
 	std::string VRPadName( unsigned short padButton );
 }

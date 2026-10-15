@@ -358,7 +358,7 @@ namespace PSUVR
 				if( stereoSubmitted && !m_loggedStereo )
 				{
 					m_loggedStereo = true;
-					PSU_LOG( "VR: stereo projection layer active (head-locked submit, F9 = recenter)\n" );
+					PSU_LOG( "VR: stereo projection layer active (head-locked submit; recenter: Ctrl+F9 / Back+X)\n" );
 				}
 				else if( !stereoSubmitted )
 				{
