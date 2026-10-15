@@ -334,6 +334,28 @@ namespace PSUVR
 			return *reinterpret_cast< const uint32_t * >( player + offset );
 		}
 
+		void ContextWatch()
+		{
+			// Input context candidates (menus vs. field): the input manager globals (0x00B9CC78..,
+			// without the idle timer at +0x14) and the scene mode (0x00B90EA8).
+			{
+				static uint32_t s_context[ 6 ]{};
+				static bool s_contextValid = false;
+				const uint32_t now[ 6 ] = {
+					PSUMemory::ReadAbsoluteMemory< uint32_t >( 0x00B9CC78 ), PSUMemory::ReadAbsoluteMemory< uint32_t >( 0x00B9CC7C ),
+					PSUMemory::ReadAbsoluteMemory< uint32_t >( 0x00B9CC80 ), PSUMemory::ReadAbsoluteMemory< uint32_t >( 0x00B9CC84 ),
+					PSUMemory::ReadAbsoluteMemory< uint32_t >( 0x00B9CC88 ), PSUMemory::ReadAbsoluteMemory< uint32_t >( 0x00B90EA8 ) };
+				if( !s_contextValid || std::memcmp( now, s_context, sizeof( now ) ) != 0 )
+				{
+					PSU_LOG( "Probe context: CC78=%08X CC7C=%08X CC80=%08X CC84=%08X CC88=%08X mode=%u\n",
+						now[ 0 ], now[ 1 ], now[ 2 ], now[ 3 ], now[ 4 ], now[ 5 ] );
+					std::memcpy( s_context, now, sizeof( now ) );
+					s_contextValid = true;
+				}
+			}
+
+		}
+
 		void WeaponAndPressWatch()
 		{
 			const uintptr_t player = LocalPlayer();
@@ -413,6 +435,7 @@ namespace PSUVR
 			{
 				WatchFrame();
 			}
+			ContextWatch();
 			WeaponAndPressWatch();
 #endif
 		}
