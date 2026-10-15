@@ -89,7 +89,7 @@ namespace PSUCombat
 		out.hitObject = dword( 0x010 ) != 0;
 		out.weaponClass = dword( 0x1F0 );
 		out.leftClass = dword( 0x1F4 );
-		out.activeClass = dword( 0x1DC ) >> 8;
+		out.activeClass = ( dword( 0x1DC ) >> 8 ) & 0xFF;  // upper half can be 0xFFFF
 		out.facing = static_cast< uint16_t >( dword( 0x124 ) & 0xFFFF );
 		return true;
 	}
