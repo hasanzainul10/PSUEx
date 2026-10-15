@@ -433,10 +433,9 @@ namespace PSUVR
 			const bool ready = !PSUCombat::Swinging( s_combat );
 			if( ( held || s_gunShot ) && gunUp && ready && s_pulseButton < 0 )
 			{
-				s_pulseButton = kPadX;
-				s_pulseTime = kAttackPulseSeconds;
-				s_gunGap = kAttackPulseSeconds + kGunGapSeconds;
-				s_lastAttackHand = 0;
+				// Same as a swing: the first shot of a chain turns toward where you look.
+				StartAttack( kPadX, 0 );
+				s_gunGap = s_nudgeTime + kAttackPulseSeconds + kGunGapSeconds;
 #ifdef _DEBUG
 				PSU_LOG( "VRGun: shot (%s), step %d\n", s_gunShot ? "click" : "held", s_combat.comboStep );
 #endif
