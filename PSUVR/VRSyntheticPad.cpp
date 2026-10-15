@@ -363,6 +363,69 @@ namespace PSUVR
 			return false;
 		}
 
+		// Left-hand gun. The left weapon is the active one only while R1 is held (+0x1DC 0x22xx),
+		// so a shot holds R1, waits for the gun to come up, then presses X. A click fires once;
+		// holding the trigger fires again each time the game takes the next shot. R1 stays held
+		// until the shot is over, so releasing doesn't cancel it.
+		bool s_gunShot = false;          // a click still owed a shot
+		float s_gunShotTime = 0.0f;
+		float s_gunTail = 0.0f;          // keep R1 held a little after the last shot
+		float s_gunGap = 0.0f;           // after an X press, wait before judging the state
+		constexpr float kGunShotWaitSeconds = 0.8f;
+		constexpr float kGunTailSeconds = 0.2f;
+		constexpr float kGunGapSeconds = 0.15f;
+
+		void Gun( float dt, const HandRoles &roles, PadState &pad )
+		{
+			if( !roles.shoot[ 0 ] )
+			{
+				s_gunShot = false;
+				s_gunTail = 0.0f;
+				return;
+			}
+			const bool held = s_triggerDown[ 0 ];
+			if( s_gunShot && ( s_gunShotTime -= dt ) <= 0.0f )
+			{
+				s_gunShot = false;
+#ifdef _DEBUG
+				PSU_LOG( "VRGun: shot dropped (gun didn't come up)\n" );
+#endif
+			}
+			const bool shooting = held || s_gunShot || ( s_lastAttackHand == 0 && s_combat.comboStep > 0 );
+			if( shooting )
+			{
+				s_gunTail = kGunTailSeconds;
+			}
+			else if( s_gunTail > 0.0f )
+			{
+				s_gunTail -= dt;
+			}
+			if( s_gunTail <= 0.0f )
+			{
+				return;
+			}
+			pad.buttons |= Bit( kPadR1 );
+
+			if( s_gunGap > 0.0f )
+			{
+				s_gunGap -= dt;
+				return;
+			}
+			const bool gunUp = s_combat.activeClass == s_combat.leftClass && ( s_combat.attackState & 0xFF ) != 0x06;
+			const bool ready = !PSUCombat::Swinging( s_combat );
+			if( ( held || s_gunShot ) && gunUp && ready && s_pulseButton < 0 )
+			{
+				s_pulseButton = kPadX;
+				s_pulseTime = kAttackPulseSeconds;
+				s_gunGap = kAttackPulseSeconds + kGunGapSeconds;
+				s_lastAttackHand = 0;
+#ifdef _DEBUG
+				PSU_LOG( "VRGun: shot (%s), step %d\n", s_gunShot ? "click" : "held", s_combat.comboStep );
+#endif
+				s_gunShot = false;
+			}
+		}
+
 		// Adds the combat presses to the pad. Returns the roles so the caller can keep the
 		// gesture controls (triggers, right grip) from also sending their plain buttons.
 		HandRoles Combat( float dt, bool modifier, PadState &pad )
@@ -375,11 +438,9 @@ namespace PSUVR
 				{
 					if( roles.swing[ hand ] && Swung( hand ) )
 					{
-						// Photon Art: swing while holding that hand's trigger. With a left-hand
-						// weapon equipped, the right-hand one has to be the active one.
+						// Photon Art: swing while holding that hand's trigger.
 						const bool pa = vr.m_paGesture && s_triggerDown[ hand ];
-						const uint32_t weapon = roles.shoot[ 0 ] ? s_combat.weaponClass : 0;
-						RequestAttack( pa ? kPadY : kPadX, hand, weapon, pa ? "swing+trigger" : "swing" );
+						RequestAttack( pa ? kPadY : kPadX, hand, 0, pa ? "swing+trigger" : "swing" );
 					}
 					else if( !roles.swing[ hand ] )
 					{
@@ -387,12 +448,16 @@ namespace PSUVR
 					}
 					if( roles.shoot[ hand ] && ( VRControllers::Pressed( hand ) & kControllerTrigger ) )
 					{
-						RequestAttack( kPadX, hand, s_combat.leftClass, "trigger" );
+						// One click = one shot (even if released before the gun is up).
+						s_gunShot = true;
+						s_gunShotTime = kGunShotWaitSeconds;
+						VRControllers::Haptic( hand, 0.25f, 0.02f );
 					}
 				}
 			}
 
 			PumpRequest( dt );
+			Gun( dt, roles, pad );
 
 			if( s_nudgeTime > 0.0f )
 			{
@@ -610,6 +675,8 @@ namespace PSUVR
 				s_pulseButton = -1;
 				s_pulseTime = 0.0f;
 				s_nudgeTime = 0.0f;
+				s_gunShot = false;
+				s_gunTail = 0.0f;
 				std::lock_guard lock( s_mutex );
 				s_active = false;
 				s_out = {};
