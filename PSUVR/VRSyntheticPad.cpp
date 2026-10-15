@@ -70,6 +70,18 @@ namespace PSUVR
 		bool s_triggerDown[ 2 ]{};
 		bool s_comboWindow = false;       // last frame's PSUCombat::ComboWindowOpen
 		int s_comboStep = 0;
+		bool s_combatValid = false;
+		PSUCombat::State s_combat;
+
+		// Swing to attack: a fast right-hand swing presses X (once per swing; re-arms when
+		// the hand slows down). Swings during the attack animation wait for the window.
+		bool s_swingArmed = true;
+		int s_swingFrames = 0;
+		float s_swingPending = 0.0f;  // seconds a buffered swing may still wait
+		float s_attackPulse = 0.0f;   // seconds X stays pressed
+		constexpr float kSwingRearmSpeed = 0.8f;
+		constexpr float kSwingBufferSeconds = 0.25f;
+		constexpr float kAttackPulseSeconds = 0.08f;
 		bool s_dpadMode = false;          // left stick sends the D-pad
 		bool s_leftClickConsumed = false; // the stick click toggled the D-pad: no SELECT
 
@@ -177,6 +189,74 @@ namespace PSUVR
 #endif
 			s_comboWindow = open;
 			s_comboStep = valid ? combat.comboStep : 0;
+			s_combatValid = valid;
+			s_combat = combat;
+		}
+
+		// Returns whether X is pressed this frame.
+		bool SwingAttack( float dt, bool modifier )
+		{
+			const auto &vr = Config::Get().vr;
+			if( s_attackPulse > 0.0f )
+			{
+				s_attackPulse -= dt;
+				return true;
+			}
+			const ControllerState &right = VRControllers::State( 1 );
+			if( !vr.m_swingAttack || !right.active || !right.velocityValid )
+			{
+				s_swingArmed = true;
+				s_swingFrames = 0;
+				s_swingPending = 0.0f;
+				return false;
+			}
+			const float *v = right.linearVelocity;
+			const float speed = std::sqrt( v[ 0 ] * v[ 0 ] + v[ 1 ] * v[ 1 ] + v[ 2 ] * v[ 2 ] );
+			// Presses are early while the swing animation plays (state 0x02).
+			const bool early = s_combatValid && PSUCombat::Swinging( s_combat );
+
+			if( speed < kSwingRearmSpeed )
+			{
+				s_swingArmed = true;
+				s_swingFrames = 0;
+			}
+			else if( s_swingArmed && !modifier && speed > vr.m_swingSpeed && ++s_swingFrames >= 2 )
+			{
+				s_swingArmed = false;
+				VRControllers::Haptic( 1, 0.25f, 0.02f );
+				if( early && vr.m_comboBuffer )
+				{
+					s_swingPending = kSwingBufferSeconds;
+				}
+				else
+				{
+					s_attackPulse = kAttackPulseSeconds;
+				}
+#ifdef _DEBUG
+				PSU_LOG( "VRSwing: %.1f m/s, step %d, %s\n", speed, s_combatValid ? s_combat.comboStep : 0,
+					s_swingPending > 0.0f ? "buffered" : ( early ? "early (sent)" : "sent" ) );
+#endif
+			}
+
+			if( s_swingPending > 0.0f )
+			{
+				if( !early )
+				{
+					s_swingPending = 0.0f;
+					s_attackPulse = kAttackPulseSeconds;
+#ifdef _DEBUG
+					PSU_LOG( "VRSwing: buffered swing sent (window %s)\n", s_comboWindow ? "open" : "idle" );
+#endif
+				}
+				else if( ( s_swingPending -= dt ) <= 0.0f )
+				{
+					s_swingPending = 0.0f;
+#ifdef _DEBUG
+					PSU_LOG( "VRSwing: buffered swing dropped (window didn't open in time)\n" );
+#endif
+				}
+			}
+			return s_attackPulse > 0.0f;
 		}
 
 		using VRMotionLayout::Control;
@@ -416,6 +496,7 @@ namespace PSUVR
 			const bool modifier = s_grip[ 0 ] == Grip::Modifier;
 
 			PadState pad;
+			if( SwingAttack( dt, modifier ) ) pad.buttons |= Bit( kPadX );
 			if( l1 && !modifier ) pad.buttons |= Bit( kPadL1 );
 			if( r1 && !modifier ) pad.buttons |= Bit( kPadR1 );
 			for( const VRMotionLayout::Entry &entry : VRMotionLayout::kLayout )

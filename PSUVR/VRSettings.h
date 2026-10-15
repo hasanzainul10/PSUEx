@@ -114,6 +114,11 @@ struct VRSettings
 	std::string m_motionProfile = "psvr2";
 	// Buzz the right controller when the game's combo window opens (melee).
 	bool m_comboHaptic = true;
+	// Motion mode: a fast right-hand swing presses the attack button (pad X).
+	bool m_swingAttack = true;
+	float m_swingSpeed = 1.8f;      // m/s to count as a swing
+	// A swing during the attack animation waits for the combo window (up to 0.25 s).
+	bool m_comboBuffer = true;
 	// 0..1 how far the vignette closes in at full motion.
 	float m_vignetteStrength = 0.7f;
 	// Render the 3D pass per eye (projection layer) with the game frame as a panel.

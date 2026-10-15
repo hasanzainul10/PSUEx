@@ -325,6 +325,15 @@ namespace PSUVR
 			ImGui::Checkbox( "Show controllers and pointer rays", &s.m_showControllers );
 			ImGui::Checkbox( "Buzz when the next combo hit can be pressed", &s.m_comboHaptic );
 			Help( "A short buzz in the right hand the moment the game accepts the next attack of a melee combo." );
+			ImGui::Checkbox( "Swing the right controller to attack", &s.m_swingAttack );
+			Help( "A fast swing presses the attack button (X). Needs 'Play with motion controllers'." );
+			if( s.m_swingAttack )
+			{
+				ImGui::SliderFloat( "Swing speed (m/s)", &s.m_swingSpeed, 1.0f, 4.0f, "%.1f" );
+				Help( "Lower: gentler swings count. Higher: only big swings count." );
+				ImGui::Checkbox( "Hold early swings for the combo window", &s.m_comboBuffer );
+				Help( "A swing made while the attack is still playing is sent the moment the next hit can connect (up to 0.25 s)." );
+			}
 			static const char *const profileIds[] = { "psvr2", "generic" };
 			static const char *const profileNames[] = { "PlayStation VR2 Sense", "Other (Touch, Index, ...)" };
 			Combo( "Controllers", s.m_motionProfile, profileIds, profileNames, 2 );
