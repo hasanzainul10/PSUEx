@@ -75,7 +75,22 @@ namespace PSUVR
 		PSUCombat::State s_combat;
 		int s_lastAttackHand = 1;     // the combo buzz goes to the hand that attacked
 
-		bool s_dpadMode = false;          // left stick sends the D-pad
+		bool s_dpadMode = false;          // manual flip of the D-pad mode (left grip + stick click)
+		bool s_ui = false;                // a menu has the input (UiContext)
+
+		// The input manager's context (0x00B9CC80): 0x1007 while moving freely, 0x0405 while a
+		// menu has the input (main menu, shops, mission counter, login screens).
+		bool UiContext()
+		{
+			return ( PSUMemory::ReadAbsoluteMemory< uint32_t >( 0x00B9CC80 ) & 0xFFFF ) == 0x0405;
+		}
+
+		// Left stick = D-pad: automatically in menus (vr.autoDpad), flipped by the manual toggle
+		// until the context changes.
+		bool DpadActive()
+		{
+			return ( Config::Get().vr.m_autoDpad && s_ui ) != s_dpadMode;
+		}
 		bool s_leftClickConsumed = false; // the stick click toggled the D-pad: no SELECT
 
 		constexpr float kGripDelay = 0.15f;
@@ -232,7 +247,8 @@ namespace PSUVR
 		HandRoles Roles()
 		{
 			HandRoles roles;
-			if( !s_combatValid || !Config::Get().vr.m_swingAttack )
+			// No combat gestures while a menu has the input.
+			if( !s_combatValid || !Config::Get().vr.m_swingAttack || s_ui )
 			{
 				return roles;
 			}
@@ -750,6 +766,18 @@ namespace PSUVR
 				s_triggerDown[ hand ] = s_triggerDown[ hand ] ? value > 0.4f : value > 0.6f;
 			}
 
+			// Menus switch the left stick to the D-pad; a context change drops the manual flip.
+			const bool ui = UiContext();
+			if( ui != s_ui )
+			{
+				s_ui = ui;
+				s_dpadMode = false;
+#ifdef _DEBUG
+				PSU_LOG( "VRSyntheticPad: %s (left stick = %s)\n", ui ? "menu input" : "field input",
+					DpadActive() ? "D-pad" : "move" );
+#endif
+			}
+
 			// Left grip + left stick click toggles the D-pad; that grip and click send nothing.
 			if( !s_leftClickConsumed && ( VRControllers::Pressed( 0 ) & kControllerStick ) && leftGripDown &&
 				s_grip[ 0 ] != Grip::Modifier && s_grip[ 1 ] != Grip::Modifier )
@@ -758,7 +786,7 @@ namespace PSUVR
 				s_leftClickConsumed = true;
 				s_grip[ 0 ] = Grip::Consumed;
 				s_pulse[ 0 ] = 0.0f;
-				VRBindings::ShowToast( s_dpadMode ? "D-pad on" : "D-pad off" );
+				VRBindings::ShowToast( DpadActive() ? "D-pad on" : "D-pad off" );
 				Buzz( 0 );
 			}
 			if( s_leftClickConsumed && !( left.buttons & kControllerStick ) )
@@ -809,7 +837,7 @@ namespace PSUVR
 					Buzz( 1 );
 				}
 			}
-			if( s_dpadMode )
+			if( DpadActive() )
 			{
 				pad.buttons |= DpadButtons( left.stick[ 0 ], left.stick[ 1 ] );
 			}

@@ -114,6 +114,8 @@ struct VRSettings
 	std::string m_motionProfile = "psvr2";
 	// Buzz the right controller when the game's combo window opens (melee).
 	bool m_comboHaptic = true;
+	// Motion mode: the left stick works the D-pad while a menu has the input.
+	bool m_autoDpad = true;
 	// Motion mode combat: swing a melee hand to attack (X), pull a gun hand's trigger to
 	// shoot (R1 = left-hand weapon). Weapon per hand comes from the game.
 	bool m_swingAttack = true;

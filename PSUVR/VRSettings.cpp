@@ -57,6 +57,7 @@ namespace
 	X( m_showControllers, "showControllers" ) \
 	X( m_motionProfile, "motionProfile" ) \
 	X( m_comboHaptic, "comboHaptic" ) \
+	X( m_autoDpad, "autoDpad" ) \
 	X( m_swingAttack, "swingAttack" ) \
 	X( m_paGesture, "paGesture" ) \
 	X( m_attackFaceLook, "attackFaceLook" ) \
