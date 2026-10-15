@@ -287,7 +287,9 @@ namespace PSUVR
 		bool NeedsFacing()
 		{
 			float off = 0.0f;
-			if( !Config::Get().vr.m_attackFaceLook || s_combat.comboStep > 0 || !FacingOff( off ) )
+			// First person only: in third person the camera isn't where the character should face.
+			if( !Config::Get().vr.m_attackFaceLook || !VRCamera::FirstPersonActive() || s_combat.comboStep > 0 ||
+				!FacingOff( off ) )
 			{
 				return false;
 			}

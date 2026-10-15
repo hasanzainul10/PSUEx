@@ -336,8 +336,8 @@ namespace PSUVR
 			{
 				ImGui::Checkbox( "Swing with the trigger held = Photon Art", &s.m_paGesture );
 				ImGui::Checkbox( "Turn to where I look before attacking", &s.m_attackFaceLook );
-				Help( "If the character faces another way (after strafing or backing up), the first hit "
-					"turns it toward your view first." );
+				Help( "First person: if the character faces another way (after strafing or backing up), the "
+					"first hit turns it toward your view first." );
 				ImGui::SliderFloat( "Swing speed (m/s)", &s.m_swingSpeed, 1.0f, 4.0f, "%.1f" );
 				Help( "Lower: gentler swings count. Higher: only big swings count." );
 				ImGui::Checkbox( "Hold early swings for the combo window", &s.m_comboBuffer );
