@@ -319,6 +319,72 @@ namespace PSUVR
 			s_playerSnapshot = std::move( now );
 			s_playerSnapshotAddress = player;
 		}
+
+		// Always on (Debug): weapon candidates logged when they change, and what each pad
+		// press led to 200 ms later (hand, attack state, PA). Feeds the weapon / button maps.
+		constexpr uint32_t kWeaponOffsets[] = { 0x1DC, 0x1F0, 0x1F4, 0x2D4, 0x2D8, 0x308, 0x30C, 0x854 };
+		uint32_t s_weaponLast[ std::size( kWeaponOffsets ) ]{};
+		uintptr_t s_weaponPlayer = 0;
+		uint32_t s_heldLast = 0;
+		uint32_t s_pressBits = 0;
+		DWORD s_pressTick = 0;
+
+		uint32_t PlayerDword( uintptr_t player, uint32_t offset )
+		{
+			return *reinterpret_cast< const uint32_t * >( player + offset );
+		}
+
+		void WeaponAndPressWatch()
+		{
+			const uintptr_t player = LocalPlayer();
+			if( !player || !PSUMemory::IsValidPointer( reinterpret_cast< const void * >( player ) ) ||
+				!PSUMemory::IsValidPointer( reinterpret_cast< const void * >( player + 0xFFF ) ) )
+			{
+				s_weaponPlayer = 0;
+				return;
+			}
+			char line[ 320 ];
+			int length = 0;
+			bool changed = false;
+			for( size_t i = 0; i < std::size( kWeaponOffsets ); ++i )
+			{
+				const uint32_t value = PlayerDword( player, kWeaponOffsets[ i ] );
+				changed |= value != s_weaponLast[ i ] || player != s_weaponPlayer;
+				s_weaponLast[ i ] = value;
+			}
+			if( changed )
+			{
+				length = sprintf_s( line, "Probe weapon:" );
+				for( size_t i = 0; i < std::size( kWeaponOffsets ); ++i )
+				{
+					length += sprintf_s( line + length, sizeof( line ) - length, " +0x%03X=%X",
+						kWeaponOffsets[ i ], s_weaponLast[ i ] );
+				}
+				PSU_LOG( "%s\n", line );
+				s_weaponPlayer = player;
+			}
+
+			// Pad 1 held bits: note new presses, report the player state 200 ms later.
+			const uint32_t held = PSUMemory::ReadAbsoluteMemory< uint32_t >( 0x00A8DDB8 );
+			const uint32_t pressed = held & ~s_heldLast;
+			s_heldLast = held;
+			if( pressed && !s_pressBits )
+			{
+				s_pressBits = pressed;
+				s_pressTick = GetTickCount();
+			}
+			if( s_pressBits && GetTickCount() - s_pressTick >= 200 )
+			{
+				char names[ 96 ];
+				BitNames( s_pressBits, names, sizeof( names ) );
+				PSU_LOG( "Probe press %s: state=%08X step=%X pa=%X/%X/%X hit0C=%08X hit10=%08X +14=%08X +18=%08X +1C=%08X +20=%08X facing=%04X\n",
+					names, PlayerDword( player, 0x710 ), PlayerDword( player, 0x1E4 ), PlayerDword( player, 0x620 ),
+					PlayerDword( player, 0x624 ), PlayerDword( player, 0x628 ), PlayerDword( player, 0x00C ),
+					PlayerDword( player, 0x010 ), PlayerDword( player, 0x014 ), PlayerDword( player, 0x018 ),
+					PlayerDword( player, 0x01C ), PlayerDword( player, 0x020 ), PlayerDword( player, 0x124 ) & 0xFFFF );
+				s_pressBits = 0;
+			}
+		}
 	}
 #endif
 
@@ -347,6 +413,7 @@ namespace PSUVR
 			{
 				WatchFrame();
 			}
+			WeaponAndPressWatch();
 #endif
 		}
 	}
