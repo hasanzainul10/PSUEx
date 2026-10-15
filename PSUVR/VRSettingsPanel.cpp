@@ -324,7 +324,7 @@ namespace PSUVR
 			}
 			ImGui::Checkbox( "Show controllers and pointer rays", &s.m_showControllers );
 			ImGui::Checkbox( "Left stick works menus (D-pad) automatically", &s.m_autoDpad );
-			Help( "In menus, shops, the mission counter and login screens the left stick sends the D-pad. "
+			Help( "In menus, shops, the mission counter, login screens and the weapon / item palette the left stick sends the D-pad. "
 				"Left grip + left stick click still flips it by hand." );
 			ImGui::Checkbox( "Buzz when the next combo hit can be pressed", &s.m_comboHaptic );
 			Help( "A short buzz in the right hand the moment the game accepts the next attack of a melee combo." );

@@ -89,7 +89,9 @@ namespace PSUVR
 		// until the context changes.
 		bool DpadActive()
 		{
-			return ( Config::Get().vr.m_autoDpad && s_ui ) != s_dpadMode;
+			// The palette (held A) is picked with the D-pad too.
+			const bool palette = s_combatValid && s_combat.paletteOpen;
+			return ( Config::Get().vr.m_autoDpad && ( s_ui || palette ) ) != s_dpadMode;
 		}
 		bool s_leftClickConsumed = false; // the stick click toggled the D-pad: no SELECT
 
@@ -247,8 +249,8 @@ namespace PSUVR
 		HandRoles Roles()
 		{
 			HandRoles roles;
-			// No combat gestures while a menu has the input.
-			if( !s_combatValid || !Config::Get().vr.m_swingAttack || s_ui )
+			// No combat gestures while a menu or the palette has the input.
+			if( !s_combatValid || !Config::Get().vr.m_swingAttack || s_ui || s_combat.paletteOpen )
 			{
 				return roles;
 			}

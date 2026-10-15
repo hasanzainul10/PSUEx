@@ -60,6 +60,7 @@ namespace PSUCombat
 		uint32_t leftClass = 0;    // +0x1F4 left hand
 		uint32_t activeClass = 0;  // +0x1DC >> 8: the weapon being used (switches to the left one on R1)
 		uint16_t facing = 0;       // +0x124, 0x10000 = 360 degrees
+		bool paletteOpen = false;  // weapon / item palette shown (+0x700 top byte: 7 open, counts down closing)
 	};
 
 	// False when there is no local player (login, area change).
@@ -91,6 +92,7 @@ namespace PSUCombat
 		out.leftClass = dword( 0x1F4 );
 		out.activeClass = ( dword( 0x1DC ) >> 8 ) & 0xFF;  // upper half can be 0xFFFF
 		out.facing = static_cast< uint16_t >( dword( 0x124 ) & 0xFFFF );
+		out.paletteOpen = ( dword( 0x700 ) & 0xFF000000u ) != 0;
 		return true;
 	}
 
