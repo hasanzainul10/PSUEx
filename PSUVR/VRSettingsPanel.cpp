@@ -224,6 +224,36 @@ namespace PSUVR
 			ImGui::SliderFloat( "Neck cut below eyes (m)", &s.m_fpNeckDrop, 0.05f, 0.5f, "%.2f" );
 			ImGui::SliderFloat( "Lean limit (m)", &s.m_fpLeanLimit, 0.0f, 0.5f, "%.2f" );
 			ImGui::SliderFloat( "Crouch limit (m)", &s.m_fpCrouchLimit, 0.0f, 0.5f, "%.2f" );
+			static const char *const lbIds[] = { "off", "follow" };
+			static const char *const lbFpNames[] = { "Off (lock-on only, view stays yours)", "Turn view toward the target" };
+			Combo( "LB camera##fp", s.m_fpLbCamera, lbIds, lbFpNames, 2 );
+			Help( "Turning the view toward a target rotates the world under you; off is more comfortable." );
+			ImGui::SliderFloat( "LB follow time (s)", &s.m_lbWindowSeconds, 0.5f, 5.0f, "%.1f" );
+		}
+
+		if( ImGui::CollapsingHeader( "Third person" ) )
+		{
+			ImGui::TextDisabled( "Right stick: left/right turns, up/down zooms. Hold Back: left/right tilts, up/down height." );
+			ImGui::Checkbox( "Snap turn##tp", &s.m_tpSnapTurn );
+			if( s.m_tpSnapTurn )
+			{
+				ImGui::SliderFloat( "Turn step (deg)##tp", &s.m_tpOrbitDegrees, 15.0f, 90.0f, "%.0f" );
+			}
+			else
+			{
+				ImGui::SliderFloat( "Turn speed (deg/s)##tp", &s.m_tpTurnSpeed, 30.0f, 360.0f, "%.0f" );
+			}
+			ImGui::SliderFloat( "Tilt (deg)", &s.m_tpPitch, -60.0f, 30.0f, "%.0f" );
+			Help( "Negative looks down at your character. A tilted camera also tilts the horizon." );
+			ImGui::SliderFloat( "Tilt speed (deg/s)", &s.m_tpTiltSpeed, 10.0f, 120.0f, "%.0f" );
+			static const char *const lbIds[] = { "follow", "off" };
+			static const char *const lbTpNames[] = { "Camera behind you / lock-on (vanilla)", "Off" };
+			Combo( "LB camera##tp", s.m_tpLbCamera, lbIds, lbTpNames, 2 );
+			ImGui::SliderFloat( "Distance (m)", &s.m_tpDistance, s.m_tpMinDistance, s.m_tpMaxDistance, "%.1f" );
+			ImGui::SliderFloat( "Height above head (m)", &s.m_tpHeight, -1.0f, 4.0f, "%.1f" );
+			ImGui::SliderFloat( "Zoom speed (m/s)", &s.m_tpZoomSpeed, 0.5f, 10.0f, "%.1f" );
+			ImGui::SliderFloat( "Closest (m)", &s.m_tpMinDistance, 0.5f, 5.0f, "%.1f" );
+			ImGui::SliderFloat( "Farthest (m)", &s.m_tpMaxDistance, 3.0f, 20.0f, "%.1f" );
 		}
 
 		if( ImGui::CollapsingHeader( "Turning", ImGuiTreeNodeFlags_DefaultOpen ) )

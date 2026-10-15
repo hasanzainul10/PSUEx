@@ -210,6 +210,29 @@ namespace TCameraTaskPlay
 		{
 			PSUVR::VRCamera::ClearFirstPerson();
 		}
+
+		// Third person: our own orbit camera (right stick zoom, Back + stick orbit steps).
+		bool steeredThird = false;
+		if( !firstPerson && PSUVR::VRCamera::ThirdPersonMode() && renderCamera )
+		{
+			const PSUPlayer &player = PSUPlayer::Get();
+			if( PSUPlayer::IsReady() )
+			{
+				const float playerPos[ 3 ] = { player.position.x, player.position.y, player.position.z };
+				steeredThird = PSUVR::VRCamera::SteerThirdPerson(
+					&camera->m_position.x, &camera->m_focusPosition.x, playerPos, cameraState );
+				if( steeredThird )
+				{
+					std::memcpy( renderCamera + kRenderCameraPosition, &camera->m_position.x, sizeof( float ) * 3 );
+					std::memcpy( renderCamera + kRenderCameraTarget, &camera->m_focusPosition.x, sizeof( float ) * 3 );
+					*reinterpret_cast< uint32_t * >( renderCamera + kRenderCameraFlags ) |= 1u;
+				}
+			}
+		}
+		if( !steeredThird )
+		{
+			PSUVR::VRCamera::ClearThirdPerson( firstPerson || !PSUVR::VRCamera::ThirdPersonMode() );
+		}
 		return result;
 	}
 

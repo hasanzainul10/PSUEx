@@ -114,6 +114,50 @@ namespace PSUVR
 
 		unsigned s_turnLogs = 0;
 
+		// Third person (VR): our own orbit camera. Yaw only changes by Back + right stick
+		// steps, distance by right stick zoom; no auto-follow rotation.
+		bool s_tpPrimed = false;
+		float s_tpYaw = 0.0f;
+		bool s_tpOrbitArmed = true;
+		bool s_tpHeightArmed = true;
+		bool s_tpActive = false;   // our camera (and its user-chosen tilt) is what renders
+		LARGE_INTEGER s_tpLastTime{};
+
+		// LB (refocus / lock-on): the game's camera direction is followed only in a window
+		// opened by the player's press, never for the camera's own automatic refocus.
+		bool s_lbWasDown = false;
+		DWORD s_lbPressTick = 0;
+		int s_lastCameraState = -1;
+		unsigned s_cameraStateLogs = 0;
+
+		bool LbWindowOpen( int cameraState )
+		{
+			unsigned short buttons = 0;
+			VRGamepad::Buttons( buttons );
+			const bool lbDown = ( buttons & 0x0100 ) != 0;  // XINPUT_GAMEPAD_LEFT_SHOULDER
+			if( lbDown && !s_lbWasDown )
+			{
+				s_lbPressTick = GetTickCount();
+			}
+			s_lbWasDown = lbDown;
+			if( cameraState != s_lastCameraState && s_cameraStateLogs < 60 )
+			{
+				++s_cameraStateLogs;
+				PSU_LOG( "VRCamera: cam state %d -> %d (LB %s)\n", s_lastCameraState, cameraState, lbDown ? "held" : "up" );
+			}
+			s_lastCameraState = cameraState;
+			if( cameraState == 5 )  // NPC talk
+			{
+				return false;
+			}
+			if( lbDown )
+			{
+				return true;
+			}
+			const DWORD windowMs = static_cast< DWORD >( Config::Get().vr.m_lbWindowSeconds * 1000.0f );
+			return s_lbPressTick != 0 && cameraState != 1 && GetTickCount() - s_lbPressTick < windowMs;
+		}
+
 		// Steered camera distance behind the head. Further back widens what the
 		// game's frustum culling keeps around the head.
 		constexpr float kSteerDistanceUnits = 25.0f;
@@ -279,8 +323,10 @@ namespace PSUVR
 			s_fpAnchor = s_refPosition;
 			s_hudYaw = s_refYaw;
 			s_hudFollowing = false;
-			// First person re-derives body yaw from the camera on its next steer.
+			// First person re-derives body yaw from the camera on its next steer; third
+			// person restarts behind wherever the camera looks.
 			s_fpPrimed = false;
+			s_tpPrimed = false;
 			PSU_LOG( "VRCamera: recentered at (%.3f, %.3f, %.3f) yaw=%.1f deg\n",
 				s_refPosition.x, s_refPosition.y, s_refPosition.z, s_refYaw * 57.29578f );
 		}
@@ -320,8 +366,9 @@ namespace PSUVR
 		{
 			// Third person: HMD on top of the game's orbit camera. The camera's own pitch
 			// is removed so the horizon stays level with the real one.
+			// Our own third-person camera's pitch is the user's tilt (tpPitch): keep it.
 			float camYaw = 0.0f, camPitch = 0.0f;
-			const bool level = RenderCameraAngles( camYaw, camPitch );
+			const bool level = !s_tpActive && RenderCameraAngles( camYaw, camPitch );
 			const Quat unpitch = level ? PitchQuat( -camPitch ) : Quat{ 0.0f, 0.0f, 0.0f, 1.0f };
 			const Quat bodyInverse = YawQuat( -s_refYaw );
 			const Vec3 offset = ToVec( eye.position );
@@ -387,6 +434,13 @@ namespace PSUVR
 			// "head": forward = where you look (stick turns add on top). "body": FPS-style.
 			const bool headMove = playState && vr.m_fpMoveDirection != "body";
 			const float hmdYaw = headMove ? WrapAngle( PoseYaw( views[ 0 ].orientation ) - s_refYaw ) : 0.0f;
+			// Optional (fpLbCamera "follow"): during the LB window keep the game's lock-on
+			// direction by solving the body yaw for it. Off by default (rotates the world).
+			const bool lbWindow = LbWindowOpen( cameraState );
+			if( vr.m_fpLbCamera == "follow" && lbWindow && haveGameYaw )
+			{
+				s_bodyYaw = WrapAngle( gameYaw - hmdYaw );
+			}
 			const float yaw = WrapAngle( s_bodyYaw + hmdYaw );
 			const float fx = std::sin( yaw );
 			const float fz = std::cos( yaw );
@@ -408,6 +462,145 @@ namespace PSUVR
 			s_camDistance = kSteerDistanceUnits;
 			s_fpActive = true;
 			return true;
+		}
+
+		bool ThirdPersonMode()
+		{
+			return Config::Get().vr.m_cameraMode != "firstPerson" && StereoRenderer::SceneAllowsStereo();
+		}
+
+		bool SteerThirdPerson( float cameraPosition[ 3 ], float focusPosition[ 3 ],
+			const float playerPosition[ 3 ], int cameraState )
+		{
+			if( !ThirdPersonMode() )
+			{
+				s_tpPrimed = false;
+				return false;
+			}
+			auto &vr = Config::Get().vr;
+
+			LARGE_INTEGER now{};
+			LARGE_INTEGER frequency{};
+			QueryPerformanceCounter( &now );
+			QueryPerformanceFrequency( &frequency );
+			float dt = 0.0f;
+			if( s_tpLastTime.QuadPart != 0 && frequency.QuadPart > 0 )
+			{
+				dt = static_cast< float >( now.QuadPart - s_tpLastTime.QuadPart ) /
+					static_cast< float >( frequency.QuadPart );
+			}
+			s_tpLastTime = now;
+			dt = dt < 0.0f ? 0.0f : ( dt > 0.1f ? 0.1f : dt );
+
+			if( !s_tpPrimed )
+			{
+				// Start behind wherever the game camera was looking (keep the last yaw if
+				// the game camera has no usable direction this tick).
+				const float dx = focusPosition[ 0 ] - cameraPosition[ 0 ];
+				const float dz = focusPosition[ 2 ] - cameraPosition[ 2 ];
+				if( ( dx * dx + dz * dz ) > 1.0e-6f )
+				{
+					s_tpYaw = std::atan2( dx, dz );
+				}
+				s_tpPrimed = true;
+				s_tpOrbitArmed = true;
+				s_tpHeightArmed = true;
+				PSU_LOG( "VRCamera TP: orbit camera yaw=%.1f deg distance=%.1f m\n",
+					s_tpYaw * ( 180.0f / kPi ), vr.m_tpDistance );
+			}
+
+			// LB refocus / lock-on: adopt the yaw the game just produced, so its own swing
+			// behind the character or its target framing plays out from our camera.
+			if( vr.m_tpLbCamera == "follow" && LbWindowOpen( cameraState ) )
+			{
+				const float dx = focusPosition[ 0 ] - cameraPosition[ 0 ];
+				const float dz = focusPosition[ 2 ] - cameraPosition[ 2 ];
+				if( ( dx * dx + dz * dz ) > 1.0e-6f )
+				{
+					s_tpYaw = std::atan2( dx, dz );
+				}
+			}
+
+			// Only in normal play (1 follow / 3 refocus); NPC talk etc. stays still.
+			const bool playState = cameraState == 1 || cameraState == 3;
+			float stickX = 0.0f, stickY = 0.0f;
+			unsigned short buttons = 0;
+			const bool havePad = VRGamepad::RightStick( stickX, stickY ) && VRGamepad::Buttons( buttons );
+			if( playState && havePad )
+			{
+				constexpr unsigned short kBack = 0x0020;  // XINPUT_GAMEPAD_BACK
+				if( std::fabs( stickX ) < kSnapRelease ) s_tpOrbitArmed = true;
+				if( std::fabs( stickY ) < kSnapRelease ) s_tpHeightArmed = true;
+				if( buttons & kBack )
+				{
+					// Back + left/right: tilt (stick right looks further down).
+					vr.m_tpPitch -= stickX * vr.m_tpTiltSpeed * dt;
+					vr.m_tpPitch = vr.m_tpPitch < -60.0f ? -60.0f : ( vr.m_tpPitch > 30.0f ? 30.0f : vr.m_tpPitch );
+					// Back + up/down: height in 0.5 m steps.
+					if( s_tpHeightArmed && std::fabs( stickY ) > kSnapPress )
+					{
+						s_tpHeightArmed = false;
+						vr.m_tpHeight += stickY > 0.0f ? 0.5f : -0.5f;
+						vr.m_tpHeight = vr.m_tpHeight < -1.0f ? -1.0f : ( vr.m_tpHeight > 4.0f ? 4.0f : vr.m_tpHeight );
+					}
+				}
+				else
+				{
+					// Left/right turns: snap steps or smooth (own setting, separate from first person).
+					// Stick right turns the view right, i.e. lowers the game yaw.
+					if( vr.m_tpSnapTurn )
+					{
+						if( s_tpOrbitArmed && std::fabs( stickX ) > kSnapPress )
+						{
+							s_tpOrbitArmed = false;
+							const float step = vr.m_tpOrbitDegrees * ( kPi / 180.0f );
+							s_tpYaw = WrapAngle( s_tpYaw + ( stickX > 0.0f ? -step : step ) );
+						}
+					}
+					else
+					{
+						s_tpYaw = WrapAngle( s_tpYaw - stickX * vr.m_tpTurnSpeed * ( kPi / 180.0f ) * dt );
+					}
+					// Up/down zooms (up = closer).
+					vr.m_tpDistance -= stickY * vr.m_tpZoomSpeed * dt;
+				}
+			}
+			const float minDistance = vr.m_tpMinDistance > 0.3f ? vr.m_tpMinDistance : 0.3f;
+			const float maxDistance = vr.m_tpMaxDistance > minDistance ? vr.m_tpMaxDistance : minDistance;
+			vr.m_tpDistance = vr.m_tpDistance < minDistance ? minDistance :
+				( vr.m_tpDistance > maxDistance ? maxDistance : vr.m_tpDistance );
+
+			// Camera behind and above the head, looking ahead tilted by the user's tpPitch
+			// (0 = level horizon, the character sits below the centre of view).
+			const float fx = std::sin( s_tpYaw );
+			const float fz = std::cos( s_tpYaw );
+			const float pitch = vr.m_tpPitch * ( kPi / 180.0f );
+			const float head[ 3 ] = {
+				playerPosition[ 0 ],
+				playerPosition[ 1 ] + vr.m_fpEyeHeight * kGameUnitsPerMeter,
+				playerPosition[ 2 ] };
+			const float back = vr.m_tpDistance * kGameUnitsPerMeter;
+			const float up = vr.m_tpHeight * kGameUnitsPerMeter;
+			cameraPosition[ 0 ] = head[ 0 ] - fx * back;
+			cameraPosition[ 1 ] = head[ 1 ] + up;
+			cameraPosition[ 2 ] = head[ 2 ] - fz * back;
+			const float reach = back > 1.0f ? back : 1.0f;
+			focusPosition[ 0 ] = cameraPosition[ 0 ] + fx * std::cos( pitch ) * reach;
+			focusPosition[ 1 ] = cameraPosition[ 1 ] + std::sin( pitch ) * reach;
+			focusPosition[ 2 ] = cameraPosition[ 2 ] + fz * std::cos( pitch ) * reach;
+			s_tpActive = true;
+			return true;
+		}
+
+		void ClearThirdPerson( bool leftThirdPerson )
+		{
+			// A one-tick miss (player data briefly unavailable) keeps the orbit; only
+			// leaving third person (mode switch, pause, scene change) starts it over.
+			if( leftThirdPerson )
+			{
+				s_tpPrimed = false;
+			}
+			s_tpActive = false;
 		}
 
 		bool FirstPersonActive()

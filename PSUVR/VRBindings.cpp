@@ -68,8 +68,17 @@ namespace PSUVR
 			}
 			if( actions & Bit( VRAction::ToggleSnapTurn ) )
 			{
-				vr.m_snapTurn = !vr.m_snapTurn;
-				ShowToast( vr.m_snapTurn ? "Snap turn" : "Smooth turn" );
+				// Each camera mode has its own turn setting.
+				if( vr.m_cameraMode == "firstPerson" )
+				{
+					vr.m_snapTurn = !vr.m_snapTurn;
+					ShowToast( vr.m_snapTurn ? "First person: snap turn" : "First person: smooth turn" );
+				}
+				else
+				{
+					vr.m_tpSnapTurn = !vr.m_tpSnapTurn;
+					ShowToast( vr.m_tpSnapTurn ? "Third person: snap turn" : "Third person: smooth turn" );
+				}
 			}
 			if( actions & Bit( VRAction::ToggleHudFollow ) )
 			{

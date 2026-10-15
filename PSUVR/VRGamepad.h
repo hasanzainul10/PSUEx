@@ -9,6 +9,8 @@ namespace PSUVR
 		// Right stick X of the first connected XInput pad, -1 (left) .. 1 (right),
 		// zero inside the standard deadzone. False if no XInput pad is connected.
 		bool RightStickX( float &x );
+		// Both right stick axes (y: up = positive), same deadzone handling.
+		bool RightStick( float &x, float &y );
 
 		// Button mask (XINPUT_GAMEPAD_*) of the first connected XInput pad. False if none.
 		bool Buttons( unsigned short &buttons );

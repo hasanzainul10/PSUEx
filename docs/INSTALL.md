@@ -83,6 +83,13 @@ Create (or edit) **`psuex_vr.json`** next to `PSUC.exe`:
 | `cameraMode` | `thirdPerson` (default) or `firstPerson` (town stereo only; other scenes stay on the virtual screen). |
 | `fpEyeHeight` | First person: eye height above the character's feet in meters (default **1.6**). |
 | `fpEyeForward` | First person: how far in front of the face the eyes sit, in meters (default **0.12**), so you don't see the inside of your own head. |
+| `tpDistance` / `tpHeight` | Third person: camera distance behind and height above your character's head, in meters (defaults **4** / **1**). The right stick zoom changes `tpDistance` live. |
+| `tpZoomSpeed`, `tpMinDistance`, `tpMaxDistance` | Third person zoom speed (m/s) and range (defaults **3**, **1.5**, **10**). |
+| `tpSnapTurn` | Third person turning, separate from first person: `true` (default) = steps of `tpOrbitDegrees` (default **45**); `false` = smooth at `tpTurnSpeed` (default **90** deg/s). |
+| `tpPitch` / `tpTiltSpeed` | Third person camera tilt in degrees (default **0** = level horizon; negative looks down) and how fast Back + right stick left/right changes it (default **45** deg/s). A tilt also tilts the horizon. |
+| `tpLbCamera` | Third person, what LB does to the VR camera: `"follow"` (default) = as vanilla, the camera swings behind you or frames the locked-on target; `"off"` = LB never moves the camera. |
+| `fpLbCamera` | First person: `"off"` (default) = LB locks on but your view stays yours; `"follow"` = the view turns toward the target (less comfortable). |
+| `lbWindowSeconds` | How long after an LB press the game's camera direction is followed (default **2**; also while LB is held). |
 | `snapTurn` | First person: `true` (default, comfort) = the right stick turns in steps; `false` = smooth turning. |
 | `snapTurnDegrees` | Snap step size (default **30**). |
 | `comfortVignette` | Darken the edges of your view while you smooth-turn or move with the stick (default **false**, opt-in). |
@@ -124,6 +131,8 @@ Rebind them under **Controls** in either UI. Pad shortcuts are chords: **hold Ba
 | Pause VR | F8 | — |
 | Snap / smooth turn | — | — |
 | Body-locked HUD on / off | — | — |
+
+**Third person camera:** the camera never rotates by itself. Right stick left/right turns it around your character (snap steps or smooth, see `tpSnapTurn`), up/down zooms. Hold **Back** and push the right stick left/right to tilt the camera, or up/down to raise or lower it in 0.5 m steps. **LB** works like vanilla: the camera swings behind your character, or frames the target you lock on to (`tpLbCamera`). The left stick moves relative to the camera.
 
 Each shortcut shows a short message in the headset. The game still sees the Back and button presses (PSUEx can't block pad input yet), so pick chords you don't need in the moment.
 

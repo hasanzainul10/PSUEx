@@ -42,6 +42,14 @@ namespace PSUVR
 		// turning. False = not applied.
 		bool SteerFirstPerson( float cameraPosition[ 3 ], float focusPosition[ 3 ],
 			const float playerPosition[ 3 ], int cameraState );
+		// Third person in VR: our own level orbit camera (no auto-follow). Right stick zooms;
+		// hold Back + right stick to orbit (vr.tpOrbitDegrees steps) or step the height.
+		bool ThirdPersonMode();
+		bool SteerThirdPerson( float cameraPosition[ 3 ], float focusPosition[ 3 ],
+			const float playerPosition[ 3 ], int cameraState );
+		// leftThirdPerson: the mode was left (restart the orbit next time); false = a
+		// one-tick miss that keeps the current orbit yaw.
+		void ClearThirdPerson( bool leftThirdPerson );
 		// True once a steer happened for the current camera; eyes then use BuildEyeFirstPerson.
 		bool FirstPersonActive();
 		void ClearFirstPerson();

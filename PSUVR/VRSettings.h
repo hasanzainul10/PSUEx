@@ -78,6 +78,26 @@ struct VRSettings
 	// How far the head may lean / crouch away from the body before the body follows (meters).
 	float m_fpLeanLimit = 0.15f;
 	float m_fpCrouchLimit = 0.2f;
+	// Third person: camera distance behind and height above the head (meters), right-stick
+	// zoom speed (m/s) and range, and the Back + right stick orbit / height steps.
+	float m_tpDistance = 4.0f;
+	float m_tpHeight = 1.0f;
+	float m_tpZoomSpeed = 3.0f;
+	float m_tpMinDistance = 1.5f;
+	float m_tpMaxDistance = 10.0f;
+	float m_tpOrbitDegrees = 45.0f;
+	// Third person turning, separate from first person: snap steps (tpOrbitDegrees) or
+	// smooth (tpTurnSpeed, deg/s). Tilt: camera pitch in degrees (negative = looking down),
+	// changed with Back + right stick left/right at tpTiltSpeed deg/s.
+	bool m_tpSnapTurn = true;
+	float m_tpTurnSpeed = 90.0f;
+	float m_tpPitch = 0.0f;
+	float m_tpTiltSpeed = 45.0f;
+	// What LB (refocus / lock-on) does to the VR camera. "follow": for lbWindowSeconds after
+	// an LB press (or while held) the game's camera direction is adopted. "off": ignored.
+	std::string m_tpLbCamera = "follow";
+	std::string m_fpLbCamera = "off";
+	float m_lbWindowSeconds = 2.0f;
 	bool m_snapTurn = true;
 	bool m_comfortVignette = false;
 	// 0..1 how far the vignette closes in at full motion.

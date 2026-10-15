@@ -39,6 +39,19 @@ namespace
 	X( m_fpNeckDrop, "fpNeckDrop" ) \
 	X( m_fpLeanLimit, "fpLeanLimit" ) \
 	X( m_fpCrouchLimit, "fpCrouchLimit" ) \
+	X( m_tpDistance, "tpDistance" ) \
+	X( m_tpHeight, "tpHeight" ) \
+	X( m_tpZoomSpeed, "tpZoomSpeed" ) \
+	X( m_tpMinDistance, "tpMinDistance" ) \
+	X( m_tpMaxDistance, "tpMaxDistance" ) \
+	X( m_tpOrbitDegrees, "tpOrbitDegrees" ) \
+	X( m_tpSnapTurn, "tpSnapTurn" ) \
+	X( m_tpTurnSpeed, "tpTurnSpeed" ) \
+	X( m_tpPitch, "tpPitch" ) \
+	X( m_tpTiltSpeed, "tpTiltSpeed" ) \
+	X( m_tpLbCamera, "tpLbCamera" ) \
+	X( m_fpLbCamera, "fpLbCamera" ) \
+	X( m_lbWindowSeconds, "lbWindowSeconds" ) \
 	X( m_snapTurn, "snapTurn" ) \
 	X( m_comfortVignette, "comfortVignette" ) \
 	X( m_vignetteStrength, "vignetteStrength" ) \

@@ -41,6 +41,23 @@ namespace PSUVR
 		}
 	}
 
+	namespace
+	{
+		// -1..1 past the standard right-thumb deadzone, rescaled so motion starts at 0.
+		float AxisPastDeadzone( short value )
+		{
+			const float raw = static_cast< float >( value );
+			const float deadzone = static_cast< float >( XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE );
+			const float magnitude = raw < 0.0f ? -raw : raw;
+			if( magnitude <= deadzone )
+			{
+				return 0.0f;
+			}
+			const float scaled = ( magnitude - deadzone ) / ( 32767.0f - deadzone );
+			return ( raw < 0.0f ? -1.0f : 1.0f ) * ( scaled > 1.0f ? 1.0f : scaled );
+		}
+	}
+
 	namespace VRGamepad
 	{
 		bool Buttons( unsigned short &buttons )
@@ -64,9 +81,10 @@ namespace PSUVR
 			return false;
 		}
 
-		bool RightStickX( float &x )
+		bool RightStick( float &x, float &y )
 		{
 			x = 0.0f;
+			y = 0.0f;
 			if( !EnsureXInput() )
 			{
 				return false;
@@ -81,17 +99,17 @@ namespace PSUVR
 					continue;
 				}
 				s_lastUser = user;
-				const float raw = static_cast< float >( state.Gamepad.sThumbRX );
-				const float deadzone = static_cast< float >( XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE );
-				const float magnitude = raw < 0.0f ? -raw : raw;
-				if( magnitude > deadzone )
-				{
-					const float scaled = ( magnitude - deadzone ) / ( 32767.0f - deadzone );
-					x = ( raw < 0.0f ? -1.0f : 1.0f ) * ( scaled > 1.0f ? 1.0f : scaled );
-				}
+				x = AxisPastDeadzone( state.Gamepad.sThumbRX );
+				y = AxisPastDeadzone( state.Gamepad.sThumbRY );
 				return true;
 			}
 			return false;
+		}
+
+		bool RightStickX( float &x )
+		{
+			float y = 0.0f;
+			return RightStick( x, y );
 		}
 	}
 }
