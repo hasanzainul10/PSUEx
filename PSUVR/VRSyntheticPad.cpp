@@ -371,6 +371,8 @@ namespace PSUVR
 		float s_gunShotTime = 0.0f;
 		float s_gunTail = 0.0f;          // keep R1 held a little after the last shot
 		float s_gunGap = 0.0f;           // after an X press, wait before judging the state
+		float s_gunUpTime = 0.0f;        // how long the left gun has been the active weapon
+		constexpr float kGunSettleSeconds = 0.1f;
 		constexpr float kGunShotWaitSeconds = 0.8f;
 		constexpr float kGunTailSeconds = 0.2f;
 		constexpr float kGunGapSeconds = 0.15f;
@@ -411,7 +413,17 @@ namespace PSUVR
 				s_gunGap -= dt;
 				return;
 			}
-			const bool gunUp = s_combat.activeClass == s_combat.leftClass && ( s_combat.attackState & 0xFF ) != 0x06;
+			// +0x710 stays 0x..06 (gun stance) the whole time R1 is held: only the active weapon
+			// tells that the gun is up; give it a moment to settle.
+			if( s_combat.activeClass == s_combat.leftClass )
+			{
+				s_gunUpTime += dt;
+			}
+			else
+			{
+				s_gunUpTime = 0.0f;
+			}
+			const bool gunUp = s_gunUpTime >= kGunSettleSeconds;
 			const bool ready = !PSUCombat::Swinging( s_combat );
 			if( ( held || s_gunShot ) && gunUp && ready && s_pulseButton < 0 )
 			{
