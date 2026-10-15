@@ -204,13 +204,15 @@ namespace PSUVR
 		bool s_switchSent = false;    // R1 sent for this request
 		int s_pulseButton = -1;       // pad button being pressed
 		float s_pulseTime = 0.0f;
-		float s_nudgeTime = 0.0f;     // turning first: the press waits this long
-		float s_faceHold = 0.0f;      // left stick held toward the look direction (turn + press)
+		float s_faceHold = 0.0f;      // left stick still held toward the look direction after the turn
+		bool s_turning = false;       // turning toward the look direction; the press waits
+		float s_turnTime = 0.0f;
 		constexpr float kSwingRearmSpeed = 0.8f;
 		constexpr float kSwingBufferSeconds = 0.25f;
 		constexpr float kSwitchWaitSeconds = 0.6f;
 		constexpr float kAttackPulseSeconds = 0.08f;
-		constexpr float kNudgeSeconds = 0.1f;
+		constexpr float kMinTurnSeconds = 0.05f;
+		constexpr float kMaxTurnSeconds = 0.7f;
 		constexpr float kFaceHoldAfterSeconds = 0.1f;
 		constexpr float kFaceToleranceRadians = 20.0f * ( 3.14159265f / 180.0f );
 
@@ -250,23 +252,29 @@ namespace PSUVR
 			return angle;
 		}
 
-		// The character faces away from where the player looks (first hit of a chain only).
-		bool NeedsFacing()
+		// Angle from the character's facing to where the player looks; false when unknown.
+		bool FacingOff( float &off )
 		{
-			if( !Config::Get().vr.m_attackFaceLook || !s_combatValid || s_combat.comboStep > 0 )
-			{
-				return false;
-			}
 			float look = 0.0f;
-			if( !VRCamera::LookYaw( look ) )
+			if( !s_combatValid || !VRCamera::LookYaw( look ) )
 			{
 				return false;
 			}
 			const float facing = static_cast< float >( s_combat.facing ) * ( 6.2831853f / 65536.0f );
-			const float off = WrapRadians( look - facing );
+			off = WrapRadians( look - facing );
+			return true;
+		}
+
+		// The character faces away from where the player looks (first hit of a chain only).
+		bool NeedsFacing()
+		{
+			float off = 0.0f;
+			if( !Config::Get().vr.m_attackFaceLook || s_combat.comboStep > 0 || !FacingOff( off ) )
+			{
+				return false;
+			}
 #ifdef _DEBUG
-			PSU_LOG( "VRFace: look %.0f facing %.0f (raw %04X) off %.0f deg\n", look * 57.29578f,
-				facing * 57.29578f, s_combat.facing, off * 57.29578f );
+			PSU_LOG( "VRFace: off %.0f deg (facing raw %04X)\n", off * 57.29578f, s_combat.facing );
 #endif
 			return std::fabs( off ) > kFaceToleranceRadians;
 		}
@@ -278,9 +286,11 @@ namespace PSUVR
 			s_pulseTime = kAttackPulseSeconds;
 			// PSU aims an attack along the stick held when it starts, so the stick stays toward
 			// the look direction through the press, not just before it.
-			const bool turn = NeedsFacing();
-			s_nudgeTime = turn ? kNudgeSeconds : 0.0f;
-			s_faceHold = turn ? kNudgeSeconds + kAttackPulseSeconds + kFaceHoldAfterSeconds : 0.0f;
+			// The game turns at its own speed (about 75 degrees per 0.1 s), so the press waits
+			// until the facing is within tolerance, at most kMaxTurnSeconds.
+			s_turning = NeedsFacing();
+			s_turnTime = 0.0f;
+			s_faceHold = 0.0f;
 		}
 
 		// The weapon X / Y use now; 0 (weapon not drawn yet) counts as the right-hand one.
@@ -435,7 +445,7 @@ namespace PSUVR
 			{
 				// Same as a swing: the first shot of a chain turns toward where you look.
 				StartAttack( kPadX, 0 );
-				s_gunGap = s_nudgeTime + kAttackPulseSeconds + kGunGapSeconds;
+				s_gunGap = kAttackPulseSeconds + kGunGapSeconds;
 #ifdef _DEBUG
 				PSU_LOG( "VRGun: shot (%s), step %d\n", s_gunShot ? "click" : "held", s_combat.comboStep );
 #endif
@@ -476,16 +486,34 @@ namespace PSUVR
 			PumpRequest( dt );
 			Gun( dt, roles, pad );
 
-			if( s_faceHold > 0.0f )
+			if( s_turning )
 			{
-				// Stick toward the look direction (forward in the camera's frame).
+				// Stick toward the look direction (forward in the camera's frame) until the
+				// character faces it; PSU aims the attack along the stick held as it starts,
+				// so the stick stays there through the press.
+				s_turnTime += dt;
+				float off = 0.0f;
+				const bool facing = FacingOff( off ) && std::fabs( off ) <= kFaceToleranceRadians;
+				if( ( facing && s_turnTime >= kMinTurnSeconds ) || s_turnTime >= kMaxTurnSeconds )
+				{
+					s_turning = false;
+					s_faceHold = kAttackPulseSeconds + kFaceHoldAfterSeconds;
+#ifdef _DEBUG
+					PSU_LOG( "VRFace: turned in %.2f s (off %.0f deg)\n", s_turnTime, off * 57.29578f );
+#endif
+				}
+				pad.lx = 0.0f;
+				pad.ly = 1.0f;
+			}
+			else if( s_faceHold > 0.0f )
+			{
 				s_faceHold -= dt;
 				pad.lx = 0.0f;
 				pad.ly = 1.0f;
 			}
-			if( s_nudgeTime > 0.0f )
+			if( s_turning )
 			{
-				s_nudgeTime -= dt;
+				// The press waits for the turn.
 			}
 			else if( s_pulseTime > 0.0f && s_pulseButton >= 0 )
 			{
@@ -695,7 +723,7 @@ namespace PSUVR
 				s_pendingButton = -1;
 				s_pulseButton = -1;
 				s_pulseTime = 0.0f;
-				s_nudgeTime = 0.0f;
+				s_turning = false;
 				s_faceHold = 0.0f;
 				s_gunShot = false;
 				s_gunTail = 0.0f;
