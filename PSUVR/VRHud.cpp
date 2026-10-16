@@ -449,6 +449,61 @@ namespace PSUVR
 		}
 
 		// One line per unique (caller, route), so psuex.log shows where each UI piece went.
+		// Free aim: the game's reticle (replaced by ours at the controller ray). Pieces on draw
+		// layer 48 with a 256 x 256 texture around the screen centre: four 192 x 192 corners
+		// (at 2560 x 1440), a ring ~45% of the width and four tick marks.
+		bool IsGameReticle( IDirect3DDevice9 *device, const void *verts, unsigned vertCount, unsigned stride, unsigned width,
+			unsigned height )
+		{
+			if( !device || !verts || vertCount == 0 || stride < 16 )
+			{
+				return false;
+			}
+			float minX = 0, minY = 0, maxX = 0, maxY = 0;
+			ComputeAabb( verts, vertCount, stride, minX, minY, maxX, maxY );
+			const float gw = static_cast< float >( width );
+			const float gh = static_cast< float >( height );
+			const float cx = ( minX + maxX ) * 0.5f;
+			const float cy = ( minY + maxY ) * 0.5f;
+			const float w = maxX - minX;
+			const float h = maxY - minY;
+			const bool squareSprite = w > gw * 0.02f && w < gw * 0.15f && h > w * 0.7f && h < w * 1.4f;
+			if( squareSprite && std::fabs( cx - gw * 0.5f ) < gw * 0.2f && std::fabs( cy - gh * 0.5f ) < gh * 0.25f )
+			{
+				return true;
+			}
+			constexpr int kReticleLayer = 48;
+			if( VRHud::PassBLayer() != kReticleLayer )
+			{
+				return false;
+			}
+			// Around the centre (ring, corners, ticks), or a thin bar on one of the screen's
+			// centre lines (the four lines reach out to the edges).
+			const bool central = w < gw * 0.6f && std::fabs( cx - gw * 0.5f ) < gw * 0.3f && std::fabs( cy - gh * 0.5f ) < gh * 0.35f;
+			const bool crossLine = ( std::fabs( cx - gw * 0.5f ) < gw * 0.02f && w < gw * 0.03f ) ||
+				( std::fabs( cy - gh * 0.5f ) < gh * 0.03f && h < gh * 0.04f );
+			if( !central && !crossLine )
+			{
+				return false;
+			}
+			bool reticle = false;
+			IDirect3DBaseTexture9 *texture = nullptr;
+			if( SUCCEEDED( device->GetTexture( 0, &texture ) ) && texture )
+			{
+				IDirect3DTexture9 *tex2d = nullptr;
+				texture->QueryInterface( __uuidof( IDirect3DTexture9 ), reinterpret_cast< void ** >( &tex2d ) );
+				texture->Release();
+				if( tex2d )
+				{
+					D3DSURFACE_DESC desc{};
+					tex2d->GetLevelDesc( 0, &desc );
+					reticle = desc.Width == 256 && desc.Height == 256;
+					tex2d->Release();
+				}
+			}
+			return reticle;
+		}
+
 		void LogRoute( void *ret, const char *route, const void *verts, unsigned vertCount, unsigned stride,
 			const D3DVIEWPORT9 *viewport = nullptr )
 		{
@@ -1140,11 +1195,20 @@ namespace PSUVR
 		const unsigned group = ( vertCount % 6 ) == 0 ? 6u : 3u;
 		unsigned userVerts = 0;
 		unsigned worldVerts = 0;
+		int aimHand = 0;
+		const bool aiming = VRSyntheticPad::GunAiming( aimHand );
+		unsigned reticleQuads = 0;
 		for( unsigned i = 0; i + group <= vertCount; i += group )
 		{
 			const unsigned char *quad = verts + i * stride;
 			if( IsNearFullscreenDraw( quad, group, stride, m_w, m_h ) )
 			{
+				continue;
+			}
+			// Free aim: the game's reticle can come batched with other quads.
+			if( aiming && IsGameReticle( device, quad, group, stride, m_w, m_h ) )
+			{
+				++reticleQuads;
 				continue;
 			}
 			const bool world = ClassifyWorldLayer( quad, group, stride );
@@ -1160,6 +1224,17 @@ namespace PSUVR
 			}
 		}
 
+#ifdef _DEBUG
+		if( reticleQuads > 0 )
+		{
+			static unsigned s_logs = 0;
+			if( s_logs < 20 )
+			{
+				++s_logs;
+				PSU_LOG( "VRHud aim: SKIP %u batched quads layer=%d ret=%p\n", reticleQuads, s_passBLayer, ret );
+			}
+		}
+#endif
 		if( userVerts >= 3 )
 		{
 			LogRoute( ret, "font-user", s_userBucket, userVerts, stride );
@@ -1185,6 +1260,24 @@ namespace PSUVR
 				RememberUserAabb( b.minX, b.minY, b.maxX, b.maxY );
 			}
 		}
+	}
+
+	bool VRHud::BlockReticleDraw( IDirect3DDevice9 *device, const void *verts, unsigned primitiveType,
+		unsigned primitiveCount, unsigned stride ) const
+	{
+		int aimHand = 0;
+		if( !m_active || !device || !verts || !VRSyntheticPad::GunAiming( aimHand ) || m_w == 0 || m_h == 0 )
+		{
+			return false;
+		}
+		DWORD fvf = 0;
+		device->GetFVF( &fvf );
+		if( ( fvf & D3DFVF_POSITION_MASK ) != D3DFVF_XYZRHW )
+		{
+			return false;
+		}
+		const unsigned vertCount = VertCountForPrimitive( primitiveType, primitiveCount );
+		return IsGameReticle( device, verts, vertCount, stride, m_w, m_h );
 	}
 
 	void VRHud::CapturePassBDraw( IDirect3DDevice9 *device, unsigned primitiveType,
@@ -1226,16 +1319,41 @@ namespace PSUVR
 		{
 			float minX = 0, minY = 0, maxX = 0, maxY = 0;
 			ComputeAabb( verts, vertCount, stride, minX, minY, maxX, maxY );
-			const float gw = static_cast< float >( m_w );
-			const float gh = static_cast< float >( m_h );
-			const float cx = ( minX + maxX ) * 0.5f;
-			const float cy = ( minY + maxY ) * 0.5f;
-			// The reticle is a square sprite (192 x 192 at 2560 x 1440) placed on the aim point,
-			// so it wanders around the centre; nameplates are wide and are kept.
-			const float w = maxX - minX;
-			const float h = maxY - minY;
-			const bool squareSprite = w > gw * 0.02f && w < gw * 0.15f && h > w * 0.7f && h < w * 1.4f;
-			if( squareSprite && std::fabs( cx - gw * 0.5f ) < gw * 0.2f && std::fabs( cy - gh * 0.5f ) < gh * 0.25f )
+			const bool skip = IsGameReticle( device, verts, vertCount, stride, m_w, m_h );
+#ifdef _DEBUG
+			// Diagnostics: every HUD draw for a while after free aim starts.
+			static DWORD s_lastAimTick = 0;
+			static unsigned s_aimLogs = 0;
+			if( GetTickCount() - s_lastAimTick > 2000 )
+			{
+				s_aimLogs = 0;
+			}
+			s_lastAimTick = GetTickCount();
+			if( s_aimLogs < 150 )
+			{
+				++s_aimLogs;
+				unsigned texW = 0, texH = 0;
+				IDirect3DBaseTexture9 *texture = nullptr;
+				if( SUCCEEDED( device->GetTexture( 0, &texture ) ) && texture )
+				{
+					IDirect3DTexture9 *tex2d = nullptr;
+					texture->QueryInterface( __uuidof( IDirect3DTexture9 ), reinterpret_cast< void ** >( &tex2d ) );
+					texture->Release();
+					if( tex2d )
+					{
+						D3DSURFACE_DESC desc{};
+						tex2d->GetLevelDesc( 0, &desc );
+						texW = desc.Width;
+						texH = desc.Height;
+						tex2d->Release();
+					}
+				}
+				const float z = stride >= 16 ? static_cast< const float * >( verts )[ 2 ] : 0.0f;
+				PSU_LOG( "VRHud aim: %s box=(%.0f,%.0f)-(%.0f,%.0f) z=%.4f n=%u tex=%ux%u layer=%d ret=%p\n", skip ? "SKIP" : "keep",
+					minX, minY, maxX, maxY, z, vertCount, texW, texH, s_passBLayer, ret );
+			}
+#endif
+			if( skip )
 			{
 				LogRoute( ret, "skip-reticle", verts, vertCount, stride );
 				return;
@@ -1498,6 +1616,21 @@ namespace PSUVR
 		DWORD fvf = 0;
 		device->GetFVF( &fvf );
 		unsigned stride = FvfStride( fvf );
+		// Free aim: the game's reticle can come through a whole UI draw too.
+		int aimHand = 0;
+		if( VRSyntheticPad::GunAiming( aimHand ) && vertexCount > 0 &&
+			IsGameReticle( device, vertexPtr, static_cast< unsigned >( vertexCount ), stride, m_w, m_h ) )
+		{
+#ifdef _DEBUG
+			static unsigned s_logs = 0;
+			if( s_logs < 20 )
+			{
+				++s_logs;
+				PSU_LOG( "VRHud aim: SKIP ui draw n=%d layer=%d\n", vertexCount, s_passBLayer );
+			}
+#endif
+			return;
+		}
 		const bool world = ClassifyWorldLayer( vertexPtr, static_cast< unsigned >( vertexCount ), stride );
 		ReplayOnto( device, world, thisPtr, a4, vertexCount, vertexPtr, drawType, drawFn );
 	}

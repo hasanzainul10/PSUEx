@@ -408,6 +408,13 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3
 	{
 		return D3D_OK;
 	}
+	// Free aim: the game's reticle isn't drawn at all (not even in the game's own frame).
+	if( ( FrameTrace::CurrentPassAddress() == 0x004FDBC0 || PSUVR::VRHud::Get().InUiDraw() ) &&
+		PSUVR::VRHud::Get().BlockReticleDraw( pDevice, pVertexStreamZeroData, static_cast< unsigned >( PrimitiveType ),
+			PrimitiveCount, VertexStreamZeroStride ) )
+	{
+		return D3D_OK;
+	}
 	const void *verts = pVertexStreamZeroData;
 	if( const void *stretched = PSUVR::StereoRenderer::StretchScreenQuadIfNeeded(
 			pDevice, static_cast< unsigned >( PrimitiveType ), PrimitiveCount,

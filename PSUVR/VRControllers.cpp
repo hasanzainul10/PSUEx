@@ -1,5 +1,6 @@
 #include "VRControllers.h"
 
+#include "VRControllerSim.h"
 #include "VRSyntheticPad.h"
 
 #include "../Misc/Log.h"
@@ -205,10 +206,16 @@ namespace PSUVR
 		void Update( IVRRuntime *runtime )
 		{
 			s_runtime = runtime;
+			VRControllerSim::Update();
+			const bool emulated = VRControllerSim::Active();
 			for( int hand = 0; hand < 2; ++hand )
 			{
 				const uint32_t before = s_state[ hand ].buttons;
-				if( !runtime || !runtime->GetControllerState( hand, s_state[ hand ] ) )
+				if( emulated )
+				{
+					VRControllerSim::Fill( hand, s_state[ hand ] );
+				}
+				else if( !runtime || !runtime->GetControllerState( hand, s_state[ hand ] ) )
 				{
 					s_state[ hand ] = {};
 				}
@@ -260,6 +267,11 @@ namespace PSUVR
 
 		void Haptic( int hand, float amplitude, float seconds )
 		{
+			if( VRControllerSim::Active() )
+			{
+				VRControllerSim::NoteHaptic( hand, amplitude, seconds );
+				return;
+			}
 			if( s_runtime )
 			{
 				s_runtime->Haptic( hand, amplitude, seconds );

@@ -111,6 +111,10 @@ struct VRSettings
 	bool m_comfortVignette = false;
 	// Motion controllers: draw a marker and pointer ray at each tracked controller.
 	bool m_showControllers = true;
+	// Testing without the headset on: emulated controllers (Ctrl+F9; Ctrl+numpad hotkeys) and a
+	// command file in the game folder that runs whenever it changes.
+	bool m_emulateControllers = false;
+	std::string m_simScript = "psuex_vr_script.txt";
 	// First person: the character's arms reach for the controllers (two-bone IK).
 	bool m_handsFollow = true;
 	// Arms while attacking: "controller" (your swing) or "animation" (the game's). Photon

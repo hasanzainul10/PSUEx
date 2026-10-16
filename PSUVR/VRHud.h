@@ -16,6 +16,7 @@ namespace PSUVR
 		// Pass-B render layer being drawn (0x2B..0x3F), -1 outside pass B. Set by
 		// Hook_PassB, which runs the layer loop itself so attribution is exact.
 		static void SetPassBLayer( int layer );
+		static int PassBLayer() { return s_passBLayer; }
 
 		// Clear both HUD RTs at game resolution. Call once per stereo frame after Pass A.
 		void BeginStereoFrame( IDirect3DDevice9 *device, unsigned gameW, unsigned gameH );
@@ -26,6 +27,10 @@ namespace PSUVR
 		void BeginUiDraw() { m_inUiDraw = true; m_uiPassBCaptures = 0; }
 		void EndUiDraw() { m_inUiDraw = false; }
 		bool InUiDraw() const { return m_inUiDraw; }
+		// Free aim with the gun up: this 2D draw is a piece of the game's reticle (ours
+		// replaces it), so it isn't drawn at all.
+		bool BlockReticleDraw( IDirect3DDevice9 *device, const void *verts, unsigned primitiveType,
+			unsigned primitiveCount, unsigned stride ) const;
 		unsigned UiPassBCaptures() const { return m_uiPassBCaptures; }
 
 		// After a 2D DP-UP (Pass B or later UI): eyes / user visor / world kiosk.

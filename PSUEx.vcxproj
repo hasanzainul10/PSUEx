@@ -194,7 +194,10 @@
     <ClInclude Include="PSUDetour\Hook_GameFlags.hpp" />
     <ClInclude Include="PSUDetour\Hook_TCameraTaskPlay.hpp" />
     <ClInclude Include="PSUVR\VRHands.h" />
+    <ClInclude Include="PSUVR\VRControllerSim.h" />
     <ClInclude Include="PSUDetour\Hook_0074B760_BonePose.hpp" />
+    <ClInclude Include="PSUDetour\Hook_005089C0_NearCull.hpp" />
+    <ClInclude Include="PSUDetour\Hook_00562070_PartCull.hpp" />
     <ClInclude Include="PSUDetour\Hook_UIScale.hpp" />
     <ClInclude Include="PSUDetour\Hook_TextDraw.hpp" />
     <ClInclude Include="PSUTranslation\Translation.h" />
@@ -291,6 +294,7 @@
     <ClCompile Include="PSUVR\VRSettings.cpp" />
     <ClCompile Include="PSUVR\VRPlayerDraw.cpp" />
     <ClCompile Include="PSUVR\VRHands.cpp" />
+    <ClCompile Include="PSUVR\VRControllerSim.cpp" />
     <ClCompile Include="PSUOverlay\ImageMng.cpp" />
     <ClCompile Include="PSUOverlay\Interface\CameraDisplay.cpp" />
     <ClCompile Include="PSUOverlay\Interface\LogDisplay.cpp" />

@@ -162,4 +162,77 @@ The camera never turns by itself; it only moves when you tell it to.
 | Choppy | Lower shadows, lower the game resolution, close other apps. |
 | Something else | Send `psuex.log` and `dinput8_proxy.log` from the game folder with your report. |
 
+---
+
+## 11. Testing without the headset
+
+For trying things over remote desktop with no headset on: SteamVR's built-in fake headset (the null driver) keeps the VR session running, and PSUEx emulates the motion controllers.
+
+### Turn on the fake headset
+
+1. Close SteamVR.
+2. Open `C:\Program Files (x86)\Steam\config\steamvr.vrsettings` in a text editor and add (or merge into the existing sections):
+
+   ```json
+   "steamvr" : {
+      "forcedDriver" : "null",
+      "activateMultipleDrivers" : true
+   },
+   "driver_null" : {
+      "enable" : true,
+      "renderWidth" : 2016,
+      "renderHeight" : 2240,
+      "windowWidth" : 1920,
+      "windowHeight" : 1080
+   }
+   ```
+
+3. Start SteamVR. A window shows what the fake headset sees.
+
+To go back to the real headset, close SteamVR and remove `forcedDriver` (or set `driver_null` `enable` to `false`).
+
+### Emulated controllers
+
+Turn them on with **Ctrl+F9** (or *Emulate controllers* in the VR settings). Keep **Num Lock** on. Hotkeys (all with **Ctrl**):
+
+| Keys | Does |
+|---|---|
+| Num7 / Num8 / Num9 | Keys act on the left / both / right hands |
+| Num1–Num5 | Pose: rest, forward, gun (up in view), raised, calibration |
+| Num0 | Trigger (held) |
+| Num . | Grip (held) |
+| Num / | Cross / A |
+| Num + | Circle / B |
+| Num − | Stick click |
+| Num6 | Swing |
+| Num * | Both grips (the VR chord) |
+| T / G / F / H | Stick up / down / left / right |
+
+### Command file
+
+`psuex_vr_script.txt` in the game folder runs from the top every time the file changes (one command per line, `#` for comments). Each line is written to `psuex.log` as `VRSim: > ...`.
+
+| Command | Does |
+|---|---|
+| `emulate on` / `emulate off` | Turn the emulated controllers on / off |
+| `wait <seconds>` | Pause the script |
+| `pose <left\|right\|both> <rest\|forward\|gun\|raised\|calib>` | Move the hands (eased) |
+| `press <hand> <trigger\|grip\|primary\|secondary\|stick> [seconds]` | Press a control (default 0.15 s) |
+| `hold <hand> <control> on\|off` | Hold or release a control |
+| `stick <hand> <x> <y> [seconds]` | Push the stick (−1 to 1) |
+| `swing <hand>` | A fast swing (attack) |
+| `chord <hand> <control>` | Both grips, then that control (e.g. `chord both trigger` = hand calibration) |
+| `log <text>` | A marker in the log |
+
+Example: free aim with the left gun, shoot, then put the gun down.
+
+```
+emulate on
+pose left gun
+wait 2
+press left trigger
+wait 3
+pose left rest
+```
+
 Full settings reference: [INSTALL.md](INSTALL.md).

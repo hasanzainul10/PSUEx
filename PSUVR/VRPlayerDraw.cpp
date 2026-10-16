@@ -41,6 +41,7 @@ namespace PSUVR
 		Patch s_patches[ kMaxPatches ]{};
 		unsigned s_patchCount = 0;
 		bool s_drawingLocalPlayer = false;
+		bool s_forcingVisible = false;
 		void *s_playerObject = nullptr;
 		bool s_loggedPatch = false;
 		bool s_loggedDiscovery = false;
@@ -84,14 +85,36 @@ namespace PSUVR
 		void __cdecl LocalPlayerDrawThunk( void *object )
 		{
 			DrawCallback original = nullptr;
+			unsigned patchIndex = kMaxPatches;
 			for( unsigned i = 0; i < s_patchCount; ++i )
 			{
 				if( *reinterpret_cast< void ** >( s_patches[ i ].node + kNodeObject ) == object )
 				{
 					original = s_patches[ i ].original;
+					patchIndex = i;
 					break;
 				}
 			}
+#ifdef _DEBUG
+			{
+				// Diagnostics: draw callback calls per patched node and camera state.
+				static unsigned s_calls[ kMaxPatches + 1 ][ 8 ]{};
+				static DWORD s_lastLog = 0;
+				++s_calls[ patchIndex ][ VRCamera::CameraState() & 7 ];
+				if( GetTickCount() - s_lastLog >= 3000 )
+				{
+					s_lastLog = GetTickCount();
+					for( unsigned i = 0; i <= kMaxPatches; ++i )
+					{
+						const unsigned *c = s_calls[ i ];
+						if( c[ 1 ] + c[ 3 ] + c[ 4 ] )
+						{
+							PSU_LOG( "VRPlayerDraw: node %u calls state1 %u state3 %u state4 %u\n", i, c[ 1 ], c[ 3 ], c[ 4 ] );
+						}
+					}
+				}
+			}
+#endif
 			if( !original && s_patchCount > 0 )
 			{
 				original = s_patches[ 0 ].original;
@@ -101,9 +124,98 @@ namespace PSUVR
 				return;
 			}
 			NotePlayerModel( object );
+			// Free aim hides the player (draw object +9 bit 0x04 skips the node, +0x390 bit 0x10
+			// skips TPlayerPad's draw 0x00526A80). With the arms on the controllers, draw it
+			// anyway: clear those bits for this call only.
+			uint8_t *flags = static_cast< uint8_t * >( object );
+			uint8_t saved9 = 0, saved390 = 0;
+			const bool forceShow = VRCamera::CameraState() == 4 && Config::Get().vr.m_handsFollow && Readable( flags + 0x390, 4 );
+			if( forceShow )
+			{
+				saved9 = flags[ 9 ];
+				saved390 = flags[ 0x390 ];
+				static DWORD s_lastLog = 0;
+				if( GetTickCount() - s_lastLog >= 2000 )
+				{
+					s_lastLog = GetTickCount();
+					const uint8_t *render = *reinterpret_cast< const uint8_t * const * >( flags + 0x160 );
+					PSU_LOG( "VRPlayerDraw: free aim draw flags +9=%02X +390=%02X mode=%d render type %d +2C=%02X\n", saved9,
+						saved390, *reinterpret_cast< const int * >( 0x009946C8 ),
+						Readable( render, 0x30 ) ? *reinterpret_cast< const int * >( render + 0x28 ) : -1,
+						Readable( render, 0x30 ) ? render[ 0x2C ] : 0 );
+				}
+				flags[ 9 ] = static_cast< uint8_t >( saved9 & ~0x04 );
+				flags[ 0x390 ] = static_cast< uint8_t >( saved390 & ~0x10 );
+			}
+			// The models (body, weapons and other attachments) draw only with +0x14 bit 0x10.
+			constexpr unsigned kMaxModels = 32;
+			uint32_t *modelFlags[ kMaxModels ];
+			uint32_t savedModelFlags[ kMaxModels ];
+			unsigned modelCount = 0;
+			if( forceShow )
+			{
+				__try
+				{
+					const uint8_t *render = *reinterpret_cast< const uint8_t * const * >( flags + 0x160 );
+					auto add = [ & ]( const void *model )
+					{
+						if( modelCount < kMaxModels && Readable( model, 0x18 ) )
+						{
+							uint32_t *f = reinterpret_cast< uint32_t * >( static_cast< uint8_t * >( const_cast< void * >( model ) ) + 0x14 );
+							modelFlags[ modelCount ] = f;
+							savedModelFlags[ modelCount ] = *f;
+							++modelCount;
+						}
+					};
+					if( Readable( render, 0x4C ) )
+					{
+						add( *reinterpret_cast< void * const * >( render + 0x04 ) );
+						add( *reinterpret_cast< void * const * >( render + 0x20 ) );
+						add( *reinterpret_cast< void * const * >( render + 0x24 ) );
+						// Attachment lists (render +0x30, 7 heads): node +0 model, +8 next.
+						for( unsigned list = 0; list < 7; ++list )
+						{
+							const uint8_t *node = *reinterpret_cast< const uint8_t * const * >( render + 0x30 + list * 4 );
+							for( unsigned n = 0; node && n < 16 && Readable( node, 0x10 ); ++n )
+							{
+								add( *reinterpret_cast< void * const * >( node ) );
+								node = *reinterpret_cast< const uint8_t * const * >( node + 8 );
+							}
+						}
+					}
+					unsigned hidden = 0;
+					for( unsigned i = 0; i < modelCount; ++i )
+					{
+						hidden += ( *modelFlags[ i ] & 0x10 ) ? 0 : 1;
+						*modelFlags[ i ] |= 0x10;
+					}
+					static DWORD s_lastModelLog = 0;
+					if( GetTickCount() - s_lastModelLog >= 2000 )
+					{
+						s_lastModelLog = GetTickCount();
+						PSU_LOG( "VRPlayerDraw: free aim models %u, %u without the draw bit (body +14=%08lX)\n", modelCount, hidden,
+							modelCount ? static_cast< unsigned long >( savedModelFlags[ 0 ] ) : 0ul );
+					}
+				}
+				__except( EXCEPTION_EXECUTE_HANDLER )
+				{
+					modelCount = 0;
+				}
+			}
 			s_drawingLocalPlayer = true;
+			s_forcingVisible = forceShow;
 			original( object );
+			s_forcingVisible = false;
 			s_drawingLocalPlayer = false;
+			if( forceShow )
+			{
+				flags[ 9 ] = static_cast< uint8_t >( ( flags[ 9 ] & ~0x04 ) | ( saved9 & 0x04 ) );
+				flags[ 0x390 ] = static_cast< uint8_t >( ( flags[ 0x390 ] & ~0x10 ) | ( saved390 & 0x10 ) );
+				for( unsigned i = 0; i < modelCount; ++i )
+				{
+					*modelFlags[ i ] = ( *modelFlags[ i ] & ~0x10u ) | ( savedModelFlags[ i ] & 0x10u );
+				}
+			}
 			if( s_divModel )
 			{
 				VRHands::AfterPlayerDraw( const_cast< uint8_t * >( s_divModel ) );
@@ -414,6 +526,11 @@ namespace PSUVR
 			return s_drawingLocalPlayer;
 		}
 
+		bool ForcingVisible()
+		{
+			return s_forcingVisible;
+		}
+
 		void OnBonePose( float *out, const uint8_t *skeleton )
 		{
 			static unsigned s_poses = 0, s_noModel = 0;
@@ -448,6 +565,45 @@ namespace PSUVR
 
 	LocalPlayerDrawScope::LocalPlayerDrawScope( IDirect3DDevice9 *device )
 	{
+#ifdef _DEBUG
+		// Diagnostics (free aim hides the player): the local player's draw state in the eye
+		// passes, once per 2 s per camera state.
+		if( device && s_drawingLocalPlayer && StereoRenderer::InEyePass() )
+		{
+			static DWORD s_lastLog[ 8 ]{};
+			static unsigned s_draws[ 8 ]{};
+			const int state = VRCamera::CameraState() & 7;
+			++s_draws[ state ];
+			if( GetTickCount() - s_lastLog[ state ] >= 2000 )
+			{
+				s_lastLog[ state ] = GetTickCount();
+				DWORD blend = 0, src = 0, dst = 0, test = 0, ref = 0, func = 0, factor = 0, z = 0, zwrite = 0, cull = 0, clip = 0;
+				device->GetRenderState( D3DRS_ALPHABLENDENABLE, &blend );
+				device->GetRenderState( D3DRS_SRCBLEND, &src );
+				device->GetRenderState( D3DRS_DESTBLEND, &dst );
+				device->GetRenderState( D3DRS_ALPHATESTENABLE, &test );
+				device->GetRenderState( D3DRS_ALPHAREF, &ref );
+				device->GetRenderState( D3DRS_ALPHAFUNC, &func );
+				device->GetRenderState( D3DRS_TEXTUREFACTOR, &factor );
+				device->GetRenderState( D3DRS_ZENABLE, &z );
+				device->GetRenderState( D3DRS_ZWRITEENABLE, &zwrite );
+				device->GetRenderState( D3DRS_CULLMODE, &cull );
+				device->GetRenderState( D3DRS_CLIPPLANEENABLE, &clip );
+				D3DMATERIAL9 material{};
+				device->GetMaterial( &material );
+				IDirect3DVertexShader9 *vs = nullptr;
+				device->GetVertexShader( &vs );
+				PSU_LOG( "VRPlayerDraw: state %d draws %u: blend %lu %lu/%lu test %lu ref %lu func %lu factor %08lX mat a %.2f z %lu/%lu cull %lu clip %lu vs %d\n",
+					state, s_draws[ state ], blend, src, dst, test, ref, func, factor, material.Diffuse.a, z, zwrite, cull, clip,
+					vs ? 1 : 0 );
+				if( vs )
+				{
+					vs->Release();
+				}
+				s_draws[ state ] = 0;
+			}
+		}
+#endif
 		if( !device || !s_drawingLocalPlayer || !StereoRenderer::InEyePass() || !VRCamera::FirstPersonActive() )
 		{
 			return;

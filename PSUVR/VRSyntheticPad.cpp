@@ -573,6 +573,10 @@ namespace PSUVR
 		// back to normal targeting. The mode only does anything with a left-hand gun.
 		float s_r3Pulse = 0.0f;        // R3 held for the current toggle
 		float s_r3Cooldown = 0.0f;     // wait for the camera to follow before toggling again
+		// Moving (left stick) or turning (right stick) leaves free aim until the sticks rest.
+		float s_stickRest = 1.0f;
+		constexpr float kStickAimThreshold = 0.35f;
+		constexpr float kStickResumeSeconds = 0.4f;
 		constexpr float kR3PulseSeconds = 0.08f;
 		constexpr float kR3CooldownSeconds = 0.5f;
 		constexpr float kInViewEnterRadians = 30.0f * ( 3.14159265f / 180.0f );
@@ -631,6 +635,10 @@ namespace PSUVR
 			}
 			const bool gun = s_combatValid && PSUCombat::ClassifyWeapon( s_combat.leftClass ) == PSUCombat::WeaponKind::Gun1H;
 			const bool inGame = VRCamera::CameraState() == 4;
+			const auto pushed = []( const ControllerState &c ) {
+				return c.stick[ 0 ] * c.stick[ 0 ] + c.stick[ 1 ] * c.stick[ 1 ] > kStickAimThreshold * kStickAimThreshold;
+			};
+			s_stickRest = pushed( VRControllers::State( 0 ) ) || pushed( VRControllers::State( 1 ) ) ? 0.0f : s_stickRest + dt;
 			bool want = false;
 			if( s_aimModeOn && gun && !s_ui )
 			{
@@ -639,7 +647,7 @@ namespace PSUVR
 				{
 					s_gunInView = s_gunInView ? angle < kInViewLeaveRadians : angle < kInViewEnterRadians;
 				}
-				want = s_gunInView;
+				want = s_gunInView && s_stickRest >= kStickResumeSeconds;
 			}
 			else
 			{
@@ -652,7 +660,8 @@ namespace PSUVR
 				s_r3Cooldown = kR3CooldownSeconds;
 				pad.buttons |= Bit( kPadR3 );
 #ifdef _DEBUG
-				PSU_LOG( "VRAim: %s free aim (gun %s view)\n", want ? "entering" : "leaving", s_gunInView ? "in" : "out of" );
+				PSU_LOG( "VRAim: %s free aim (gun %s view%s)\n", want ? "entering" : "leaving", s_gunInView ? "in" : "out of",
+					s_stickRest < kStickResumeSeconds ? ", sticks moving" : "" );
 #endif
 			}
 		}
@@ -996,8 +1005,11 @@ namespace PSUVR
 
 			PadState pad;
 			const HandRoles roles = Roles();
-			if( l1 && !modifier ) pad.buttons |= Bit( kPadL1 );
-			if( r1 && !modifier ) pad.buttons |= Bit( kPadR1 );
+			// In free aim (manual aim on) L1 / R1 are the scan: the grips send nothing there, so
+			// left grip + trigger is only the gun's Photon Art (Y). Scan stays on R3.
+			const bool freeAim = s_aimModeOn && VRCamera::CameraState() == 4;
+			if( l1 && !modifier && !freeAim ) pad.buttons |= Bit( kPadL1 );
+			if( r1 && !modifier && !freeAim ) pad.buttons |= Bit( kPadR1 );
 			for( const VRMotionLayout::Entry &entry : VRMotionLayout::kLayout )
 			{
 				if( entry.control == Control::Grip || entry.control == Control::Stick )

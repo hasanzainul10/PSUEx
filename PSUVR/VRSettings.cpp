@@ -55,6 +55,8 @@ namespace
 	X( m_snapTurn, "snapTurn" ) \
 	X( m_comfortVignette, "comfortVignette" ) \
 	X( m_showControllers, "showControllers" ) \
+	X( m_emulateControllers, "emulateControllers" ) \
+	X( m_simScript, "simScript" ) \
 	X( m_handsFollow, "handsFollow" ) \
 	X( m_handsAttack, "handsAttack" ) \
 	X( m_handCalibrated, "handCalibrated" ) \

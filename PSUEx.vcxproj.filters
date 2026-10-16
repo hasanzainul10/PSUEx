@@ -228,6 +228,12 @@
     <ClInclude Include="PSUDetour\Hook_0074B760_BonePose.hpp">
       <Filter>Header Files\PSUFunction</Filter>
     </ClInclude>
+    <ClInclude Include="PSUDetour\Hook_005089C0_NearCull.hpp">
+      <Filter>Header Files\PSUFunction</Filter>
+    </ClInclude>
+    <ClInclude Include="PSUDetour\Hook_00562070_PartCull.hpp">
+      <Filter>Header Files\PSUFunction</Filter>
+    </ClInclude>
     <ClInclude Include="PSUOverlay\Interface\CameraDisplay.h">
       <Filter>Header Files\PSUOverlay\Interface</Filter>
     </ClInclude>
@@ -304,6 +310,9 @@
       <Filter>Header Files\PSUVR</Filter>
     </ClInclude>
     <ClInclude Include="PSUVR\VRHands.h">
+      <Filter>Header Files\PSUVR</Filter>
+    </ClInclude>
+    <ClInclude Include="PSUVR\VRControllerSim.h">
       <Filter>Header Files\PSUVR</Filter>
     </ClInclude>
     <ClInclude Include="Misc\Log.h">
@@ -471,6 +480,9 @@
       <Filter>Source Files\PSUVR</Filter>
     </ClCompile>
     <ClCompile Include="PSUVR\VRHands.cpp">
+      <Filter>Source Files\PSUVR</Filter>
+    </ClCompile>
+    <ClCompile Include="PSUVR\VRControllerSim.cpp">
       <Filter>Source Files\PSUVR</Filter>
     </ClCompile>
   </ItemGroup>
