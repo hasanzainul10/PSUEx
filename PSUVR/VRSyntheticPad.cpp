@@ -3,6 +3,7 @@
 #include "VRBindings.h"
 #include "VRCamera.h"
 #include "VRControllers.h"
+#include "VRSystem.h"
 #include "VRMotionLayout.h"
 #include "../Misc/Log.h"
 #include "../PSUExConfig.h"
@@ -552,6 +553,97 @@ namespace PSUVR
 #endif
 		}
 
+		// Free aim mode (left stick click): while on, PSU's free aim (R3, camera state 4) follows
+		// the gun hand: raised into view = free aim with the reticle, lowered out of view =
+		// back to normal targeting. The mode only does anything with a left-hand gun.
+		bool s_aimModeOn = false;
+		bool s_gunInView = false;
+		float s_r3Pulse = 0.0f;        // R3 held for the current toggle
+		float s_r3Cooldown = 0.0f;     // wait for the camera to follow before toggling again
+		constexpr float kR3PulseSeconds = 0.08f;
+		constexpr float kR3CooldownSeconds = 0.5f;
+		constexpr float kInViewEnterRadians = 30.0f * ( 3.14159265f / 180.0f );
+		constexpr float kInViewLeaveRadians = 45.0f * ( 3.14159265f / 180.0f );
+
+		// Angle between where the head looks and the direction to the controller.
+		bool AngleFromView( const ControllerState &c, float &angle )
+		{
+			EyePose views[ 2 ];
+			EyePose viewSpace[ 2 ];
+			if( !c.active || !c.gripValid || !System::Get().NextViews( views, viewSpace ) )
+			{
+				return false;
+			}
+			const float hx = ( views[ 0 ].position[ 0 ] + views[ 1 ].position[ 0 ] ) * 0.5f;
+			const float hy = ( views[ 0 ].position[ 1 ] + views[ 1 ].position[ 1 ] ) * 0.5f;
+			const float hz = ( views[ 0 ].position[ 2 ] + views[ 1 ].position[ 2 ] ) * 0.5f;
+			float dx = c.gripPosition[ 0 ] - hx, dy = c.gripPosition[ 1 ] - hy, dz = c.gripPosition[ 2 ] - hz;
+			const float length = std::sqrt( dx * dx + dy * dy + dz * dz );
+			if( length < 1.0e-3f )
+			{
+				return false;
+			}
+			dx /= length; dy /= length; dz /= length;
+			// Head forward: q * (0, 0, -1).
+			const float *q = views[ 0 ].orientation;
+			const float x = q[ 0 ], y = q[ 1 ], z = q[ 2 ], w = q[ 3 ];
+			const float fx = -( 2.0f * ( x * z + w * y ) );
+			const float fy = -( 2.0f * ( y * z - w * x ) );
+			const float fz = -( 1.0f - 2.0f * ( x * x + y * y ) );
+			float dot = dx * fx + dy * fy + dz * fz;
+			dot = dot > 1.0f ? 1.0f : ( dot < -1.0f ? -1.0f : dot );
+			angle = std::acos( dot );
+			return true;
+		}
+
+		void ToggleAimMode()
+		{
+			s_aimModeOn = !s_aimModeOn;
+			VRBindings::ShowToast( s_aimModeOn ? "Free aim mode on" : "Free aim mode off" );
+			Buzz( 0 );
+		}
+
+		// Keeps the game's free aim matching the gun hand while the mode is on (R3 toggles it).
+		void AimModeFollow( float dt, PadState &pad )
+		{
+			if( s_r3Cooldown > 0.0f )
+			{
+				s_r3Cooldown -= dt;
+			}
+			if( s_r3Pulse > 0.0f )
+			{
+				s_r3Pulse -= dt;
+				pad.buttons |= Bit( kPadR3 );
+				return;
+			}
+			const bool gun = s_combatValid && PSUCombat::ClassifyWeapon( s_combat.leftClass ) == PSUCombat::WeaponKind::Gun1H;
+			const bool inGame = VRCamera::CameraState() == 4;
+			bool want = false;
+			if( s_aimModeOn && gun && !s_ui )
+			{
+				float angle = 0.0f;
+				if( AngleFromView( VRControllers::State( 0 ), angle ) )
+				{
+					s_gunInView = s_gunInView ? angle < kInViewLeaveRadians : angle < kInViewEnterRadians;
+				}
+				want = s_gunInView;
+			}
+			else
+			{
+				s_gunInView = false;
+			}
+			// Mode off (or no gun): leave free aim if we are in it.
+			if( want != inGame && s_r3Cooldown <= 0.0f && ( s_aimModeOn || inGame ) && ( gun || inGame ) )
+			{
+				s_r3Pulse = kR3PulseSeconds;
+				s_r3Cooldown = kR3CooldownSeconds;
+				pad.buttons |= Bit( kPadR3 );
+#ifdef _DEBUG
+				PSU_LOG( "VRAim: %s free aim (gun %s view)\n", want ? "entering" : "leaving", s_gunInView ? "in" : "out of" );
+#endif
+			}
+		}
+
 		// Adds the combat presses to the pad. Returns the roles so the caller can keep the
 		// gesture controls (triggers, right grip) from also sending their plain buttons.
 		HandRoles Combat( float dt, bool modifier, PadState &pad )
@@ -826,6 +918,7 @@ namespace PSUVR
 				s_faceHold = 0.0f;
 				s_gunShot = false;
 				s_gunTail = 0.0f;
+				s_r3Pulse = 0.0f;
 				std::lock_guard lock( s_mutex );
 				s_active = false;
 				s_out = {};
@@ -911,6 +1004,14 @@ namespace PSUVR
 					}
 					continue;
 				}
+				if( output == Output::FreeAimMode )
+				{
+					if( VRControllers::Pressed( entry.hand ) & ControlBit( entry.control ) )
+					{
+						ToggleAimMode();
+					}
+					continue;
+				}
 				// VR actions fire once, on the press.
 				const int action = ActionFor( output );
 				if( action >= 0 && ( VRControllers::Pressed( entry.hand ) & ControlBit( entry.control ) ) )
@@ -933,6 +1034,7 @@ namespace PSUVR
 			pad.rx = Deadzone( right.stick[ 0 ], 0.15f );
 			pad.ry = Deadzone( right.stick[ 1 ], 0.15f );
 			FreeAim( pad );
+			AimModeFollow( dt, pad );
 
 			std::lock_guard lock( s_mutex );
 			s_out = pad;

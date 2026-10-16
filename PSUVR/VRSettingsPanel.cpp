@@ -337,7 +337,9 @@ namespace PSUVR
 				ImGui::Checkbox( "Swing with the trigger held = Photon Art", &s.m_paGesture );
 				ImGui::Checkbox( "Turn to where I look before attacking", &s.m_attackFaceLook );
 				ImGui::Checkbox( "Aim free aim with the gun hand", &s.m_controllerAim );
-				Help( "In free aim (R3 with a gun) turning the gun hand turns the aim by the same angle." );
+				Help( "Left stick click turns free aim mode on / off. While on, raising the gun hand into view "
+					"enters the game's free aim (reticle) and lowering it leaves it; turning the gun hand turns "
+					"the aim by the same angle." );
 				if( s.m_controllerAim )
 				{
 					ImGui::Checkbox( "Invert aim up / down", &s.m_aimInvertPitch );

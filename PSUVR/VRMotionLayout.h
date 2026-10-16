@@ -20,6 +20,8 @@ namespace PSUVR
 			LeftStick, RightStick,
 			// VR actions.
 			Recenter, ToggleCamera, ToggleSettings, TogglePause,
+			// Motion combat: free aim follows the gun hand while this mode is on.
+			FreeAimMode,
 		};
 
 		struct Entry
@@ -35,7 +37,7 @@ namespace PSUVR
 			{ 0, Control::Trigger, Output::L2, Output::None },
 			{ 0, Control::Grip, Output::L1, Output::None },
 			{ 0, Control::Stick, Output::LeftStick, Output::None },
-			{ 0, Control::StickClick, Output::Select, Output::L3 },
+			{ 0, Control::StickClick, Output::FreeAimMode, Output::L3 },
 			{ 0, Control::Primary, Output::X, Output::ToggleSettings },
 			{ 0, Control::Secondary, Output::Y, Output::TogglePause },
 			{ 1, Control::Trigger, Output::R2, Output::None },
@@ -91,6 +93,7 @@ namespace PSUVR
 				case Output::ToggleCamera: return "First / third person";
 				case Output::ToggleSettings: return "VR settings";
 				case Output::TogglePause: return "Pause VR";
+				case Output::FreeAimMode: return "Free aim mode on / off";
 				default: return "";
 			}
 		}
