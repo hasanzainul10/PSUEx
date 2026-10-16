@@ -458,7 +458,7 @@ namespace PSUVR
 			m_skip = true;
 			return;
 		}
-		if( vr.m_fpBody != "headless" || VRHands::HeadHidden() )
+		if( ( vr.m_fpBody != "headless" && vr.m_fpBody != "hands" ) || VRHands::HeadHidden() )
 		{
 			return;
 		}

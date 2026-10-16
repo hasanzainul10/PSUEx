@@ -1009,6 +1009,20 @@ namespace PSUVR
 				{
 					continue;
 				}
+				// Both grips + both triggers: hand angle calibration (once, when the second
+				// trigger goes down). Triggers send nothing else in the chord.
+				if( modifier && entry.control == Control::Trigger )
+				{
+					if( entry.chord == Output::CalibrateHands && entry.hand == 1 &&
+						( ( VRControllers::Pressed( 0 ) & kControllerTrigger ) || ( VRControllers::Pressed( 1 ) & kControllerTrigger ) ) &&
+						( hands[ 0 ]->buttons & kControllerTrigger ) && ( hands[ 1 ]->buttons & kControllerTrigger ) )
+					{
+						++Config::Get().vr.m_handCalibRequest;
+						VRBindings::ShowToast( "Hand calibration: arms forward, fists, palms facing each other. Keep still 5 s" );
+						PSU_LOG( "VRSyntheticPad: hand calibration requested\n" );
+					}
+					continue;
+				}
 				// A hand's trigger is its Photon Art modifier (melee) or its gun trigger.
 				if( entry.control == Control::Trigger && ( roles.swing[ entry.hand ] || roles.shoot[ entry.hand ] ) )
 				{

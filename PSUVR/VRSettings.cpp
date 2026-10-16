@@ -66,6 +66,8 @@ namespace
 	X( m_handRotR1, "handRotR1" ) \
 	X( m_handRotR2, "handRotR2" ) \
 	X( m_handRotR3, "handRotR3" ) \
+	X( m_handPitch, "handPitch" ) \
+	X( m_handRoll, "handRoll" ) \
 	X( m_motionProfile, "motionProfile" ) \
 	X( m_comboHaptic, "comboHaptic" ) \
 	X( m_autoDpad, "autoDpad" ) \

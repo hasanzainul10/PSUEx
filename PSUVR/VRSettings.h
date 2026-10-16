@@ -79,7 +79,8 @@ struct VRSettings
 	float m_fpTurnSpeed = 120.0f;
 	// "head" = left stick forward goes where you look; "body" = where the body faces.
 	std::string m_fpMoveDirection = "head";
-	// Own character in first person: "headless" (cut above the neck), "hidden", "full".
+	// Own character in first person: "headless" (cut above the neck), "hands" (forearms and
+	// hands only, while the arms follow the controllers), "hidden", "full".
 	std::string m_fpBody = "headless";
 	// How far below the eyes the headless cut sits (meters).
 	float m_fpNeckDrop = 0.22f;
@@ -116,9 +117,13 @@ struct VRSettings
 	// Arts always play the game's animation.
 	std::string m_handsAttack = "controller";
 	// Hand angle calibration (controller -> hand rotation, quaternion x y z w per hand).
-	bool m_handCalibrated = false;
-	float m_handRotL0 = 0.0f, m_handRotL1 = 0.0f, m_handRotL2 = 0.0f, m_handRotL3 = 1.0f;
-	float m_handRotR0 = 0.0f, m_handRotR1 = 0.0f, m_handRotR2 = 0.0f, m_handRotR3 = 1.0f;
+	// Defaults: a calibration on the PS VR2 Sense controllers.
+	bool m_handCalibrated = true;
+	float m_handRotL0 = -0.288f, m_handRotL1 = 0.692f, m_handRotL2 = 0.651f, m_handRotL3 = 0.152f;
+	float m_handRotR0 = -0.029f, m_handRotR1 = 0.263f, m_handRotR2 = -0.227f, m_handRotR3 = 0.937f;
+	// Fine tune on top of the calibration, degrees (roll mirrors between the hands).
+	float m_handPitch = 0.0f;
+	float m_handRoll = 0.0f;
 	// Runtime only (not saved): bumped by the panel's Calibrate button.
 	int m_handCalibRequest = 0;
 	// Button names in the controller layout picture: "psvr2" (Sense) or "generic" (A/B/X/Y).

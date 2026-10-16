@@ -22,6 +22,8 @@ namespace PSUVR
 			Recenter, ToggleCamera, ToggleSettings, TogglePause,
 			// Motion combat: free aim follows the gun hand while this mode is on.
 			FreeAimMode,
+			// Both triggers (in the chord): start the hand angle calibration.
+			CalibrateHands,
 		};
 
 		struct Entry
@@ -34,13 +36,13 @@ namespace PSUVR
 
 		// The game's own A cancels and B confirms, so Cross (bottom) sends B.
 		inline constexpr Entry kLayout[] = {
-			{ 0, Control::Trigger, Output::L2, Output::None },
+			{ 0, Control::Trigger, Output::L2, Output::CalibrateHands },
 			{ 0, Control::Grip, Output::L1, Output::None },
 			{ 0, Control::Stick, Output::LeftStick, Output::None },
 			{ 0, Control::StickClick, Output::FreeAimMode, Output::L3 },
 			{ 0, Control::Primary, Output::X, Output::ToggleSettings },
 			{ 0, Control::Secondary, Output::Y, Output::TogglePause },
-			{ 1, Control::Trigger, Output::R2, Output::None },
+			{ 1, Control::Trigger, Output::R2, Output::CalibrateHands },
 			{ 1, Control::Grip, Output::R1, Output::None },
 			{ 1, Control::Stick, Output::RightStick, Output::None },
 			{ 1, Control::StickClick, Output::Start, Output::R3 },
@@ -94,6 +96,7 @@ namespace PSUVR
 				case Output::ToggleSettings: return "VR settings";
 				case Output::TogglePause: return "Pause VR";
 				case Output::FreeAimMode: return "Free aim mode on / off";
+				case Output::CalibrateHands: return "Calibrate hands (both triggers)";
 				default: return "";
 			}
 		}

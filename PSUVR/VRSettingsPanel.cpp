@@ -237,9 +237,11 @@ namespace PSUVR
 			static const char *const moveIds[] = { "head", "body" };
 			static const char *const moveNames[] = { "Where you look (head)", "Where the body faces" };
 			Combo( "Left stick forward", s.m_fpMoveDirection, moveIds, moveNames, 2 );
-			static const char *const bodyIds[] = { "headless", "hidden", "full" };
-			static const char *const bodyNames[] = { "Headless (hands, body, legs)", "Hidden", "Full" };
-			Combo( "Own body", s.m_fpBody, bodyIds, bodyNames, 3 );
+			static const char *const bodyIds[] = { "headless", "hands", "hidden", "full" };
+			static const char *const bodyNames[] = { "Headless (hands, body, legs)", "Hands only", "Hidden", "Full" };
+			Combo( "Own body", s.m_fpBody, bodyIds, bodyNames, 4 );
+			Help( "Hands only: just the forearms, hands and weapons, while the arms follow the controllers "
+				"(otherwise like Headless)." );
 			ImGui::SliderFloat( "Eye height (m)", &s.m_fpEyeHeight, 1.2f, 2.0f, "%.2f" );
 			ImGui::SliderFloat( "Eye forward (m)", &s.m_fpEyeForward, 0.0f, 0.3f, "%.2f" );
 			ImGui::SliderFloat( "Neck cut below eyes (m)", &s.m_fpNeckDrop, 0.05f, 0.5f, "%.2f" );
@@ -342,13 +344,19 @@ namespace PSUVR
 					}
 					ImGui::SameLine();
 					ImGui::TextDisabled( s.m_handCalibrated ? "(calibrated)" : "(hands keep the game's angle)" );
-					Help( "Look down at your character's hands, hold each controller at the same angle as the hand "
-						"(or its weapon) and keep still: the angle is taken 5 seconds after the click (a buzz each second). "
-						"Then press Save." );
+					Help( "After the click, hold both arms straight out in front, hands in fists around the controllers, "
+						"palms facing each other (knuckles forward), and keep still: the angle is taken after 5 seconds "
+						"(a buzz each second, a long buzz when done). Then press Save." );
 					if( s.m_handCalibrated && ImGui::Button( "Clear hand calibration" ) )
 					{
 						s.m_handCalibrated = false;
 					}
+				}
+				if( s.m_handCalibrated )
+				{
+					ImGui::SliderFloat( "Hand pitch (deg)", &s.m_handPitch, -90.0f, 90.0f, "%.0f" );
+					ImGui::SliderFloat( "Hand roll (deg)", &s.m_handRoll, -180.0f, 180.0f, "%.0f" );
+					Help( "Fine tune the hand angle on top of the calibration (tip up / down, twist)." );
 				}
 			}
 			ImGui::Checkbox( "Left stick works menus (D-pad) automatically", &s.m_autoDpad );

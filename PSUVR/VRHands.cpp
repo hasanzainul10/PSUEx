@@ -12,6 +12,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <string>
 
 namespace PSUVR
 {
@@ -238,6 +239,118 @@ namespace PSUVR
 			*dst[ 1 ] = q.y;
 			*dst[ 2 ] = q.z;
 			*dst[ 3 ] = q.w;
+		}
+
+		// Scale a bone to nothing about a point (its vertices collapse there).
+		void FoldBone( float *out, int bone, const D3DXVECTOR3 &point )
+		{
+			constexpr float kTiny = 0.001f;
+			D3DXMATRIX fold;
+			D3DXMatrixScaling( &fold, kTiny, kTiny, kTiny );
+			fold._41 = point.x * ( 1.0f - kTiny );
+			fold._42 = point.y * ( 1.0f - kTiny );
+			fold._43 = point.z * ( 1.0f - kTiny );
+			D3DXMATRIX *m = reinterpret_cast< D3DXMATRIX * >( out + bone * 16 );
+			D3DXMatrixMultiply( m, m, &fold );
+		}
+
+		// "headless": the neck and head fold into the top of the chest. "hands": everything but
+		// the forearms and hands folds away (upper arms into the elbows, the rest into one
+		// point, so blended vertices stay on a line and draw nothing). Last, after the IK.
+		void FoldBody( float *out, const uint8_t *records, const std::string &mode )
+		{
+			if( mode == "headless" )
+			{
+				const D3DXVECTOR3 neck = Position( out, kNeckBone );
+				for( int b = 0; b < kBoneCount; ++b )
+				{
+					if( Below( records, b, kNeckBone ) )
+					{
+						FoldBone( out, b, neck );
+					}
+				}
+				s_headHiddenTick = GetTickCount();
+			}
+			else if( mode == "hands" )
+			{
+				const D3DXVECTOR3 elbows[ 2 ] = { Position( out, kArms[ 0 ].fore ), Position( out, kArms[ 1 ].fore ) };
+				const D3DXVECTOR3 body = Position( out, kWaistBone );
+				for( int b = 0; b < kBoneCount; ++b )
+				{
+					// Roots (no parent) stay: the model->world measurement reads the root bone.
+					if( Parent( records, b ) < 0 || Below( records, b, kArms[ 0 ].fore ) || Below( records, b, kArms[ 1 ].fore ) )
+					{
+						continue;
+					}
+					FoldBone( out, b, b == kArms[ 0 ].upper ? elbows[ 0 ] : ( b == kArms[ 1 ].upper ? elbows[ 1 ] : body ) );
+				}
+				s_headHiddenTick = GetTickCount();
+			}
+		}
+
+		D3DXVECTOR3 Normalized( const D3DXVECTOR3 &v, const D3DXVECTOR3 &fallback );
+
+		// Calibration pose: arms forward, fists, palms facing each other. The hand's axes in that
+		// pose (game world rows) from its bind pose: knuckles (wrist -> hand tip bone) point
+		// forward, the palm faces the other hand. False if the bind data is unusable.
+		bool CalibrationHandAxes( const uint8_t *records, const Arm &arm, int hand, const D3DXVECTOR3 &forward,
+			const D3DXVECTOR3 &right, D3DXMATRIX &axes )
+		{
+			const auto inverseBind = [ records ]( int bone ) {
+				return *reinterpret_cast< const D3DXMATRIX * >( records + bone * kRecordSize + 0x30 );
+			};
+			const D3DXMATRIX handInverse = inverseBind( arm.hand );
+			const D3DXMATRIX tipInverse = inverseBind( arm.hand + 1 );
+			const D3DXMATRIX foreInverse = inverseBind( arm.fore );
+			D3DXMATRIX handBind, tipBind, foreBind;
+			if( !D3DXMatrixInverse( &handBind, nullptr, &handInverse ) || !D3DXMatrixInverse( &tipBind, nullptr, &tipInverse ) ||
+				!D3DXMatrixInverse( &foreBind, nullptr, &foreInverse ) )
+			{
+				return false;
+			}
+			const D3DXVECTOR3 handPos( handBind._41, handBind._42, handBind._43 );
+			const D3DXVECTOR3 tipPos( tipBind._41, tipBind._42, tipBind._43 );
+			const D3DXVECTOR3 forePos( foreBind._41, foreBind._42, foreBind._43 );
+			// Bind pose palm: arms hanging down -> palms face the body (left side is +X);
+			// arms out -> palms face down.
+			D3DXVECTOR3 arm3 = handPos - forePos;
+			arm3 = Normalized( arm3, { 0.0f, -1.0f, 0.0f } );
+			const bool hanging = std::fabs( arm3.y ) > 0.7f;
+			const D3DXVECTOR3 palmModel = hanging ? D3DXVECTOR3( hand == 0 ? -1.0f : 1.0f, 0.0f, 0.0f ) : D3DXVECTOR3( 0.0f, -1.0f, 0.0f );
+			// Into the hand's own axes.
+			D3DXVECTOR3 knuckleLocal, palmLocal;
+			D3DXVec3TransformCoord( &knuckleLocal, &tipPos, &handInverse );
+			D3DXVec3TransformNormal( &palmLocal, &palmModel, &handInverse );
+			knuckleLocal = Normalized( knuckleLocal, { 0.0f, 1.0f, 0.0f } );
+			palmLocal = palmLocal - knuckleLocal * D3DXVec3Dot( &palmLocal, &knuckleLocal );
+			palmLocal = Normalized( palmLocal, { 1.0f, 0.0f, 0.0f } );
+			D3DXVECTOR3 thirdLocal;
+			D3DXVec3Cross( &thirdLocal, &knuckleLocal, &palmLocal );
+			// The same three in the calibration pose (world): knuckles forward, palm inward.
+			const D3DXVECTOR3 palmWorld = hand == 0 ? right : -right;
+			D3DXVECTOR3 thirdWorld;
+			D3DXVec3Cross( &thirdWorld, &forward, &palmWorld );
+			// local basis L (rows) -> world basis B (rows): R = L^T x B.
+			D3DXMATRIX l, b, lT;
+			D3DXMatrixIdentity( &l );
+			D3DXMatrixIdentity( &b );
+			const D3DXVECTOR3 lRows[ 3 ] = { knuckleLocal, palmLocal, thirdLocal };
+			const D3DXVECTOR3 bRows[ 3 ] = { forward, palmWorld, thirdWorld };
+			for( int i = 0; i < 3; ++i )
+			{
+				l( i, 0 ) = lRows[ i ].x;
+				l( i, 1 ) = lRows[ i ].y;
+				l( i, 2 ) = lRows[ i ].z;
+				b( i, 0 ) = bRows[ i ].x;
+				b( i, 1 ) = bRows[ i ].y;
+				b( i, 2 ) = bRows[ i ].z;
+			}
+			D3DXMatrixTranspose( &lT, &l );
+			D3DXMatrixMultiply( &axes, &lT, &b );
+			PSU_LOG( "VRHands: calibration %s hand: bind arm (%.2f %.2f %.2f) %s, knuckle local (%.2f %.2f %.2f) palm local (%.2f %.2f %.2f)\n",
+				hand == 0 ? "left" : "right", arm3.x, arm3.y, arm3.z, hanging ? "hanging" : "out", knuckleLocal.x, knuckleLocal.y,
+				knuckleLocal.z, palmLocal.x, palmLocal.y, palmLocal.z );
+			return true;
 		}
 
 		void ApplyToSubtree( float *out, const uint8_t *records, int root, const D3DXMATRIX &delta )
@@ -495,22 +608,11 @@ namespace PSUVR
 					}
 				}
 
-				// Headless first person: fold the neck and head into the top of the chest, so the
-				// clip plane (which also cut raised hands) isn't needed.
-				if( vr.m_fpBody == "headless" )
-				{
-					const D3DXVECTOR3 neck = Position( out, kNeckBone );
-					constexpr float kTiny = 0.001f;
-					D3DXMATRIX fold;
-					D3DXMatrixScaling( &fold, kTiny, kTiny, kTiny );
-					fold._41 = neck.x * ( 1.0f - kTiny );
-					fold._42 = neck.y * ( 1.0f - kTiny );
-					fold._43 = neck.z * ( 1.0f - kTiny );
-					ApplyToSubtree( out, records, kNeckBone, fold );
-					s_headHiddenTick = now;
-				}
 				if( w <= 0.0f && !captureNow )
 				{
+					// The game's animation; only hide what first person hides. (The clip plane,
+					// which also cut raised hands, isn't needed once the head is folded.)
+					FoldBody( out, records, vr.m_fpBody );
 					Note( kSolved );
 					return;
 				}
@@ -565,10 +667,36 @@ namespace PSUVR
 					const D3DXMATRIX handAxes = Axes( handWorld );
 					if( captureNow )
 					{
-						// K = H x C^T (rows are axes, so C^-1 = C^T).
+						// K = H x C^T (rows are axes, so C^-1 = C^T), H = the hand in the calibration pose.
+						// Forward = where both controllers point (level), not the body: you may stand
+						// turned away from the character's facing.
+						D3DXMATRIX poseAxes;
+						D3DXVECTOR3 forwardWorld( forward[ 0 ], forward[ 1 ], forward[ 2 ] );
+						D3DXVECTOR3 aimSum( 0.0f, 0.0f, 0.0f );
+						for( int h = 0; h < 2; ++h )
+						{
+							if( !pads[ h ]->aimValid )
+							{
+								continue;
+							}
+							const D3DXVECTOR3 aim = RotateByQuat( pads[ h ]->aimOrientation, { 0.0f, 0.0f, -1.0f } );
+							const float in[ 3 ] = { aim.x, aim.y, aim.z };
+							float aimWorld[ 3 ];
+							if( VRCamera::TrackingDirToWorld( in, aimWorld ) )
+							{
+								aimSum += D3DXVECTOR3( aimWorld[ 0 ], 0.0f, aimWorld[ 2 ] );
+							}
+						}
+						forwardWorld = Normalized( aimSum, forwardWorld );
+						// Game right = ( -forward.z, 0, forward.x ).
+						const D3DXVECTOR3 rightWorld( -forwardWorld.z, 0.0f, forwardWorld.x );
+						if( !CalibrationHandAxes( records, arm, hand, forwardWorld, rightWorld, poseAxes ) )
+						{
+							continue;
+						}
 						D3DXMATRIX controllerT, k;
 						D3DXMatrixTranspose( &controllerT, &controller );
-						D3DXMatrixMultiply( &k, &handAxes, &controllerT );
+						D3DXMatrixMultiply( &k, &poseAxes, &controllerT );
 						D3DXQUATERNION q;
 						D3DXQuaternionRotationMatrix( &q, &k );
 						StoreCalib( hand, q );
@@ -581,9 +709,15 @@ namespace PSUVR
 					{
 						continue;
 					}
-					D3DXMATRIX k, desired, handT, delta;
+					D3DXMATRIX k, tweak, tweakRoll, desired, handT, delta;
 					const D3DXQUATERNION q = CalibQuat( hand );
 					D3DXMatrixRotationQuaternion( &k, &q );
+					// Fine tune in the controller's frame: pitch about its X, roll about its Z.
+					constexpr float kDeg = 3.14159265f / 180.0f;
+					D3DXMatrixRotationX( &tweak, vr.m_handPitch * kDeg );
+					D3DXMatrixRotationZ( &tweakRoll, ( hand == 0 ? -vr.m_handRoll : vr.m_handRoll ) * kDeg );
+					D3DXMatrixMultiply( &tweak, &tweak, &tweakRoll );
+					D3DXMatrixMultiply( &k, &k, &tweak );
 					D3DXMatrixMultiply( &desired, &k, &controller );
 					D3DXMatrixTranspose( &handT, &handAxes );
 					D3DXMatrixMultiply( &delta, &handT, &desired );  // H x delta = desired
@@ -607,6 +741,7 @@ namespace PSUVR
 					D3DXMatrixMultiply( &modelDelta, &modelDelta, &toModel );
 					ApplyToSubtree( out, records, arm.hand, modelDelta );
 				}
+				FoldBody( out, records, vr.m_fpBody );
 				Note( kSolved );
 			}
 			__except( EXCEPTION_EXECUTE_HANDLER )
