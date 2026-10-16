@@ -343,16 +343,16 @@ namespace PSUVR
 						++s.m_handCalibRequest;
 					}
 					ImGui::SameLine();
-					ImGui::TextDisabled( s.m_handCalibrated ? "(calibrated)" : "(hands keep the game's angle)" );
+					ImGui::TextDisabled( s.m_handCalibrated ? "(calibrated)" : "(automatic)" );
 					Help( "After the click, hold both arms straight out in front, hands in fists around the controllers, "
 						"palms facing each other (knuckles forward), and keep still: the angle is taken after 5 seconds "
-						"(a buzz each second, a long buzz when done). Then press Save." );
-					if( s.m_handCalibrated && ImGui::Button( "Clear hand calibration" ) )
+						"(a buzz each second, a long buzz when done); it is saved. Also on both grips + both triggers. "
+						"Without it the angle is estimated, which suits most controllers." );
+					if( s.m_handCalibrated && ImGui::Button( "Back to automatic" ) )
 					{
 						s.m_handCalibrated = false;
 					}
 				}
-				if( s.m_handCalibrated )
 				{
 					ImGui::SliderFloat( "Hand pitch (deg)", &s.m_handPitch, -90.0f, 90.0f, "%.0f" );
 					ImGui::SliderFloat( "Hand roll (deg)", &s.m_handRoll, -180.0f, 180.0f, "%.0f" );

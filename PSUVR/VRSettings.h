@@ -117,11 +117,11 @@ struct VRSettings
 	// Arts always play the game's animation.
 	std::string m_handsAttack = "controller";
 	// Hand angle calibration (controller -> hand rotation, quaternion x y z w per hand).
-	// Defaults: a calibration on the PS VR2 Sense controllers.
-	bool m_handCalibrated = true;
-	float m_handRotL0 = -0.288f, m_handRotL1 = 0.692f, m_handRotL2 = 0.651f, m_handRotL3 = 0.152f;
-	float m_handRotR0 = -0.029f, m_handRotR1 = 0.263f, m_handRotR2 = -0.227f, m_handRotR3 = 0.937f;
-	// Fine tune on top of the calibration, degrees (roll mirrors between the hands).
+	// Off: estimated from the skeleton and the standard OpenXR grip pose.
+	bool m_handCalibrated = false;
+	float m_handRotL0 = 0.0f, m_handRotL1 = 0.0f, m_handRotL2 = 0.0f, m_handRotL3 = 1.0f;
+	float m_handRotR0 = 0.0f, m_handRotR1 = 0.0f, m_handRotR2 = 0.0f, m_handRotR3 = 1.0f;
+	// Fine tune on top of the hand angle, degrees (roll mirrors between the hands).
 	float m_handPitch = 0.0f;
 	float m_handRoll = 0.0f;
 	// Runtime only (not saved): bumped by the panel's Calibrate button.

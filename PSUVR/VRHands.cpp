@@ -1,6 +1,7 @@
 #include "VRHands.h"
 
 #include "VRCamera.h"
+#include "VRBindings.h"
 #include "VRControllers.h"
 #include "../PSUStructs/PSUCombat.h"
 #include "../Misc/Log.h"
@@ -46,6 +47,10 @@ namespace PSUVR
 		bool s_calibPending = false;
 		int s_calibBuzz = 0;
 		constexpr DWORD kCalibDelayMs = 5000;
+
+		// Automatic hand angle (no calibration), per hand, for the skeleton it was made from.
+		D3DXMATRIX s_autoK[ 2 ];
+		const uint8_t *s_autoRecords[ 2 ] = { nullptr, nullptr };
 
 		// The wrist sits this far behind the controller's grip point (grip +Z points back).
 		constexpr float kWristBackMeters = 0.06f;
@@ -294,7 +299,7 @@ namespace PSUVR
 		// pose (game world rows) from its bind pose: knuckles (wrist -> hand tip bone) point
 		// forward, the palm faces the other hand. False if the bind data is unusable.
 		bool CalibrationHandAxes( const uint8_t *records, const Arm &arm, int hand, const D3DXVECTOR3 &forward,
-			const D3DXVECTOR3 &right, D3DXMATRIX &axes )
+			const D3DXVECTOR3 &right, D3DXMATRIX &axes, bool log = true )
 		{
 			const auto inverseBind = [ records ]( int bone ) {
 				return *reinterpret_cast< const D3DXMATRIX * >( records + bone * kRecordSize + 0x30 );
@@ -347,9 +352,44 @@ namespace PSUVR
 			}
 			D3DXMatrixTranspose( &lT, &l );
 			D3DXMatrixMultiply( &axes, &lT, &b );
+			if( log )
 			PSU_LOG( "VRHands: calibration %s hand: bind arm (%.2f %.2f %.2f) %s, knuckle local (%.2f %.2f %.2f) palm local (%.2f %.2f %.2f)\n",
 				hand == 0 ? "left" : "right", arm3.x, arm3.y, arm3.z, hanging ? "hanging" : "out", knuckleLocal.x, knuckleLocal.y,
 				knuckleLocal.z, palmLocal.x, palmLocal.y, palmLocal.z );
+			return true;
+		}
+
+		// Without calibration: in the calibration pose an OpenXR grip has +X right (away from the
+		// left palm, into the right one), +Y up and -Z forward along the pointing finger, so
+		// K = H_pose x C_pose^T needs no measurement. Any forward gives the same K.
+		bool AutoCalibration( const uint8_t *records, int hand, D3DXMATRIX &k )
+		{
+			if( s_autoRecords[ hand ] == records )
+			{
+				k = s_autoK[ hand ];
+				return true;
+			}
+			const D3DXVECTOR3 forward( 0.0f, 0.0f, 1.0f );
+			const D3DXVECTOR3 right( -forward.z, 0.0f, forward.x );
+			D3DXMATRIX pose;
+			if( !CalibrationHandAxes( records, kArms[ hand ], hand, forward, right, pose, true ) )
+			{
+				return false;
+			}
+			D3DXMATRIX controller;
+			D3DXMatrixIdentity( &controller );
+			const D3DXVECTOR3 rows[ 3 ] = { right, { 0.0f, 1.0f, 0.0f }, -forward };
+			for( int i = 0; i < 3; ++i )
+			{
+				controller( i, 0 ) = rows[ i ].x;
+				controller( i, 1 ) = rows[ i ].y;
+				controller( i, 2 ) = rows[ i ].z;
+			}
+			D3DXMATRIX controllerT;
+			D3DXMatrixTranspose( &controllerT, &controller );
+			D3DXMatrixMultiply( &k, &pose, &controllerT );
+			s_autoK[ hand ] = k;
+			s_autoRecords[ hand ] = records;
 			return true;
 		}
 
@@ -599,12 +639,21 @@ namespace PSUVR
 					const D3DXVECTOR3 lookWorld( std::sin( lookYaw ), 0.0f, std::cos( lookYaw ) );
 					D3DXVECTOR3 lookModel;
 					D3DXVec3TransformNormal( &lookModel, &lookWorld, &toModel );
-					const float angle = std::atan2( lookModel.x, lookModel.z ) * w;
+					// Where the chest faces now: square to the shoulder line (left side is +X, so
+					// left - right = +X means facing +Z). Animations often twist the torso.
+					const D3DXVECTOR3 across = Position( out, kArms[ 0 ].upper ) - Position( out, kArms[ 1 ].upper );
+					const D3DXVECTOR3 chest = Normalized( D3DXVECTOR3( -across.z, 0.0f, across.x ), kModelForward );
+					const float chestYaw = std::atan2( chest.x, chest.z );
+					const float lookYawModel = std::atan2( lookModel.x, lookModel.z );
+					float delta = lookYawModel - chestYaw;
+					delta = delta > 3.14159265f ? delta - 6.2831853f : ( delta < -3.14159265f ? delta + 6.2831853f : delta );
+					const float angle = chestYaw + delta * w;
 					const D3DXVECTOR3 turned( std::sin( angle ), 0.0f, std::cos( angle ) );
-					ApplyToSubtree( out, records, kWaistBone, RotationAbout( kModelForward, turned, Position( out, kWaistBone ) ) );
+					ApplyToSubtree( out, records, kWaistBone, RotationAbout( chest, turned, Position( out, kWaistBone ) ) );
 					if( log )
 					{
-						PSU_LOG( "VRHands: torso turn %.0f deg, weight %.2f\n", angle * 57.29578f, w );
+						PSU_LOG( "VRHands: torso turn %.0f deg (chest was %.0f), weight %.2f\n", delta * w * 57.29578f,
+							chestYaw * 57.29578f, w );
 					}
 				}
 
@@ -703,15 +752,27 @@ namespace PSUVR
 						vr.m_handCalibrated = true;
 						VRControllers::Haptic( hand, 0.8f, 0.15f );
 						PSU_LOG( "VRHands: calibrated %s hand (%.3f %.3f %.3f %.3f)\n", hand == 0 ? "left" : "right", q.x, q.y, q.z, q.w );
+						if( hand == 1 || !pads[ 1 ]->gripValid )
+						{
+							Config::Get().SaveToFile();
+							VRBindings::ShowToast( "Hand calibration saved" );
+						}
 						continue;
 					}
-					if( !vr.m_handCalibrated || w <= 0.0f )
+					if( w <= 0.0f )
 					{
 						continue;
 					}
 					D3DXMATRIX k, tweak, tweakRoll, desired, handT, delta;
-					const D3DXQUATERNION q = CalibQuat( hand );
-					D3DXMatrixRotationQuaternion( &k, &q );
+					if( vr.m_handCalibrated )
+					{
+						const D3DXQUATERNION q = CalibQuat( hand );
+						D3DXMatrixRotationQuaternion( &k, &q );
+					}
+					else if( !AutoCalibration( records, hand, k ) )
+					{
+						continue;
+					}
 					// Fine tune in the controller's frame: pitch about its X, roll about its Z.
 					constexpr float kDeg = 3.14159265f / 180.0f;
 					D3DXMatrixRotationX( &tweak, vr.m_handPitch * kDeg );
