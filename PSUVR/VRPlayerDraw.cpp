@@ -114,7 +114,9 @@ namespace PSUVR
 					for( const char *bone : kBones )
 					{
 						const int index = Readable( names, 0x0C ) ? findBone( names, bone ) : -1;
+						// In / out: the bone's transform is multiplied into the matrix passed in.
 						float matrix[ 32 ]{};
+						matrix[ 0 ] = matrix[ 5 ] = matrix[ 10 ] = matrix[ 15 ] = 1.0f;
 						const char ok = index >= 0 ? getBone( model, matrix, index, 0, 0, 1 ) : 0;
 						PSU_LOG( "HandsProbe:   model+0x%02X %s #%d ok=%d pos (%.2f, %.2f, %.2f)\n", kModelOffsets[ m ], bone,
 							index, ok ? 1 : 0, matrix[ 12 ], matrix[ 13 ], matrix[ 14 ] );
