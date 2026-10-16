@@ -3,6 +3,7 @@
 #include "StereoRenderer.h"
 #include "VRControllers.h"
 #include "VRGamepad.h"
+#include "VRSyntheticPad.h"
 #include "VRSystem.h"
 #include "../Misc/Log.h"
 #include "../PSUExConfig.h"
@@ -832,9 +833,11 @@ namespace PSUVR
 			bool s_havePrevHeadWorld = false;
 			DWORD s_roomLogTick = 0;
 
+			// Needs the motion-controller pad (motion input, a controller tracked): it is what
+			// walks the character. Without it the normal lean leash applies.
 			bool RoomWalkOn()
 			{
-				return Config::Get().vr.m_roomWalk && FirstPersonActive();
+				return Config::Get().vr.m_roomWalk && FirstPersonActive() && VRSyntheticPad::Active();
 			}
 
 			// The character moved this frame while the stick walked it: move the anchor along
@@ -954,6 +957,7 @@ namespace PSUVR
 			else
 			{
 				s_roomWanted = false;
+				s_roomDriving = false;
 				s_havePrevHeadWorld = false;
 			}
 			// Horizontal leash: lean up to fpLeanLimit, then the anchor follows the head. With

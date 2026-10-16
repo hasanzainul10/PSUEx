@@ -35,6 +35,7 @@ namespace PSUVR
 		// The model faces +Z (left side is +X, up +Y).
 		const D3DXVECTOR3 kModelForward( 0.0f, 0.0f, 1.0f );
 		DWORD s_headHiddenTick = 0;
+		const std::string kHeadlessBody = "headless";
 
 		// How much the arms follow the controllers (0 = the game's animation), eased.
 		float s_weight = 0.0f;
@@ -530,11 +531,6 @@ namespace PSUVR
 				return;
 			}
 			const ControllerState *pads[ 2 ] = { &VRControllers::State( 0 ), &VRControllers::State( 1 ) };
-			if( !( pads[ 0 ]->gripValid || pads[ 1 ]->gripValid ) )
-			{
-				Note( kSkipControllers );
-				return;
-			}
 			__try
 			{
 				const int count = *reinterpret_cast< const int * >( skeleton + 0x28 );
@@ -554,8 +550,21 @@ namespace PSUVR
 						return;
 					}
 				}
+				// From here on, an early exit still hides what first person hides (hands only /
+				// headless), so losing tracking for a moment doesn't show the whole body.
+				if( !( pads[ 0 ]->gripValid || pads[ 1 ]->gripValid ) )
+				{
+					// Tracking lost for a moment: keep the body mode. No controller at all: "hands"
+					// falls back to headless (nothing would put the hands anywhere).
+					const std::string &body = Config::Get().vr.m_fpBody;
+					const bool anyActive = pads[ 0 ]->active || pads[ 1 ]->active;
+					FoldBody( out, records, anyActive || body != "hands" ? body : kHeadlessBody );
+					Note( kSkipControllers );
+					return;
+				}
 				if( !s_haveWorld || GetTickCount() - s_worldTick > kWorldStaleMs )
 				{
+					FoldBody( out, records, Config::Get().vr.m_fpBody );
 					Note( kSkipWorld );
 					return;
 				}
@@ -563,12 +572,14 @@ namespace PSUVR
 				D3DXMATRIX toModel;
 				if( !D3DXMatrixInverse( &toModel, nullptr, &world ) )
 				{
+					FoldBody( out, records, Config::Get().vr.m_fpBody );
 					Note( kSkipInverse );
 					return;
 				}
 				float forward[ 3 ], right[ 3 ];
 				if( !VRCamera::BodyAxes( forward, right ) )
 				{
+					FoldBody( out, records, Config::Get().vr.m_fpBody );
 					Note( kSkipBody );
 					return;
 				}
@@ -673,6 +684,7 @@ namespace PSUVR
 					return;
 				}
 
+				bool tracked = true;
 				for( int hand = 0; hand < 2; ++hand )
 				{
 					const ControllerState &c = *pads[ hand ];
@@ -686,8 +698,8 @@ namespace PSUVR
 					float targetWorld[ 3 ];
 					if( !VRCamera::TrackingToWorld( tracking, targetWorld ) )
 					{
-						Note( kSkipTracking );
-						return;
+						tracked = false;
+						break;
 					}
 					// Elbows hang down, a little back and out to the side.
 					const float side = hand == 0 ? -1.0f : 1.0f;
@@ -820,7 +832,7 @@ namespace PSUVR
 					ApplyToSubtree( out, records, arm.hand, modelDelta );
 				}
 				FoldBody( out, records, vr.m_fpBody );
-				Note( kSolved );
+				Note( tracked ? kSolved : kSkipTracking );
 			}
 			__except( EXCEPTION_EXECUTE_HANDLER )
 			{

@@ -884,7 +884,8 @@ namespace PSUVR
 		// Testing with emulated controllers and no headset worn (SteamVR's null HMD stays
 		// "synchronized", never visible): render anyway, so the eye passes and everything
 		// that depends on them run. The runtime simply doesn't show the frames.
-		if( !m_shouldRender && Config::Get().vr.m_emulateControllers && m_sessionState >= XR_SESSION_STATE_SYNCHRONIZED )
+		if( !m_shouldRender && Config::Get().vr.m_emulateControllers && m_sessionState >= XR_SESSION_STATE_SYNCHRONIZED &&
+			m_sessionState <= XR_SESSION_STATE_FOCUSED )
 		{
 			m_shouldRender = true;
 		}
