@@ -240,8 +240,8 @@ namespace PSUVR
 			static const char *const bodyIds[] = { "headless", "hands", "hidden", "full" };
 			static const char *const bodyNames[] = { "Headless (hands, body, legs)", "Hands only", "Hidden", "Full" };
 			Combo( "Own body", s.m_fpBody, bodyIds, bodyNames, 4 );
-			Help( "Hands only: just the forearms, hands and weapons, while the arms follow the controllers "
-				"(otherwise like Headless)." );
+			Help( "Hands only: just the hands and weapons, right on the controllers (no reach limit), while the arms "
+				"follow the controllers (otherwise like Headless)." );
 			ImGui::SliderFloat( "Eye height (m)", &s.m_fpEyeHeight, 1.2f, 2.0f, "%.2f" );
 			ImGui::SliderFloat( "Eye forward (m)", &s.m_fpEyeForward, 0.0f, 0.3f, "%.2f" );
 			ImGui::SliderFloat( "Neck cut below eyes (m)", &s.m_fpNeckDrop, 0.05f, 0.5f, "%.2f" );

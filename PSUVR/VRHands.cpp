@@ -278,16 +278,19 @@ namespace PSUVR
 			}
 			else if( mode == "hands" )
 			{
-				const D3DXVECTOR3 elbows[ 2 ] = { Position( out, kArms[ 0 ].fore ), Position( out, kArms[ 1 ].fore ) };
+				// Hands only (no tracking for the forearm): the arms fold into the wrists.
+				const D3DXVECTOR3 wrists[ 2 ] = { Position( out, kArms[ 0 ].hand ), Position( out, kArms[ 1 ].hand ) };
 				const D3DXVECTOR3 body = Position( out, kWaistBone );
 				for( int b = 0; b < kBoneCount; ++b )
 				{
 					// Roots (no parent) stay: the model->world measurement reads the root bone.
-					if( Parent( records, b ) < 0 || Below( records, b, kArms[ 0 ].fore ) || Below( records, b, kArms[ 1 ].fore ) )
+					if( Parent( records, b ) < 0 || Below( records, b, kArms[ 0 ].hand ) || Below( records, b, kArms[ 1 ].hand ) )
 					{
 						continue;
 					}
-					FoldBone( out, b, b == kArms[ 0 ].upper ? elbows[ 0 ] : ( b == kArms[ 1 ].upper ? elbows[ 1 ] : body ) );
+					const bool left = b == kArms[ 0 ].upper || b == kArms[ 0 ].fore;
+					const bool right = b == kArms[ 1 ].upper || b == kArms[ 1 ].fore;
+					FoldBone( out, b, left ? wrists[ 0 ] : ( right ? wrists[ 1 ] : body ) );
 				}
 				s_headHiddenTick = GetTickCount();
 			}
@@ -704,6 +707,14 @@ namespace PSUVR
 							hand == 0 ? "L" : "R", target.x, target.y, target.z, s.x, s.y, s.z, D3DXVec3Length( &d ) );
 					}
 					SolveArm( out, records, arm, reach, pole );
+					if( vr.m_fpBody == "hands" )
+					{
+						// No arm to show, so no reach limit: the hand goes the rest of the way.
+						const D3DXVECTOR3 gap = reach - Position( out, arm.hand );
+						D3DXMATRIX shift;
+						D3DXMatrixTranslation( &shift, gap.x, gap.y, gap.z );
+						ApplyToSubtree( out, records, arm.hand, shift );
+					}
 
 					// Hand angle: hand axes = calibration x controller axes (both in world).
 					D3DXMATRIX controller;
