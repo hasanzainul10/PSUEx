@@ -93,7 +93,9 @@ namespace PSUVR
 				{
 					len += sprintf_s( line + len, sizeof( line ) - len, " %s=%u", kSkipNames[ i ], s_skips[ i ] );
 				}
+#ifdef _DEBUG
 				PSU_LOG( "VRHands: player poses:%s\n", line );
+#endif
 			}
 		}
 
@@ -655,8 +657,10 @@ namespace PSUVR
 					ApplyToSubtree( out, records, kWaistBone, RotationAbout( chest, turned, Position( out, kWaistBone ) ) );
 					if( log )
 					{
+#ifdef _DEBUG
 						PSU_LOG( "VRHands: torso turn %.0f deg (chest was %.0f), weight %.2f\n", delta * w * 57.29578f,
 							chestYaw * 57.29578f, w );
+#endif
 					}
 				}
 
@@ -703,8 +707,10 @@ namespace PSUVR
 					{
 						const D3DXVECTOR3 s = Position( out, arm.upper );
 						const D3DXVECTOR3 d = target - s;
+#ifdef _DEBUG
 						PSU_LOG( "VRHands: %s target model (%.2f %.2f %.2f) shoulder (%.2f %.2f %.2f) reach %.2f\n",
 							hand == 0 ? "L" : "R", target.x, target.y, target.z, s.x, s.y, s.z, D3DXVec3Length( &d ) );
+#endif
 					}
 					SolveArm( out, records, arm, reach, pole );
 					if( vr.m_fpBody == "hands" )

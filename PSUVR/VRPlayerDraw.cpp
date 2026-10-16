@@ -140,11 +140,13 @@ namespace PSUVR
 				{
 					s_lastLog = GetTickCount();
 					const uint8_t *render = *reinterpret_cast< const uint8_t * const * >( flags + 0x160 );
+#ifdef _DEBUG
 					PSU_LOG( "VRPlayerDraw: free aim draw flags +9=%02X +390=%02X +1BC=%02X [B91140]=%08lX mode=%d render type %d +2C=%02X\n",
 						saved9, saved390, saved1BC, *reinterpret_cast< const DWORD * >( 0x00B91140 ),
 						*reinterpret_cast< const int * >( 0x009946C8 ),
 						Readable( render, 0x30 ) ? *reinterpret_cast< const int * >( render + 0x28 ) : -1,
 						Readable( render, 0x30 ) ? render[ 0x2C ] : 0 );
+#endif
 				}
 				flags[ 9 ] = static_cast< uint8_t >( saved9 & ~0x04 );
 				flags[ 0x390 ] = static_cast< uint8_t >( saved390 & ~0x10 );
@@ -198,8 +200,10 @@ namespace PSUVR
 					if( GetTickCount() - s_lastModelLog >= 2000 )
 					{
 						s_lastModelLog = GetTickCount();
+#ifdef _DEBUG
 						PSU_LOG( "VRPlayerDraw: free aim models %u, %u without the draw bit (body +14=%08lX)\n", modelCount, hidden,
 							modelCount ? static_cast< unsigned long >( savedModelFlags[ 0 ] ) : 0ul );
+#endif
 					}
 				}
 				__except( EXCEPTION_EXECUTE_HANDLER )
@@ -545,7 +549,9 @@ namespace PSUVR
 			if( GetTickCount() - s_lastLog >= 3000 )
 			{
 				s_lastLog = GetTickCount();
+#ifdef _DEBUG
 				PSU_LOG( "VRPlayerDraw: %u bone poses, %u without a player model (model %p)\n", s_poses, s_noModel, s_divModel );
+#endif
 			}
 			const uint8_t *div = s_divModel;
 			if( !out || !skeleton || !div )

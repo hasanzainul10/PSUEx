@@ -333,7 +333,7 @@ namespace PSUVR
 			}
 			ImGui::Checkbox( "Show controllers", &s.m_showControllers );
 			ImGui::Checkbox( "Emulate controllers (testing)", &s.m_emulateControllers );
-			Help( "For testing without the headset on: Ctrl+F9 toggles. Ctrl+numpad: 7/8/9 left/both/right, 1-5 rest/forward/gun/"
+			Help( "For testing without the headset on: Ctrl+Shift+F9 toggles. Ctrl+numpad: 7/8/9 left/both/right, 1-5 rest/forward/gun/"
 				"raised/calib, 0 trigger, . grip, / Cross (A), + Circle (B), - stick click, 6 swing, * both grips. Ctrl+T/G/F/H "
 				"stick. A command file (psuex_vr_script.txt) runs whenever it changes; see VR_GUIDE.md." );
 			ImGui::Checkbox( "Arms follow the controllers (first person)", &s.m_handsFollow );

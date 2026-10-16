@@ -916,8 +916,10 @@ namespace PSUVR
 				if( GetTickCount() - s_roomLogTick >= 2000 )
 				{
 					s_roomLogTick = GetTickCount();
+#ifdef _DEBUG
 					PSU_LOG( "VRRoomWalk: offset %.2f m stick (%.2f, %.2f)%s\n", distance, s_roomStick[ 0 ], s_roomStick[ 1 ],
 						s_roomDriving ? "" : " (not driving)" );
+#endif
 				}
 			}
 		}

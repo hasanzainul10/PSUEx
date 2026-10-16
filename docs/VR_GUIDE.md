@@ -114,10 +114,40 @@ Change them under **Controls** in either settings window (click a cell, press th
 |---|---|
 | Left stick | Walk where you look (or where your body faces: *Left stick forward* setting) |
 | Right stick left / right | Turn: 30° steps by default, or smooth (*Turning* settings) |
-| Your head | Look around freely. Lean or duck a little; walk further in your room and the body follows. |
+| Your head | Look around freely. Lean or duck a little; walk in your room and your character walks with you (motion controllers). |
 | LB | Lock on (your view stays yours) |
 
 Your own head is cut away so you don't see inside it; your hands, body and legs stay visible.
+
+### Motion controllers (PS VR2 Sense, Touch, Index...)
+
+Turn on **Play with motion controllers** in the VR settings. The controllers act as a gamepad, and in first person your character's arms follow them.
+
+| Control | Left hand | Right hand |
+|---|---|---|
+| Stick | Move | Turn |
+| Stick click | Free aim mode on / off | START (menu) |
+| Square / Cross (X / A) | X | B (confirm) |
+| Triangle / Circle (Y / B) | Y | A (cancel) |
+| Grip | L1 | R1 |
+| Trigger | L2, or that hand's weapon (see below) | R2, or that hand's weapon |
+
+**Hold both grips** for VR shortcuts: + Cross recenter, + Circle first / third person, + Square VR settings, + Triangle pause VR, + stick clicks L3 / R3, + **both triggers: hand calibration**. Left grip + left stick click switches the left stick to the D-pad (it switches by itself in menus, shops and the weapon palette).
+
+**Fighting.** Each hand uses the weapon the game puts in it:
+
+- **Melee:** swing the hand to attack. A short buzz says the next hit of the combo will connect. Swing with that hand's trigger held for a Photon Art.
+- **Handgun (left hand):** pull the trigger to shoot; hold it to keep firing. Left grip + trigger is the gun's Photon Art.
+- **Free aim:** click the left stick to turn free aim mode on. Raise the gun into view and the game's free aim follows where the gun points (our reticle shows it); lower it, or walk / turn with the sticks, and you're back to normal. Right stick click is the scan while aiming.
+
+**Your arms** (first person) reach for the controllers. Settings in **Motion controllers**:
+
+- *Arms follow the controllers*: on / off.
+- *Play the game's attack animation*: off = your swing is the swing; on = attacks hand over to the game's animation. Photon Arts always use the game's animation.
+- **Hand calibration:** the hand angle is estimated automatically. If it looks off, hold both grips + both triggers, then within 5 seconds hold your arms straight forward, fists around the controllers, palms facing each other, and keep still until the long buzz. It's saved. *Hand pitch / roll* fine-tune it; *Back to automatic* undoes it.
+- **Own body → Hands only** (First person settings): only the hands and weapons, right on the controllers, so the camera never clips your shoulders.
+
+**Walking in your room** walks your character: step away and it follows until it's under you again (*Walk in the room moves the character*, First person settings). Your stick still works and takes over.
 
 ### Third person
 
@@ -193,7 +223,7 @@ To go back to the real headset, close SteamVR and remove `forcedDriver` (or set 
 
 ### Emulated controllers
 
-Turn them on with **Ctrl+F9** (or *Emulate controllers* in the VR settings). Keep **Num Lock** on. Hotkeys (all with **Ctrl**):
+Turn them on with **Ctrl+Shift+F9** (or *Emulate controllers* in the VR settings). Keep **Num Lock** on. Hotkeys (all with **Ctrl**):
 
 | Keys | Does |
 |---|---|

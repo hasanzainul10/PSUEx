@@ -5,7 +5,7 @@
 namespace PSUVR
 {
 	// Emulated motion controllers for testing without the headset on (remote desktop, the
-	// SteamVR null HMD). When on (vr.emulateControllers, Ctrl+F9) both hands' state comes from
+	// SteamVR null HMD). When on (vr.emulateControllers, Ctrl+Shift+F9) both hands' state comes from
 	// here instead of the runtime: head-relative pose presets, buttons, sticks and swings,
 	// driven by Ctrl+numpad hotkeys or a timed command file (vr.simScript, re-run whenever the
 	// file changes). Every action logs a "VRSim:" line.

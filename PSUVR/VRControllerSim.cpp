@@ -202,8 +202,9 @@ namespace PSUVR
 		{
 			const bool ctrl = KeyDown( VK_CONTROL );
 			// Edges are tracked even without Ctrl, so releasing Ctrl first doesn't fire later.
+			// Ctrl+Shift+F9 (Ctrl+F9 alone is Recenter).
 			const bool toggle = KeyEdge( VK_F9 );
-			if( ctrl && toggle )
+			if( ctrl && KeyDown( VK_SHIFT ) && toggle )
 			{
 				SetActive( !Config::Get().vr.m_emulateControllers );
 			}
