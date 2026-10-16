@@ -55,6 +55,7 @@ namespace
 	X( m_snapTurn, "snapTurn" ) \
 	X( m_comfortVignette, "comfortVignette" ) \
 	X( m_showControllers, "showControllers" ) \
+	X( m_handsFollow, "handsFollow" ) \
 	X( m_motionProfile, "motionProfile" ) \
 	X( m_comboHaptic, "comboHaptic" ) \
 	X( m_autoDpad, "autoDpad" ) \

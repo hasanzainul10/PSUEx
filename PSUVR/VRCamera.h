@@ -59,6 +59,11 @@ namespace PSUVR
 		// A tracking-space direction (OpenXR yaw, pitch) as a game-world yaw / pitch, using the
 		// first-person body frame. False outside first person.
 		bool WorldAimFromTracking( float trackingYaw, float trackingPitch, float &yaw, float &pitch );
+		// First person: a tracking-space point as a game world position, mapped like the eyes
+		// (body frame at the head, eye-forward offset included). False outside first person.
+		bool TrackingToWorld( const float tracking[ 3 ], float world[ 3 ] );
+		// First-person body forward and right in game world (unit, level). False outside it.
+		bool BodyAxes( float forward[ 3 ], float right[ 3 ] );
 		void ClearFirstPerson();
 		// The right stick is read through XInput (false = turning falls back to the game's orbit).
 		bool TurnFromStick();

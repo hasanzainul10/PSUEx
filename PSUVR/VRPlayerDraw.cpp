@@ -2,6 +2,7 @@
 
 #include "StereoRenderer.h"
 #include "VRCamera.h"
+#include "VRHands.h"
 #include "../Misc/Log.h"
 #include "../PSUExConfig.h"
 #include "../PSUMemory/Memory.hpp"
@@ -62,190 +63,23 @@ namespace PSUVR
 			return bytes <= 0x40 || PSUMemory::IsValidPointer( static_cast< const uint8_t * >( p ) + bytes - 1 );
 		}
 
-#ifdef _DEBUG
-		// Hands test (Debug): the local player's TModel (render object +0x20) owns the pose
-		// buffer at model +0x64 that 0x0074D1D0 fills. Its bone names come from the model's
-		// vtable +0x28 object (+0x28 names, 0x00757500 lookup).
-		typedef void *( __thiscall *GetSkeletonFn )( void *model );
-		typedef int( __cdecl *FindBoneFn )( void *names, const char *name );
-
-		float *s_playerPose = nullptr;
-		const uint8_t *s_playerModel = nullptr;
-		const uint8_t *s_divModel = nullptr;  // render object +0x04 (TDivModel, the loaded character)
-		const uint8_t *s_playerRecords = nullptr;
-		int s_armBones[ 3 ] = { -1, -1, -1 };  // L_upperarm, L_forearm, L_hand
+		// The loaded player character: TDivModel at render object +0x04 (render object at draw
+		// object +0x160). VRHands edits its bone pose when the game builds it (0x0074B760).
+		const uint8_t *s_divModel = nullptr;
 
 		void NotePlayerModel( void *drawObject )
 		{
 			__try
 			{
 				const uint8_t *render = *reinterpret_cast< const uint8_t * const * >( static_cast< const uint8_t * >( drawObject ) + 0x160 );
-				if( !Readable( render, 0x30 ) )
-				{
-					return;
-				}
-				void *model = *reinterpret_cast< void * const * >( render + 0x20 );
-				if( !Readable( model, 0x70 ) )
-				{
-					return;
-				}
-				s_playerPose = *reinterpret_cast< float * const * >( static_cast< const uint8_t * >( model ) + 0x64 );
-				s_playerModel = static_cast< const uint8_t * >( model );
-				s_divModel = *reinterpret_cast< const uint8_t * const * >( render + 0x04 );
-				if( s_armBones[ 2 ] >= 0 )
-				{
-					return;
-				}
-				void *const *vt = *static_cast< void *const *const * >( model );
-				const uint8_t *skeleton = static_cast< const uint8_t * >( reinterpret_cast< GetSkeletonFn >( vt[ 10 ] )( model ) );
-				if( !Readable( skeleton, 0x2C ) )
-				{
-					return;
-				}
-				void *names = *reinterpret_cast< void * const * >( skeleton + 0x28 );
-				if( !Readable( names, 0x0C ) )
-				{
-					return;
-				}
-				static const char *const kArm[] = { "L_upperarm", "L_forearm", "L_hand" };
-				const auto findBone = reinterpret_cast< FindBoneFn >( 0x00757500 );
-				for( unsigned i = 0; i < 3; ++i )
-				{
-					s_armBones[ i ] = findBone( names, kArm[ i ] );
-				}
-				PSU_LOG( "HandsTest: model %p pose %p arm bones %d %d %d\n", model, s_playerPose, s_armBones[ 0 ], s_armBones[ 1 ],
-					s_armBones[ 2 ] );
+				const uint8_t *div = Readable( render, 0x30 ) ? *reinterpret_cast< const uint8_t * const * >( render + 0x04 ) : nullptr;
+				s_divModel = Readable( div, 0x70 ) ? div : nullptr;
 			}
 			__except( EXCEPTION_EXECUTE_HANDLER )
 			{
-				s_playerPose = nullptr;
-			}
-		}
-
-		void ArmTest( float *out, const uint8_t *records )
-		{
-			static DWORD s_lastLog = 0;
-			static unsigned s_lifts = 0;
-			// Record: +0 flags, +4 palette slot, +6 parent, +8 first child, +0xA next sibling,
-			// +0x30 inverse bind. The player skeleton has 28 bones.
-			constexpr int count = 28;
-			__try
-			{
-				if( !Readable( records, count * 0x90 ) )
-				{
-					return;
-				}
-				s_playerRecords = records;
-				// Lift the left arm 30 cm (model space Y) to see whether the skin follows.
-				int slots[ 3 ]{ -1, -1, -1 };
-				for( unsigned i = 0; i < 3; ++i )
-				{
-					const int bone = s_armBones[ i ];
-					if( bone >= 0 && bone < count )
-					{
-						slots[ i ] = *reinterpret_cast< const short * >( records + bone * 0x90 + 4 );
-						if( slots[ i ] >= 0 && slots[ i ] < count )
-						{
-							out[ slots[ i ] * 16 + 13 ] += 3.0f;
-						}
-					}
-				}
-				++s_lifts;
-				if( GetTickCount() - s_lastLog >= 2000 )
-				{
-					s_lastLog = GetTickCount();
-					PSU_LOG( "HandsTest: lifted slots %d %d %d, %u lifts (in player draw %d)\n", slots[ 0 ], slots[ 1 ], slots[ 2 ],
-						s_lifts, s_drawingLocalPlayer ? 1 : 0 );
-				}
-			}
-			__except( EXCEPTION_EXECUTE_HANDLER )
-			{
-				PSU_LOG( "HandsTest: exception\n" );
-				s_playerPose = nullptr;
-			}
-		}
-
-		// Loaded character (TDivModel): bone-indexed model-space matrices from 0x0074B760.
-		// Lift one bone and everything under it (parent at record +6) by 30 cm.
-		constexpr int kLiftBone = 15;
-
-		void BonePoseTest( float *out, const uint8_t *skeleton )
-		{
-			static DWORD s_lastLog = 0;
-			static unsigned s_lifts = 0;
-			static bool s_dumped = false;
-			__try
-			{
-				const int count = *reinterpret_cast< const int * >( skeleton + 0x28 );
-				const uint8_t *records = *reinterpret_cast< const uint8_t * const * >( skeleton + 0x30 );
-				if( count <= 0 || count > 128 || !Readable( records, count * 0x90 ) )
-				{
-					return;
-				}
-				if( !s_dumped )
-				{
-					s_dumped = true;
-					PSU_LOG( "HandsDiv: skeleton %p, %d bones\n", skeleton, count );
-					const DWORD *sk = reinterpret_cast< const DWORD * >( skeleton );
-					for( unsigned n = 0; n < 0x40 / 4; ++n )
-					{
-						void *names = reinterpret_cast< void * >( sk[ n ] );
-						int hand = -2;
-						if( Readable( names, 0x0C ) )
-						{
-							__try
-							{
-								hand = reinterpret_cast< FindBoneFn >( 0x00757500 )( names, "L_hand" );
-							}
-							__except( EXCEPTION_EXECUTE_HANDLER )
-							{
-								hand = -3;
-							}
-						}
-						PSU_LOG( "HandsDiv:   skeleton+0x%02X %08lX L_hand lookup %d\n", n * 4, sk[ n ], hand );
-					}
-					for( int b = 0; b < count; ++b )
-					{
-						const uint8_t *rec = records + b * 0x90;
-						const short *links = reinterpret_cast< const short * >( rec + 4 );
-						const float *m = out + b * 16;
-						PSU_LOG( "HandsDiv:   #%d flags %08lX shorts %d %d %d %d pos (%.2f %.2f %.2f)\n", b,
-							*reinterpret_cast< const DWORD * >( rec ), links[ 0 ], links[ 1 ], links[ 2 ], links[ 3 ], m[ 12 ], m[ 13 ],
-							m[ 14 ] );
-					}
-				}
-				if( kLiftBone >= count )
-				{
-					return;
-				}
-				for( int b = 0; b < count; ++b )
-				{
-					// Is b kLiftBone or below it?
-					int walk = b;
-					for( int guard = 0; walk >= 0 && walk != kLiftBone && guard < count; ++guard )
-					{
-						walk = *reinterpret_cast< const short * >( records + walk * 0x90 + 6 );
-					}
-					if( walk == kLiftBone )
-					{
-						out[ b * 16 + 13 ] += 3.0f;
-					}
-				}
-				++s_lifts;
-				if( GetTickCount() - s_lastLog >= 2000 )
-				{
-					s_lastLog = GetTickCount();
-					PSU_LOG( "HandsDiv: lifted bone %d subtree, %u lifts (in player draw %d)\n", kLiftBone, s_lifts,
-						s_drawingLocalPlayer ? 1 : 0 );
-				}
-			}
-			__except( EXCEPTION_EXECUTE_HANDLER )
-			{
-				PSU_LOG( "HandsDiv: exception\n" );
 				s_divModel = nullptr;
 			}
 		}
-#endif
 
 		void __cdecl LocalPlayerDrawThunk( void *object )
 		{
@@ -266,12 +100,14 @@ namespace PSUVR
 			{
 				return;
 			}
-#ifdef _DEBUG
 			NotePlayerModel( object );
-#endif
 			s_drawingLocalPlayer = true;
 			original( object );
 			s_drawingLocalPlayer = false;
+			if( s_divModel )
+			{
+				VRHands::AfterPlayerDraw( const_cast< uint8_t * >( s_divModel ) );
+			}
 		}
 
 		DrawCallback NodeCallback( uint8_t *node )
@@ -290,6 +126,7 @@ namespace PSUVR
 				}
 			}
 			s_patchCount = 0;
+			s_divModel = nullptr;
 		}
 
 		template< typename Fn >
@@ -439,6 +276,8 @@ namespace PSUVR
 			{
 				// New area or character: old nodes may be gone, so drop them without writing.
 				s_patchCount = 0;
+				s_divModel = nullptr;
+			s_divModel = nullptr;
 				s_playerObject = playerObject;
 				s_nextScanFrame = s_frame;
 			}
@@ -577,35 +416,33 @@ namespace PSUVR
 
 		void OnBonePose( float *out, const uint8_t *skeleton )
 		{
-#ifdef _DEBUG
+			static unsigned s_poses = 0, s_noModel = 0;
+			static DWORD s_lastLog = 0;
+			++s_poses;
+			if( GetTickCount() - s_lastLog >= 3000 )
+			{
+				s_lastLog = GetTickCount();
+				PSU_LOG( "VRPlayerDraw: %u bone poses, %u without a player model (model %p)\n", s_poses, s_noModel, s_divModel );
+			}
+			const uint8_t *div = s_divModel;
+			if( !out || !skeleton || !div )
+			{
+				++s_noModel;
+				return;
+			}
+			bool player = false;
 			__try
 			{
-				if( out && skeleton && s_divModel && out == *reinterpret_cast< float * const * >( s_divModel + 0x64 ) )
-				{
-					BonePoseTest( out, skeleton );
-				}
+				player = *reinterpret_cast< float * const * >( div + 0x64 ) == out;
 			}
 			__except( EXCEPTION_EXECUTE_HANDLER )
 			{
 				s_divModel = nullptr;
 			}
-#else
-			( void )out;
-			( void )skeleton;
-#endif
-		}
-
-		void OnPoseBuilt( float *out, const uint8_t *records )
-		{
-#ifdef _DEBUG
-			if( out && out == s_playerPose && s_armBones[ 2 ] >= 0 && records )
+			if( player )
 			{
-				ArmTest( out, records );
+				VRHands::Apply( const_cast< uint8_t * >( div ), out, skeleton );
 			}
-#else
-			( void )out;
-			( void )records;
-#endif
 		}
 	}
 

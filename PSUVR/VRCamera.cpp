@@ -134,6 +134,7 @@ namespace PSUVR
 		float s_lastWrittenYaw = 0.0f;
 		float s_camDistance = 0.0f;  // game units from steered camera to head
 		float s_steerHmdYaw = 0.0f;  // HMD yaw (relative to the reference) the camera was steered to
+		Vec3 s_eyeLook{ 0.0f, 0.0f, -1.0f };  // body-frame level look at the last eye build
 		Vec3 s_headWorld{};          // game world head position at the last steer
 		LARGE_INTEGER s_lastSteerTime{};
 		// The play camera task can stop updating; first person must not keep stale state.
@@ -537,6 +538,44 @@ namespace PSUVR
 			return true;
 		}
 
+		bool TrackingToWorld( const float tracking[ 3 ], float world[ 3 ] )
+		{
+			if( !FirstPersonActive() || !s_haveReference )
+			{
+				return false;
+			}
+			const auto &vr = Config::Get().vr;
+			const float unitsPerMeter = kGameUnitsPerMeter * ( vr.m_worldScale > 0.01f ? vr.m_worldScale : 1.0f );
+			// Body frame (as BuildEyeFirstPerson): yaw-free, origin at the anchor, looking down -Z.
+			Vec3 local = Scale( Rotate( YawQuat( -s_refYaw ),
+				{ tracking[ 0 ] - s_fpAnchor.x, tracking[ 1 ] - s_fpAnchor.y, tracking[ 2 ] - s_fpAnchor.z } ), unitsPerMeter );
+			local = Add( local, Scale( s_eyeLook, vr.m_fpEyeForward * kGameUnitsPerMeter ) );
+			// Game forward = ( sin, 0, cos ) of the body yaw, game right = ( -cos, 0, sin ).
+			const float fx = std::sin( s_bodyYaw );
+			const float fz = std::cos( s_bodyYaw );
+			world[ 0 ] = s_headWorld.x - fz * local.x - fx * local.z;
+			world[ 1 ] = s_headWorld.y + local.y;
+			world[ 2 ] = s_headWorld.z + fx * local.x - fz * local.z;
+			return true;
+		}
+
+		bool BodyAxes( float forward[ 3 ], float right[ 3 ] )
+		{
+			if( !FirstPersonActive() )
+			{
+				return false;
+			}
+			const float fx = std::sin( s_bodyYaw );
+			const float fz = std::cos( s_bodyYaw );
+			forward[ 0 ] = fx;
+			forward[ 1 ] = 0.0f;
+			forward[ 2 ] = fz;
+			right[ 0 ] = -fz;
+			right[ 1 ] = 0.0f;
+			right[ 2 ] = fx;
+			return true;
+		}
+
 		bool ThirdPersonMode()
 		{
 			return Config::Get().vr.m_cameraMode != "firstPerson" && StereoRenderer::SceneAllowsStereo();
@@ -809,6 +848,7 @@ namespace PSUVR
 			const float flat = std::sqrt( look.x * look.x + look.z * look.z );
 			look = flat > 1.0e-4f ? Vec3{ look.x / flat, 0.0f, look.z / flat } : Vec3{ 0.0f, 0.0f, -1.0f };
 			offset = Add( offset, Scale( look, Config::Get().vr.m_fpEyeForward * kGameUnitsPerMeter ) );
+			s_eyeLook = look;
 
 			// Camera the game actually renders from (our steer, or the NPC talk camera).
 			// Place the eye at the head in that camera's space, so any game re-aim or

@@ -143,7 +143,6 @@ DetoursHookAll()
 
 		sub_50B790::Hook();			// Chat Logger
 		sub_74B490::Hook();			// memset Crash
-		sub_74CFD0::Hook();			// Skinned pose walk (VR hands)
 		sub_74B760::Hook();			// Bone pose build (VR hands)
 		sub_814040::Hook();			// File Processing
 

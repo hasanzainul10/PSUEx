@@ -323,6 +323,8 @@ namespace PSUVR
 				ImGui::TextDisabled( "Motion controllers: %s (applies when the game starts)", motion ? "on" : "off" );
 			}
 			ImGui::Checkbox( "Show controllers", &s.m_showControllers );
+			ImGui::Checkbox( "Arms follow the controllers (first person)", &s.m_handsFollow );
+			Help( "The character's arms reach for where you hold the controllers." );
 			ImGui::Checkbox( "Left stick works menus (D-pad) automatically", &s.m_autoDpad );
 			Help( "In menus, shops, the mission counter, login screens and the weapon / item palette the left stick sends the D-pad. "
 				"Left grip + left stick click still flips it by hand." );

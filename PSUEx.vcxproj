@@ -193,7 +193,7 @@
     <ClInclude Include="PSUDetour\Hook_0076E330_Audio_PlayADX.hpp" />
     <ClInclude Include="PSUDetour\Hook_GameFlags.hpp" />
     <ClInclude Include="PSUDetour\Hook_TCameraTaskPlay.hpp" />
-    <ClInclude Include="PSUDetour\Hook_0074CFD0_PoseWalk.hpp" />
+    <ClInclude Include="PSUVR\VRHands.h" />
     <ClInclude Include="PSUDetour\Hook_0074B760_BonePose.hpp" />
     <ClInclude Include="PSUDetour\Hook_UIScale.hpp" />
     <ClInclude Include="PSUDetour\Hook_TextDraw.hpp" />
@@ -290,6 +290,7 @@
     <ClCompile Include="PSUVR\VRControllerDiagram.cpp" />
     <ClCompile Include="PSUVR\VRSettings.cpp" />
     <ClCompile Include="PSUVR\VRPlayerDraw.cpp" />
+    <ClCompile Include="PSUVR\VRHands.cpp" />
     <ClCompile Include="PSUOverlay\ImageMng.cpp" />
     <ClCompile Include="PSUOverlay\Interface\CameraDisplay.cpp" />
     <ClCompile Include="PSUOverlay\Interface\LogDisplay.cpp" />

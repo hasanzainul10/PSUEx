@@ -19,10 +19,6 @@ namespace PSUVR
 		// Inside the local player's draw callback.
 		bool DrawingLocalPlayer();
 
-		// Right after the skeleton walk 0x0074CFD0 wrote a model's skinning matrices
-		// (out = model +0x64 buffer, records = skeleton bone records).
-		void OnPoseBuilt( float *out, const uint8_t *records );
-
 		// Right after 0x0074B760 wrote a model's bone-indexed, model-space bone matrices
 		// (out = model +0x64 buffer). The loaded player character takes this path.
 		void OnBonePose( float *out, const uint8_t *skeleton );

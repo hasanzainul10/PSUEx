@@ -110,6 +110,8 @@ struct VRSettings
 	bool m_comfortVignette = false;
 	// Motion controllers: draw a marker and pointer ray at each tracked controller.
 	bool m_showControllers = true;
+	// First person: the character's arms reach for the controllers (two-bone IK).
+	bool m_handsFollow = true;
 	// Button names in the controller layout picture: "psvr2" (Sense) or "generic" (A/B/X/Y).
 	std::string m_motionProfile = "psvr2";
 	// Buzz the right controller when the game's combo window opens (melee).
