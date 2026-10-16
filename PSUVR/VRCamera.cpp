@@ -675,6 +675,26 @@ namespace PSUVR
 			return s_bodyYaw;
 		}
 
+		namespace
+		{
+			int s_cameraState = 0;
+		}
+
+		void NoteCameraState( int state )
+		{
+			s_cameraState = state;
+		}
+
+		int CameraState()
+		{
+			return s_cameraState;
+		}
+
+		bool RenderCameraYawPitch( float &yaw, float &pitch )
+		{
+			return RenderCameraAngles( yaw, pitch );
+		}
+
 		bool LookYaw( float &yaw )
 		{
 			if( FirstPersonActive() )

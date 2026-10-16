@@ -336,6 +336,12 @@ namespace PSUVR
 			{
 				ImGui::Checkbox( "Swing with the trigger held = Photon Art", &s.m_paGesture );
 				ImGui::Checkbox( "Turn to where I look before attacking", &s.m_attackFaceLook );
+				ImGui::Checkbox( "Aim free aim with the gun hand", &s.m_controllerAim );
+				Help( "In free aim (R3 with a gun) turning the gun hand turns the aim by the same angle." );
+				if( s.m_controllerAim )
+				{
+					ImGui::Checkbox( "Invert aim up / down", &s.m_aimInvertPitch );
+				}
 				Help( "First person: if the character faces another way (after strafing or backing up), the "
 					"first hit turns it toward your view first." );
 				ImGui::SliderFloat( "Swing speed (m/s)", &s.m_swingSpeed, 1.0f, 4.0f, "%.1f" );

@@ -186,6 +186,7 @@ namespace TCameraTaskPlay
 		// Camera state byte (+0x20): 1 = follow, 2 = LB held (lock-on), 3 = refocus,
 		// 4 = free aim, 5 = NPC talk.
 		const int cameraState = *reinterpret_cast< uint8_t * >( reinterpret_cast< uint8_t * >( camera ) + 0x20 );
+		PSUVR::VRCamera::NoteCameraState( cameraState );
 		// Free aim: the game's aim camera stays as it is (the headset looks around on top).
 		const bool steerAllowed = cameraState != kCameraStateFreeAim;
 		uint8_t *renderCamera = RenderCameraObject( camera );

@@ -123,6 +123,9 @@ struct VRSettings
 	bool m_paGesture = true;
 	// Before the first hit of a chain, turn the character toward where you look.
 	bool m_attackFaceLook = true;
+	// Free aim (R3 with a gun): the gun hand steers the aim.
+	bool m_controllerAim = true;
+	bool m_aimInvertPitch = false;
 	float m_swingSpeed = 1.8f;      // m/s to count as a swing
 	// A swing during the attack animation waits for the combo window (up to 0.25 s).
 	bool m_comboBuffer = true;

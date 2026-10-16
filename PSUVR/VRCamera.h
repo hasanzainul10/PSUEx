@@ -62,6 +62,12 @@ namespace PSUVR
 		// Where the player looks, in the game's yaw convention (atan2(dx, dz) of the camera's
 		// ground forward): body + head yaw in first person, the render camera otherwise.
 		bool LookYaw( float &yaw );
+		// Camera task state byte from the camera hook (1 follow, 2 LB held, 3 refocus,
+		// 4 free aim, 5 NPC talk).
+		void NoteCameraState( int state );
+		int CameraState();
+		// The render camera's yaw (game convention) and pitch (positive = up).
+		bool RenderCameraYawPitch( float &yaw, float &pitch );
 		// Leash the first-person head to the body: physical lean/crouch beyond
 		// vr.fpLeanLimit / vr.fpCrouchLimit drags the anchor instead of the view.
 		void UpdateFirstPersonAnchor( const EyePose views[ 2 ] );

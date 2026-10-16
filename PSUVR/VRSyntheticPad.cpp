@@ -473,6 +473,85 @@ namespace PSUVR
 			}
 		}
 
+		// Free aim (camera state 4, R3 with a gun): the game aims with the right stick, so the
+		// controller steers that stick until the aim matches where the gun hand points. On entry
+		// the hand's direction and the aim are paired; turning the hand by some angle turns the
+		// aim by the same angle (at the game's aim speed). Input only: nothing is written.
+		bool s_freeAim = false;
+		float s_aimHandYaw0 = 0.0f, s_aimHandPitch0 = 0.0f;
+		float s_aimCamYaw0 = 0.0f, s_aimCamPitch0 = 0.0f;
+		DWORD s_aimLogTick = 0;
+		constexpr float kAimGain = 3.0f;              // stick per radian of error (full at ~19 degrees)
+		constexpr float kAimDeadband = 0.6f * ( 3.14159265f / 180.0f );
+
+		// Yaw (OpenXR, +left) and pitch (+up) of a controller's aim ray.
+		bool AimAngles( const ControllerState &c, float &yaw, float &pitch )
+		{
+			if( !c.active || !c.aimValid )
+			{
+				return false;
+			}
+			const float x = c.aimOrientation[ 0 ], y = c.aimOrientation[ 1 ], z = c.aimOrientation[ 2 ], w = c.aimOrientation[ 3 ];
+			// q * (0, 0, -1)
+			const float fx = -( 2.0f * ( x * z + w * y ) );
+			const float fy = -( 2.0f * ( y * z - w * x ) );
+			const float fz = -( 1.0f - 2.0f * ( x * x + y * y ) );
+			yaw = std::atan2( -fx, -fz );
+			pitch = std::asin( fy < -1.0f ? -1.0f : ( fy > 1.0f ? 1.0f : fy ) );
+			return true;
+		}
+
+		void FreeAim( PadState &pad )
+		{
+			const bool active = Config::Get().vr.m_controllerAim && VRCamera::CameraState() == 4;
+			// The gun hand: the left one with a left-hand gun, otherwise the right.
+			const int hand = s_combatValid && PSUCombat::ClassifyWeapon( s_combat.leftClass ) == PSUCombat::WeaponKind::Gun1H ? 0 : 1;
+			float handYaw = 0.0f, handPitch = 0.0f, camYaw = 0.0f, camPitch = 0.0f;
+			if( !active || !AimAngles( VRControllers::State( hand ), handYaw, handPitch ) ||
+				!VRCamera::RenderCameraYawPitch( camYaw, camPitch ) )
+			{
+				s_freeAim = false;
+				return;
+			}
+			if( !s_freeAim )
+			{
+				s_freeAim = true;
+				s_aimHandYaw0 = handYaw;
+				s_aimHandPitch0 = handPitch;
+				s_aimCamYaw0 = camYaw;
+				s_aimCamPitch0 = camPitch;
+#ifdef _DEBUG
+				PSU_LOG( "VRAim: free aim with the %s hand (camera yaw %.0f pitch %.0f)\n", hand == 0 ? "left" : "right",
+					camYaw * 57.29578f, camPitch * 57.29578f );
+#endif
+			}
+			// Game yaw turns the same way as OpenXR yaw (both grow turning left).
+			const float wantYaw = WrapRadians( s_aimCamYaw0 + WrapRadians( handYaw - s_aimHandYaw0 ) );
+			const float wantPitch = s_aimCamPitch0 + ( handPitch - s_aimHandPitch0 );
+			const float yawError = WrapRadians( wantYaw - camYaw );
+			const float pitchError = wantPitch - camPitch;
+			const auto drive = []( float error )
+			{
+				if( std::fabs( error ) < kAimDeadband )
+				{
+					return 0.0f;
+				}
+				const float v = error * kAimGain;
+				return v > 1.0f ? 1.0f : ( v < -1.0f ? -1.0f : v );
+			};
+			// Stick right lowers the game yaw (turns right); stick up raises the aim.
+			pad.rx = -drive( yawError );
+			pad.ry = drive( pitchError ) * ( Config::Get().vr.m_aimInvertPitch ? -1.0f : 1.0f );
+#ifdef _DEBUG
+			if( GetTickCount() - s_aimLogTick > 500 )
+			{
+				s_aimLogTick = GetTickCount();
+				PSU_LOG( "VRAim: yaw err %.1f pitch err %.1f -> stick (%.2f, %.2f)\n", yawError * 57.29578f,
+					pitchError * 57.29578f, pad.rx, pad.ry );
+			}
+#endif
+		}
+
 		// Adds the combat presses to the pad. Returns the roles so the caller can keep the
 		// gesture controls (triggers, right grip) from also sending their plain buttons.
 		HandRoles Combat( float dt, bool modifier, PadState &pad )
@@ -853,6 +932,7 @@ namespace PSUVR
 			Combat( dt, modifier, pad );
 			pad.rx = Deadzone( right.stick[ 0 ], 0.15f );
 			pad.ry = Deadzone( right.stick[ 1 ], 0.15f );
+			FreeAim( pad );
 
 			std::lock_guard lock( s_mutex );
 			s_out = pad;
