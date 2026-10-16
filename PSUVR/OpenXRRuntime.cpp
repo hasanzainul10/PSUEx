@@ -1,6 +1,7 @@
 ﻿#include "OpenXRRuntime.h"
 
 #include "../Misc/Log.h"
+#include "../PSUExConfig.h"
 
 #define XR_USE_GRAPHICS_API_D3D11
 #include <openxr/openxr.h>
@@ -880,6 +881,13 @@ namespace PSUVR
 		m_displayTime = frameState.predictedDisplayTime;
 		m_displayPeriod = frameState.predictedDisplayPeriod;
 		m_shouldRender = frameState.shouldRender;
+		// Testing with emulated controllers and no headset worn (SteamVR's null HMD stays
+		// "synchronized", never visible): render anyway, so the eye passes and everything
+		// that depends on them run. The runtime simply doesn't show the frames.
+		if( !m_shouldRender && Config::Get().vr.m_emulateControllers && m_sessionState >= XR_SESSION_STATE_SYNCHRONIZED )
+		{
+			m_shouldRender = true;
+		}
 
 		XrFrameBeginInfo beginInfo{ XR_TYPE_FRAME_BEGIN_INFO };
 		if( XR_FAILED( xrBeginFrame( session, &beginInfo ) ) )

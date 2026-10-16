@@ -117,6 +117,27 @@ namespace PSUVR
 			return E_FAIL;
 		}
 
+		// The game fills the formats from the monitor it was set up on; on a display it doesn't
+		// know (a streaming host's virtual display) they stay uninitialised. A window can use
+		// the desktop format, so fill in sane ones (also for the plain CreateDevice fallback).
+		D3DPRESENT_PARAMETERS &pp = *pPresentationParameters;
+		if( pp.Windowed )
+		{
+			const D3DFORMAT format = pp.BackBufferFormat;
+			const bool knownFormat = format == D3DFMT_UNKNOWN || format == D3DFMT_X8R8G8B8 || format == D3DFMT_A8R8G8B8 ||
+				format == D3DFMT_R5G6B5 || format == D3DFMT_X1R5G5B5 || format == D3DFMT_A1R5G5B5 || format == D3DFMT_A2R10G10B10;
+			if( !knownFormat )
+			{
+				PSU_LOG( "D3D9ExUpgrade: back buffer format %d is invalid; using X8R8G8B8\n", static_cast< int >( format ) );
+				pp.BackBufferFormat = D3DFMT_X8R8G8B8;
+			}
+			if( pp.EnableAutoDepthStencil && pp.AutoDepthStencilFormat == D3DFMT_UNKNOWN )
+			{
+				PSU_LOG( "D3D9ExUpgrade: no depth format; using D24S8\n" );
+				pp.AutoDepthStencilFormat = D3DFMT_D24S8;
+			}
+		}
+
 		D3DDISPLAYMODEEX fullscreenMode{};
 		D3DDISPLAYMODEEX *pMode = nullptr;
 		if( !pPresentationParameters->Windowed )
@@ -138,6 +159,12 @@ namespace PSUVR
 
 		if( FAILED( hr ) || !deviceEx )
 		{
+			const D3DPRESENT_PARAMETERS &pp = *pPresentationParameters;
+			PSU_LOG( "D3D9ExUpgrade: params adapter=%u windowed=%d bb=%ux%u fmt=%d count=%u swap=%d refresh=%u interval=0x%X "
+				"depth=%d/%d flags=0x%X behavior=0x%X hwnd=%p devhwnd=%p\n", Adapter, pp.Windowed, pp.BackBufferWidth,
+				pp.BackBufferHeight, pp.BackBufferFormat, pp.BackBufferCount, pp.SwapEffect, pp.FullScreen_RefreshRateInHz,
+				pp.PresentationInterval, pp.EnableAutoDepthStencil, pp.AutoDepthStencilFormat, pp.Flags, BehaviorFlags,
+				hFocusWindow, pp.hDeviceWindow );
 			PSU_LOG( "D3D9ExUpgrade: CreateDeviceEx failed 0x%08X — VR shared surfaces unavailable\n", hr );
 			s_activeEx = false;
 			return hr;
