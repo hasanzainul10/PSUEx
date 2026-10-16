@@ -42,7 +42,7 @@ namespace PSUVR
 
 		std::vector< uint8_t > s_playerSnapshot;
 		uintptr_t s_playerSnapshotAddress = 0;
-		constexpr size_t kPlayerBytes = 0x1000;
+		constexpr size_t kPlayerBytes = 0x2000;
 
 		bool s_prevF11 = false;
 		bool s_prevF12 = false;
@@ -237,6 +237,51 @@ namespace PSUVR
 			s_playerLast = std::move( now );
 		}
 
+		// Camera task object (TCameraTaskPlay `this`, from the camera hook), watched like the
+		// player struct: what changes while standing still is muted during calibration.
+		uintptr_t s_cameraTask = 0;
+		uintptr_t s_cameraWatchAddress = 0;
+		std::vector< uint8_t > s_cameraLast;
+		std::vector< bool > s_cameraMuted;
+		constexpr size_t kCameraBytes = 0x400;
+
+		void WatchCamera( DWORD tick )
+		{
+			std::vector< uint8_t > now;
+			if( !s_cameraTask || !Copy( s_cameraTask, kCameraBytes, now ) )
+			{
+				return;
+			}
+			if( s_cameraTask != s_cameraWatchAddress || s_cameraLast.size() != now.size() || s_calibrationFrames == 0 )
+			{
+				s_cameraWatchAddress = s_cameraTask;
+				s_cameraMuted.assign( kCameraBytes / 4, false );
+				s_cameraLast = std::move( now );
+				return;
+			}
+			const bool calibrating = s_calibrationFrames < kCalibrationFrames;
+			for( size_t offset = 0; offset + 4 <= now.size(); offset += 4 )
+			{
+				const uint32_t before = Dword( s_cameraLast, offset );
+				const uint32_t after = Dword( now, offset );
+				if( before == after )
+				{
+					continue;
+				}
+				if( calibrating )
+				{
+					s_cameraMuted[ offset / 4 ] = true;
+				}
+				else if( !s_cameraMuted[ offset / 4 ] && s_watchLines < kMaxWatchLines )
+				{
+					++s_watchLines;
+					PSU_LOG( "Probe %lu camera+0x%03X: %08X -> %08X (float %.3f)\n", tick,
+						static_cast< unsigned >( offset ), before, after, AsFloat( after ) );
+				}
+			}
+			s_cameraLast = std::move( now );
+		}
+
 		void WatchFrame()
 		{
 			const DWORD tick = GetTickCount();
@@ -272,6 +317,7 @@ namespace PSUVR
 				region.valid = true;
 			}
 			WatchPlayer( tick );
+			WatchCamera( tick );
 			if( s_watchLines == kMaxWatchLines )
 			{
 				++s_watchLines;
@@ -412,6 +458,15 @@ namespace PSUVR
 
 	namespace VRProbe
 	{
+		void NoteCameraTask( const void *task )
+		{
+#ifdef _DEBUG
+			s_cameraTask = reinterpret_cast< uintptr_t >( task );
+#else
+			( void )task;
+#endif
+		}
+
 		void Update()
 		{
 #ifdef _DEBUG

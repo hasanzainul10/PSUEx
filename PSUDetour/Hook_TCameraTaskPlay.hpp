@@ -5,6 +5,7 @@
 #include "../PSUOverlay/FrameTrace.h"
 #include "../PSUStructs/PSUPlayerData.h"
 #include "../PSUVR/VRCamera.h"
+#include "../PSUVR/VRProbe.h"
 
 namespace TCameraTaskPlay
 {
@@ -176,6 +177,7 @@ namespace TCameraTaskPlay
 		}
 
 		const int result = pOriginal48DA90( thisPtr );
+		PSUVR::VRProbe::NoteCameraTask( camera );
 
 		// Camera state byte (+0x20): 1 = follow, 3 = refocus, 5 = NPC talk.
 		const int cameraState = *reinterpret_cast< uint8_t * >( reinterpret_cast< uint8_t * >( camera ) + 0x20 );

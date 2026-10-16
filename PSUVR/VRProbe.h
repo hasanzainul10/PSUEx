@@ -9,5 +9,7 @@ namespace PSUVR
 	{
 		// Once per frame (game thread).
 		void Update();
+		// The camera task (TCameraTaskPlay this), watched with the player struct (Ctrl+F11).
+		void NoteCameraTask( const void *task );
 	}
 }
