@@ -126,6 +126,8 @@ struct VRSettings
 	// Free aim (R3 with a gun): the gun hand steers the aim.
 	bool m_controllerAim = true;
 	bool m_aimInvertPitch = false;
+	// Free aim reticle radius in degrees of view (the game's shots spread around the centre).
+	float m_reticleSize = 3.0f;
 	float m_swingSpeed = 1.8f;      // m/s to count as a swing
 	// A swing during the attack animation waits for the combo window (up to 0.25 s).
 	bool m_comboBuffer = true;

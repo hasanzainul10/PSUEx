@@ -343,6 +343,7 @@ namespace PSUVR
 				if( s.m_controllerAim )
 				{
 					ImGui::Checkbox( "Invert aim up / down", &s.m_aimInvertPitch );
+					ImGui::SliderFloat( "Reticle size (degrees)", &s.m_reticleSize, 0.5f, 8.0f, "%.1f" );
 				}
 				Help( "First person: if the character faces another way (after strafing or backing up), the "
 					"first hit turns it toward your view first." );

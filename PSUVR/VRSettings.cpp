@@ -63,6 +63,7 @@ namespace
 	X( m_attackFaceLook, "attackFaceLook" ) \
 	X( m_controllerAim, "controllerAim" ) \
 	X( m_aimInvertPitch, "aimInvertPitch" ) \
+	X( m_reticleSize, "reticleSize" ) \
 	X( m_swingSpeed, "swingSpeed" ) \
 	X( m_comboBuffer, "comboBuffer" ) \
 	X( m_vignetteStrength, "vignetteStrength" ) \

@@ -1201,6 +1201,20 @@ namespace PSUVR
 			return;
 		}
 		const unsigned vertCount = VertCountForPrimitive( primitiveType, primitiveCount );
+		{
+			int aimHand = 0;
+			static unsigned s_aimLogs = 0;
+			if( VRSyntheticPad::GunAiming( aimHand ) && s_aimLogs < 120 )
+			{
+				++s_aimLogs;
+				float minX = 0, minY = 0, maxX = 0, maxY = 0;
+				ComputeAabb( verts, vertCount, stride, minX, minY, maxX, maxY );
+				DWORD fvf = 0;
+				device->GetFVF( &fvf );
+				PSU_LOG( "VRHud aiming draw: layer=0x%X box=(%.0f,%.0f)-(%.0f,%.0f) fvf=0x%X verts=%u game=%d ret=%p\n",
+					s_passBLayer, minX, minY, maxX, maxY, fvf, vertCount, TargetsGameFrame( device ) ? 1 : 0, ret );
+			}
+		}
 		if( !TargetsGameFrame( device ) )
 		{
 			LogRoute( ret, "skip-offscreen", verts, vertCount, stride );

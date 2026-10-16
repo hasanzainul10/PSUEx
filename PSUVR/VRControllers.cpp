@@ -311,7 +311,9 @@ namespace PSUVR
 					float sx, sy, depth;
 					if( proj.Project( point, sx, sy, depth ) )
 					{
-						DrawReticle( device, sx, sy, proj.Scale( 1.0f ) * 0.017f, trigger );
+						// Radius: vr.reticleSize degrees of view at any distance.
+						const float degrees = Config::Get().vr.m_reticleSize > 0.1f ? Config::Get().vr.m_reticleSize : 0.1f;
+						DrawReticle( device, sx, sy, proj.Scale( 1.0f ) * std::tan( degrees * ( 3.14159265f / 180.0f ) ), trigger );
 					}
 				}
 				if( c.gripValid )
