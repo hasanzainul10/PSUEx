@@ -1201,20 +1201,6 @@ namespace PSUVR
 			return;
 		}
 		const unsigned vertCount = VertCountForPrimitive( primitiveType, primitiveCount );
-		{
-			int aimHand = 0;
-			static unsigned s_aimLogs = 0;
-			if( VRSyntheticPad::GunAiming( aimHand ) && s_aimLogs < 120 )
-			{
-				++s_aimLogs;
-				float minX = 0, minY = 0, maxX = 0, maxY = 0;
-				ComputeAabb( verts, vertCount, stride, minX, minY, maxX, maxY );
-				DWORD fvf = 0;
-				device->GetFVF( &fvf );
-				PSU_LOG( "VRHud aiming draw: layer=0x%X box=(%.0f,%.0f)-(%.0f,%.0f) fvf=0x%X verts=%u game=%d ret=%p\n",
-					s_passBLayer, minX, minY, maxX, maxY, fvf, vertCount, TargetsGameFrame( device ) ? 1 : 0, ret );
-			}
-		}
 		if( !TargetsGameFrame( device ) )
 		{
 			LogRoute( ret, "skip-offscreen", verts, vertCount, stride );
@@ -1233,8 +1219,8 @@ namespace PSUVR
 			LogRoute( ret, "skip-fullscreen-3d", verts, vertCount, stride );
 			return;
 		}
-		// Free aim with the gun up: the game's reticle (small elements around the screen
-		// centre) is replaced by ours at the controller ray, so it isn't put on the panel.
+		// Free aim with the gun up: the game's reticle (a square sprite near the screen centre)
+		// is replaced by ours at the controller ray, so it isn't put on the panel.
 		int aimHand = 0;
 		if( VRSyntheticPad::GunAiming( aimHand ) )
 		{
@@ -1244,8 +1230,12 @@ namespace PSUVR
 			const float gh = static_cast< float >( m_h );
 			const float cx = ( minX + maxX ) * 0.5f;
 			const float cy = ( minY + maxY ) * 0.5f;
-			if( std::fabs( cx - gw * 0.5f ) < gw * 0.08f && std::fabs( cy - gh * 0.5f ) < gh * 0.12f &&
-				( maxX - minX ) < gw * 0.3f && ( maxY - minY ) < gh * 0.4f )
+			// The reticle is a square sprite (192 x 192 at 2560 x 1440) placed on the aim point,
+			// so it wanders around the centre; nameplates are wide and are kept.
+			const float w = maxX - minX;
+			const float h = maxY - minY;
+			const bool squareSprite = w > gw * 0.02f && w < gw * 0.15f && h > w * 0.7f && h < w * 1.4f;
+			if( squareSprite && std::fabs( cx - gw * 0.5f ) < gw * 0.2f && std::fabs( cy - gh * 0.5f ) < gh * 0.25f )
 			{
 				LogRoute( ret, "skip-reticle", verts, vertCount, stride );
 				return;
