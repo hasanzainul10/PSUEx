@@ -682,6 +682,12 @@ namespace PSUVR
 
 		void NoteCameraState( int state )
 		{
+			static unsigned s_logs = 0;
+			if( state != s_cameraState && s_logs < 200 )
+			{
+				++s_logs;
+				PSU_LOG( "VRCamera: camera state %d -> %d\n", s_cameraState, state );
+			}
 			s_cameraState = state;
 		}
 

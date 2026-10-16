@@ -468,6 +468,41 @@ namespace PSUVR
 	bool StereoRenderer::ShouldSkipScreenQuad( IDirect3DDevice9 *device, void *ret,
 		unsigned primitiveCount, bool userPointer )
 	{
+		// Diagnostics: every draw of the eye pass while the camera is in state 5 (dressing room).
+		if( s_inEyePass && device && VRCamera::CameraState() == 5 )
+		{
+			static unsigned s_state5Logs = 0;
+			if( s_state5Logs < 150 )
+			{
+				++s_state5Logs;
+				DWORD drawFvf = 0;
+				device->GetFVF( &drawFvf );
+				unsigned texW = 0, texH = 0;
+				int texRT = -1;
+				IDirect3DBaseTexture9 *texture = nullptr;
+				if( SUCCEEDED( device->GetTexture( 0, &texture ) ) && texture )
+				{
+					IDirect3DTexture9 *tex2d = nullptr;
+					texture->QueryInterface( __uuidof( IDirect3DTexture9 ), reinterpret_cast< void ** >( &tex2d ) );
+					texture->Release();
+					if( tex2d )
+					{
+						D3DSURFACE_DESC desc{};
+						tex2d->GetLevelDesc( 0, &desc );
+						texW = desc.Width;
+						texH = desc.Height;
+						texRT = ( desc.Usage & D3DUSAGE_RENDERTARGET ) ? 1 : 0;
+						tex2d->Release();
+					}
+				}
+				IDirect3DVertexShader9 *vs = nullptr;
+				device->GetVertexShader( &vs );
+				PSU_LOG( "State5 draw: rhw=%d up=%d prim=%u fvf=0x%X vs=%d tex=%ux%u rt=%d ret=%p\n",
+					( drawFvf & D3DFVF_POSITION_MASK ) == D3DFVF_XYZRHW ? 1 : 0, userPointer ? 1 : 0, primitiveCount,
+					drawFvf, vs ? 1 : 0, texW, texH, texRT, ret );
+				if( vs ) vs->Release();
+			}
+		}
 		if( !s_inEyePass || !device || !Config::Get().vr.m_stereoSkipScreenQuads )
 		{
 			return false;
