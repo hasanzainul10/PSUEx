@@ -128,24 +128,29 @@ namespace PSUVR
 			// skips TPlayerPad's draw 0x00526A80). With the arms on the controllers, draw it
 			// anyway: clear those bits for this call only.
 			uint8_t *flags = static_cast< uint8_t * >( object );
-			uint8_t saved9 = 0, saved390 = 0;
+			uint8_t saved9 = 0, saved390 = 0, saved1BC = 0;
 			const bool forceShow = VRCamera::CameraState() == 4 && Config::Get().vr.m_handsFollow && Readable( flags + 0x390, 4 );
 			if( forceShow )
 			{
 				saved9 = flags[ 9 ];
 				saved390 = flags[ 0x390 ];
+				saved1BC = flags[ 0x1BC ];
 				static DWORD s_lastLog = 0;
 				if( GetTickCount() - s_lastLog >= 2000 )
 				{
 					s_lastLog = GetTickCount();
 					const uint8_t *render = *reinterpret_cast< const uint8_t * const * >( flags + 0x160 );
-					PSU_LOG( "VRPlayerDraw: free aim draw flags +9=%02X +390=%02X mode=%d render type %d +2C=%02X\n", saved9,
-						saved390, *reinterpret_cast< const int * >( 0x009946C8 ),
+					PSU_LOG( "VRPlayerDraw: free aim draw flags +9=%02X +390=%02X +1BC=%02X [B91140]=%08lX mode=%d render type %d +2C=%02X\n",
+						saved9, saved390, saved1BC, *reinterpret_cast< const DWORD * >( 0x00B91140 ),
+						*reinterpret_cast< const int * >( 0x009946C8 ),
 						Readable( render, 0x30 ) ? *reinterpret_cast< const int * >( render + 0x28 ) : -1,
 						Readable( render, 0x30 ) ? render[ 0x2C ] : 0 );
 				}
 				flags[ 9 ] = static_cast< uint8_t >( saved9 & ~0x04 );
 				flags[ 0x390 ] = static_cast< uint8_t >( saved390 & ~0x10 );
+				// +0x1BC bit 0x10 with [0x00B91140] set: 0x00541EA0 skips the draw (and the update
+				// 0x00541CD0 marks the node visible anyway).
+				flags[ 0x1BC ] = static_cast< uint8_t >( saved1BC & ~0x10 );
 			}
 			// The models (body, weapons and other attachments) draw only with +0x14 bit 0x10.
 			constexpr unsigned kMaxModels = 32;
@@ -211,6 +216,7 @@ namespace PSUVR
 			{
 				flags[ 9 ] = static_cast< uint8_t >( ( flags[ 9 ] & ~0x04 ) | ( saved9 & 0x04 ) );
 				flags[ 0x390 ] = static_cast< uint8_t >( ( flags[ 0x390 ] & ~0x10 ) | ( saved390 & 0x10 ) );
+				flags[ 0x1BC ] = static_cast< uint8_t >( ( flags[ 0x1BC ] & ~0x10 ) | ( saved1BC & 0x10 ) );
 				for( unsigned i = 0; i < modelCount; ++i )
 				{
 					*modelFlags[ i ] = ( *modelFlags[ i ] & ~0x10u ) | ( savedModelFlags[ i ] & 0x10u );
