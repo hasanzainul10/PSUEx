@@ -63,104 +63,20 @@ namespace PSUVR
 		}
 
 #ifdef _DEBUG
-		// Hands RE (Debug): find the per-frame writer of the pose buffer. The player's TModel
-		// (render object +0x20) keeps one 64-byte matrix per bone at model+0x64; L_hand is #17.
-		// A hardware write watchpoint on that matrix (this thread only) logs the writing code
-		// and the code addresses on its stack.
-		constexpr DWORD kArmWatchException = 0xE0505357;
-		constexpr unsigned kWatchBone = 17;
-		constexpr unsigned kMaxWatchSites = 16;
-		constexpr unsigned kWatchStack = 10;
-		constexpr unsigned kMaxWatchHits = 2000;
+		// Hands test (Debug): the local player's TModel (render object +0x20) owns the pose
+		// buffer at model +0x64 that 0x0074D1D0 fills. Its bone names come from the model's
+		// vtable +0x28 object (+0x28 names, 0x00757500 lookup).
+		typedef void *( __thiscall *GetSkeletonFn )( void *model );
+		typedef int( __cdecl *FindBoneFn )( void *names, const char *name );
 
-		struct WatchSite
+		float *s_playerPose = nullptr;
+		const uint8_t *s_playerModel = nullptr;
+		const uint8_t *s_divModel = nullptr;  // render object +0x04 (TDivModel, the loaded character)
+		const uint8_t *s_playerRecords = nullptr;
+		int s_armBones[ 3 ] = { -1, -1, -1 };  // L_upperarm, L_forearm, L_hand
+
+		void NotePlayerModel( void *drawObject )
 		{
-			DWORD eip;
-			unsigned count;
-			DWORD stack[ kWatchStack ];
-		};
-
-		WatchSite s_sites[ kMaxWatchSites ]{};
-		volatile LONG s_siteCount = 0;
-		volatile LONG s_watchHits = 0;
-		DWORD s_watchAddr = 0;
-		bool s_watchArmed = false;
-		bool s_watchDone = false;
-
-		LONG CALLBACK WatchHandler( EXCEPTION_POINTERS *info )
-		{
-			CONTEXT *ctx = info->ContextRecord;
-			if( info->ExceptionRecord->ExceptionCode == kArmWatchException )
-			{
-				// Dr0 on the matrix's element 3, Dr1 on element 12 (either translation layout).
-				// Write-only, 4 bytes: RW = 01, LEN = 11.
-				ctx->Dr0 = s_watchAddr + 3 * 4;
-				ctx->Dr1 = s_watchAddr + 12 * 4;
-				ctx->Dr7 = 0x1 | 0x4 | ( 0xD << 16 ) | ( 0xD << 20 );
-				return EXCEPTION_CONTINUE_EXECUTION;
-			}
-			if( info->ExceptionRecord->ExceptionCode != EXCEPTION_SINGLE_STEP || ( ctx->Dr6 & 0x3 ) == 0 )
-			{
-				return EXCEPTION_CONTINUE_SEARCH;
-			}
-			ctx->Dr6 = 0;
-			if( InterlockedIncrement( &s_watchHits ) >= static_cast< LONG >( kMaxWatchHits ) )
-			{
-				ctx->Dr7 = 0;
-			}
-			for( LONG i = 0; i < s_siteCount; ++i )
-			{
-				if( s_sites[ i ].eip == ctx->Eip )
-				{
-					++s_sites[ i ].count;
-					return EXCEPTION_CONTINUE_EXECUTION;
-				}
-			}
-			if( s_siteCount < static_cast< LONG >( kMaxWatchSites ) )
-			{
-				WatchSite &site = s_sites[ s_siteCount ];
-				site.eip = ctx->Eip;
-				site.count = 1;
-				const DWORD *stack = reinterpret_cast< const DWORD * >( ctx->Esp );
-				unsigned found = 0;
-				for( unsigned n = 0; n < 96 && found < kWatchStack; ++n )
-				{
-					const DWORD value = stack[ n ];
-					if( value >= 0x00401000 && value < 0x00880000 )
-					{
-						site.stack[ found++ ] = value;
-					}
-				}
-				++s_siteCount;
-			}
-			return EXCEPTION_CONTINUE_EXECUTION;
-		}
-
-		void ProbeHandBones( void *drawObject )
-		{
-			static DWORD s_lastTick = 0;
-			static unsigned s_reports = 0;
-			if( s_watchDone || GetTickCount() - s_lastTick < 1000 )
-			{
-				return;
-			}
-			s_lastTick = GetTickCount();
-			if( s_watchArmed )
-			{
-				PSU_LOG( "HandsWatch: %ld hits, %ld sites (thread %lu)\n", s_watchHits, s_siteCount, GetCurrentThreadId() );
-				for( LONG i = 0; i < s_siteCount; ++i )
-				{
-					const WatchSite &site = s_sites[ i ];
-					PSU_LOG( "HandsWatch:   eip %08lX x%u stack %08lX %08lX %08lX %08lX %08lX %08lX %08lX %08lX %08lX %08lX\n",
-						site.eip, site.count, site.stack[ 0 ], site.stack[ 1 ], site.stack[ 2 ], site.stack[ 3 ], site.stack[ 4 ],
-						site.stack[ 5 ], site.stack[ 6 ], site.stack[ 7 ], site.stack[ 8 ], site.stack[ 9 ] );
-				}
-				if( ++s_reports >= 5 || s_watchHits >= static_cast< LONG >( kMaxWatchHits ) )
-				{
-					s_watchDone = true;
-				}
-				return;
-			}
 			__try
 			{
 				const uint8_t *render = *reinterpret_cast< const uint8_t * const * >( static_cast< const uint8_t * >( drawObject ) + 0x160 );
@@ -168,38 +84,165 @@ namespace PSUVR
 				{
 					return;
 				}
-				const uint8_t *model = *reinterpret_cast< const uint8_t * const * >( render + 0x20 );
+				void *model = *reinterpret_cast< void * const * >( render + 0x20 );
 				if( !Readable( model, 0x70 ) )
 				{
 					return;
 				}
-				const uint8_t *pose = *reinterpret_cast< const uint8_t * const * >( model + 0x64 );
-				PSU_LOG( "HandsWatch: model %p vt %08lX flags14 %08lX flags18 %08lX local1C %p pose64 %p count68 %ld (thread %lu)\n",
-					model, *reinterpret_cast< const DWORD * >( model ), *reinterpret_cast< const DWORD * >( model + 0x14 ),
-					*reinterpret_cast< const DWORD * >( model + 0x18 ), *reinterpret_cast< void * const * >( model + 0x1C ), pose,
-					*reinterpret_cast< const LONG * >( model + 0x68 ), GetCurrentThreadId() );
-				if( !Readable( pose, ( kWatchBone + 1 ) * 0x40 ) )
+				s_playerPose = *reinterpret_cast< float * const * >( static_cast< const uint8_t * >( model ) + 0x64 );
+				s_playerModel = static_cast< const uint8_t * >( model );
+				s_divModel = *reinterpret_cast< const uint8_t * const * >( render + 0x04 );
+				if( s_armBones[ 2 ] >= 0 )
 				{
 					return;
 				}
-				const float *m = reinterpret_cast< const float * >( pose + kWatchBone * 0x40 );
-				PSU_LOG( "HandsWatch: L_hand pose [%.2f %.2f %.2f %.2f | %.2f %.2f %.2f %.2f | %.2f %.2f %.2f %.2f | %.2f %.2f %.2f %.2f]\n",
-					m[ 0 ], m[ 1 ], m[ 2 ], m[ 3 ], m[ 4 ], m[ 5 ], m[ 6 ], m[ 7 ], m[ 8 ], m[ 9 ], m[ 10 ], m[ 11 ], m[ 12 ], m[ 13 ],
-					m[ 14 ], m[ 15 ] );
-				s_watchAddr = reinterpret_cast< DWORD >( m );
+				void *const *vt = *static_cast< void *const *const * >( model );
+				const uint8_t *skeleton = static_cast< const uint8_t * >( reinterpret_cast< GetSkeletonFn >( vt[ 10 ] )( model ) );
+				if( !Readable( skeleton, 0x2C ) )
+				{
+					return;
+				}
+				void *names = *reinterpret_cast< void * const * >( skeleton + 0x28 );
+				if( !Readable( names, 0x0C ) )
+				{
+					return;
+				}
+				static const char *const kArm[] = { "L_upperarm", "L_forearm", "L_hand" };
+				const auto findBone = reinterpret_cast< FindBoneFn >( 0x00757500 );
+				for( unsigned i = 0; i < 3; ++i )
+				{
+					s_armBones[ i ] = findBone( names, kArm[ i ] );
+				}
+				PSU_LOG( "HandsTest: model %p pose %p arm bones %d %d %d\n", model, s_playerPose, s_armBones[ 0 ], s_armBones[ 1 ],
+					s_armBones[ 2 ] );
 			}
 			__except( EXCEPTION_EXECUTE_HANDLER )
 			{
-				PSU_LOG( "HandsWatch: exception\n" );
-				s_watchDone = true;
-				return;
+				s_playerPose = nullptr;
 			}
-			if( s_watchAddr )
+		}
+
+		void ArmTest( float *out, const uint8_t *records )
+		{
+			static DWORD s_lastLog = 0;
+			static unsigned s_lifts = 0;
+			// Record: +0 flags, +4 palette slot, +6 parent, +8 first child, +0xA next sibling,
+			// +0x30 inverse bind. The player skeleton has 28 bones.
+			constexpr int count = 28;
+			__try
 			{
-				AddVectoredExceptionHandler( 1, &WatchHandler );
-				RaiseException( kArmWatchException, 0, 0, nullptr );
-				s_watchArmed = true;
-				PSU_LOG( "HandsWatch: armed on %08lX\n", s_watchAddr );
+				if( !Readable( records, count * 0x90 ) )
+				{
+					return;
+				}
+				s_playerRecords = records;
+				// Lift the left arm 30 cm (model space Y) to see whether the skin follows.
+				int slots[ 3 ]{ -1, -1, -1 };
+				for( unsigned i = 0; i < 3; ++i )
+				{
+					const int bone = s_armBones[ i ];
+					if( bone >= 0 && bone < count )
+					{
+						slots[ i ] = *reinterpret_cast< const short * >( records + bone * 0x90 + 4 );
+						if( slots[ i ] >= 0 && slots[ i ] < count )
+						{
+							out[ slots[ i ] * 16 + 13 ] += 3.0f;
+						}
+					}
+				}
+				++s_lifts;
+				if( GetTickCount() - s_lastLog >= 2000 )
+				{
+					s_lastLog = GetTickCount();
+					PSU_LOG( "HandsTest: lifted slots %d %d %d, %u lifts (in player draw %d)\n", slots[ 0 ], slots[ 1 ], slots[ 2 ],
+						s_lifts, s_drawingLocalPlayer ? 1 : 0 );
+				}
+			}
+			__except( EXCEPTION_EXECUTE_HANDLER )
+			{
+				PSU_LOG( "HandsTest: exception\n" );
+				s_playerPose = nullptr;
+			}
+		}
+
+		// Loaded character (TDivModel): bone-indexed model-space matrices from 0x0074B760.
+		// Lift one bone and everything under it (parent at record +6) by 30 cm.
+		constexpr int kLiftBone = 15;
+
+		void BonePoseTest( float *out, const uint8_t *skeleton )
+		{
+			static DWORD s_lastLog = 0;
+			static unsigned s_lifts = 0;
+			static bool s_dumped = false;
+			__try
+			{
+				const int count = *reinterpret_cast< const int * >( skeleton + 0x28 );
+				const uint8_t *records = *reinterpret_cast< const uint8_t * const * >( skeleton + 0x30 );
+				if( count <= 0 || count > 128 || !Readable( records, count * 0x90 ) )
+				{
+					return;
+				}
+				if( !s_dumped )
+				{
+					s_dumped = true;
+					PSU_LOG( "HandsDiv: skeleton %p, %d bones\n", skeleton, count );
+					const DWORD *sk = reinterpret_cast< const DWORD * >( skeleton );
+					for( unsigned n = 0; n < 0x40 / 4; ++n )
+					{
+						void *names = reinterpret_cast< void * >( sk[ n ] );
+						int hand = -2;
+						if( Readable( names, 0x0C ) )
+						{
+							__try
+							{
+								hand = reinterpret_cast< FindBoneFn >( 0x00757500 )( names, "L_hand" );
+							}
+							__except( EXCEPTION_EXECUTE_HANDLER )
+							{
+								hand = -3;
+							}
+						}
+						PSU_LOG( "HandsDiv:   skeleton+0x%02X %08lX L_hand lookup %d\n", n * 4, sk[ n ], hand );
+					}
+					for( int b = 0; b < count; ++b )
+					{
+						const uint8_t *rec = records + b * 0x90;
+						const short *links = reinterpret_cast< const short * >( rec + 4 );
+						const float *m = out + b * 16;
+						PSU_LOG( "HandsDiv:   #%d flags %08lX shorts %d %d %d %d pos (%.2f %.2f %.2f)\n", b,
+							*reinterpret_cast< const DWORD * >( rec ), links[ 0 ], links[ 1 ], links[ 2 ], links[ 3 ], m[ 12 ], m[ 13 ],
+							m[ 14 ] );
+					}
+				}
+				if( kLiftBone >= count )
+				{
+					return;
+				}
+				for( int b = 0; b < count; ++b )
+				{
+					// Is b kLiftBone or below it?
+					int walk = b;
+					for( int guard = 0; walk >= 0 && walk != kLiftBone && guard < count; ++guard )
+					{
+						walk = *reinterpret_cast< const short * >( records + walk * 0x90 + 6 );
+					}
+					if( walk == kLiftBone )
+					{
+						out[ b * 16 + 13 ] += 3.0f;
+					}
+				}
+				++s_lifts;
+				if( GetTickCount() - s_lastLog >= 2000 )
+				{
+					s_lastLog = GetTickCount();
+					PSU_LOG( "HandsDiv: lifted bone %d subtree, %u lifts (in player draw %d)\n", kLiftBone, s_lifts,
+						s_drawingLocalPlayer ? 1 : 0 );
+				}
+			}
+			__except( EXCEPTION_EXECUTE_HANDLER )
+			{
+				PSU_LOG( "HandsDiv: exception\n" );
+				s_divModel = nullptr;
 			}
 		}
 #endif
@@ -223,13 +266,12 @@ namespace PSUVR
 			{
 				return;
 			}
+#ifdef _DEBUG
+			NotePlayerModel( object );
+#endif
 			s_drawingLocalPlayer = true;
 			original( object );
 			s_drawingLocalPlayer = false;
-#ifdef _DEBUG
-			// After the draw: the pose is built while drawing.
-			ProbeHandBones( object );
-#endif
 		}
 
 		DrawCallback NodeCallback( uint8_t *node )
@@ -531,6 +573,39 @@ namespace PSUVR
 		bool DrawingLocalPlayer()
 		{
 			return s_drawingLocalPlayer;
+		}
+
+		void OnBonePose( float *out, const uint8_t *skeleton )
+		{
+#ifdef _DEBUG
+			__try
+			{
+				if( out && skeleton && s_divModel && out == *reinterpret_cast< float * const * >( s_divModel + 0x64 ) )
+				{
+					BonePoseTest( out, skeleton );
+				}
+			}
+			__except( EXCEPTION_EXECUTE_HANDLER )
+			{
+				s_divModel = nullptr;
+			}
+#else
+			( void )out;
+			( void )skeleton;
+#endif
+		}
+
+		void OnPoseBuilt( float *out, const uint8_t *records )
+		{
+#ifdef _DEBUG
+			if( out && out == s_playerPose && s_armBones[ 2 ] >= 0 && records )
+			{
+				ArmTest( out, records );
+			}
+#else
+			( void )out;
+			( void )records;
+#endif
 		}
 	}
 

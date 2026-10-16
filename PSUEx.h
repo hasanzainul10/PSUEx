@@ -41,5 +41,7 @@
 #include "PSUDetour/Hook_004CF9A0.hpp"
 #include "PSUDetour/Hook_0050B790_LogChatMessage.hpp"
 #include "PSUDetour/Hook_0074B490_memset32.hpp"
+#include "PSUDetour/Hook_0074CFD0_PoseWalk.hpp"
+#include "PSUDetour/Hook_0074B760_BonePose.hpp"
 #include "PSUDetour/Hook_0076E330_Audio_PlayADX.hpp"
 #include "PSUDetour/Hook_00814040.hpp"

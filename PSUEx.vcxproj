@@ -193,6 +193,8 @@
     <ClInclude Include="PSUDetour\Hook_0076E330_Audio_PlayADX.hpp" />
     <ClInclude Include="PSUDetour\Hook_GameFlags.hpp" />
     <ClInclude Include="PSUDetour\Hook_TCameraTaskPlay.hpp" />
+    <ClInclude Include="PSUDetour\Hook_0074CFD0_PoseWalk.hpp" />
+    <ClInclude Include="PSUDetour\Hook_0074B760_BonePose.hpp" />
     <ClInclude Include="PSUDetour\Hook_UIScale.hpp" />
     <ClInclude Include="PSUDetour\Hook_TextDraw.hpp" />
     <ClInclude Include="PSUTranslation\Translation.h" />
