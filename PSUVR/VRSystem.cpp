@@ -454,11 +454,23 @@ namespace PSUVR
 				m_xr->SetVirtualScreenPlacement( dist, height );
 				float panelPosition[ 3 ]{};
 				float panelOrientation[ 4 ]{ 0.0f, 0.0f, 0.0f, 1.0f };
+				bool worldLocked = stereoSubmitted;
 				if( stereoSubmitted )
 				{
 					VRCamera::PanelPose( dist, 0.35f, panelPosition, panelOrientation );
 				}
-				m_xr->SetPanelWorldPose( stereoSubmitted, panelPosition, panelOrientation );
+				else if( Config::Get().vr.m_hudFollow && m_haveNextViews )
+				{
+					// 2D scenes (login, planet select, clothing shop...): the same body-locked
+					// lazy-follow panel as the in-game menus, instead of a head-locked screen.
+					if( !VRCamera::HasReference() )
+					{
+						VRCamera::Recenter( m_nextViews );
+					}
+					VRCamera::HudPanelPose( m_nextViews, dist, panelPosition, panelOrientation );
+					worldLocked = true;
+				}
+				m_xr->SetPanelWorldPose( worldLocked, panelPosition, panelOrientation );
 				m_xr->SubmitSharedTexture( m_bridge->GetSharedTexture() );
 				if( !m_loggedVirtualScreen )
 				{
