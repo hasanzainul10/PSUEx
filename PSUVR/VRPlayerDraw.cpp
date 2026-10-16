@@ -118,8 +118,11 @@ namespace PSUVR
 						float matrix[ 32 ]{};
 						matrix[ 0 ] = matrix[ 5 ] = matrix[ 10 ] = matrix[ 15 ] = 1.0f;
 						const char ok = index >= 0 ? getBone( model, matrix, index, 0, 0, 1 ) : 0;
-						PSU_LOG( "HandsProbe:   model+0x%02X %s #%d ok=%d pos (%.2f, %.2f, %.2f)\n", kModelOffsets[ m ], bone,
-							index, ok ? 1 : 0, matrix[ 12 ], matrix[ 13 ], matrix[ 14 ] );
+						PSU_LOG( "HandsProbe:   model+0x%02X %s #%d ok=%d m=[%.2f %.2f %.2f %.2f | %.2f %.2f %.2f %.2f | %.2f %.2f %.2f %.2f | %.2f %.2f %.2f %.2f] extra=[%.2f %.2f %.2f %.2f]\n",
+							kModelOffsets[ m ], bone, index, ok ? 1 : 0,
+							matrix[ 0 ], matrix[ 1 ], matrix[ 2 ], matrix[ 3 ], matrix[ 4 ], matrix[ 5 ], matrix[ 6 ], matrix[ 7 ],
+							matrix[ 8 ], matrix[ 9 ], matrix[ 10 ], matrix[ 11 ], matrix[ 12 ], matrix[ 13 ], matrix[ 14 ], matrix[ 15 ],
+							matrix[ 16 ], matrix[ 17 ], matrix[ 18 ], matrix[ 19 ] );
 					}
 				}
 			}
@@ -133,9 +136,6 @@ namespace PSUVR
 
 		void __cdecl LocalPlayerDrawThunk( void *object )
 		{
-#ifdef _DEBUG
-			ProbeHandBones( object );
-#endif
 			DrawCallback original = nullptr;
 			for( unsigned i = 0; i < s_patchCount; ++i )
 			{
@@ -156,6 +156,10 @@ namespace PSUVR
 			s_drawingLocalPlayer = true;
 			original( object );
 			s_drawingLocalPlayer = false;
+#ifdef _DEBUG
+			// After the draw: the pose is built while drawing.
+			ProbeHandBones( object );
+#endif
 		}
 
 		DrawCallback NodeCallback( uint8_t *node )
