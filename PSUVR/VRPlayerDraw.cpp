@@ -62,8 +62,78 @@ namespace PSUVR
 			return bytes <= 0x40 || PSUMemory::IsValidPointer( static_cast< const uint8_t * >( p ) + bytes - 1 );
 		}
 
+#ifdef _DEBUG
+		// Hands RE (Debug): read the hand / head bones through the game's own lookups, once a
+		// second, for each model of the player's render object (+0x160: +0x04 TDivModel,
+		// +0x20 / +0x24 TModel). Skeleton: model vtable +0x28; names at skeleton +0x28;
+		// 0x00757500(names, "L_hand") -> bone index; model vtable +0x18(out matrix, index, 0, 0, 1).
+		typedef void *( __thiscall *GetSkeletonFn )( void *model );
+		typedef char( __thiscall *GetBoneMatrixFn )( void *model, float *out, int bone, int, int, int );
+		typedef int( __cdecl *FindBoneFn )( void *names, const char *name );
+
+		void ProbeHandBones( void *drawObject )
+		{
+			static DWORD s_lastTick = 0;
+			static unsigned s_logs = 0;
+			if( s_logs >= 30 || GetTickCount() - s_lastTick < 1000 )
+			{
+				return;
+			}
+			s_lastTick = GetTickCount();
+			++s_logs;
+			__try
+			{
+				const uint8_t *render = *reinterpret_cast< const uint8_t * const * >( static_cast< const uint8_t * >( drawObject ) + 0x160 );
+				if( !Readable( render, 0x30 ) )
+				{
+					return;
+				}
+				const PSUPlayer &player = PSUPlayer::Get();
+				PSU_LOG( "HandsProbe: player (%.1f, %.1f, %.1f) render type %d\n", player.position.x, player.position.y,
+					player.position.z, *reinterpret_cast< const int * >( render + 0x28 ) );
+				static const unsigned kModelOffsets[] = { 0x04, 0x20, 0x24 };
+				static const char *const kBones[] = { "L_hand", "R_hand", "Head", "L_forearm", "L_upperarm" };
+				for( unsigned m = 0; m < 3; ++m )
+				{
+					void *model = *reinterpret_cast< void * const * >( render + kModelOffsets[ m ] );
+					if( !Readable( model, 4 ) )
+					{
+						continue;
+					}
+					void *const *vt = *static_cast< void *const *const * >( model );
+					const auto getSkeleton = reinterpret_cast< GetSkeletonFn >( vt[ 10 ] );
+					const auto getBone = reinterpret_cast< GetBoneMatrixFn >( vt[ 6 ] );
+					const uint8_t *skeleton = static_cast< const uint8_t * >( getSkeleton( model ) );
+					if( !Readable( skeleton, 0x2C ) )
+					{
+						PSU_LOG( "HandsProbe:   model+0x%02X %p: no skeleton\n", kModelOffsets[ m ], model );
+						continue;
+					}
+					void *names = *reinterpret_cast< void * const * >( skeleton + 0x28 );
+					const auto findBone = reinterpret_cast< FindBoneFn >( 0x00757500 );
+					for( const char *bone : kBones )
+					{
+						const int index = Readable( names, 0x0C ) ? findBone( names, bone ) : -1;
+						float matrix[ 32 ]{};
+						const char ok = index >= 0 ? getBone( model, matrix, index, 0, 0, 1 ) : 0;
+						PSU_LOG( "HandsProbe:   model+0x%02X %s #%d ok=%d pos (%.2f, %.2f, %.2f)\n", kModelOffsets[ m ], bone,
+							index, ok ? 1 : 0, matrix[ 12 ], matrix[ 13 ], matrix[ 14 ] );
+					}
+				}
+			}
+			__except( EXCEPTION_EXECUTE_HANDLER )
+			{
+				PSU_LOG( "HandsProbe: exception\n" );
+				s_logs = 1000;
+			}
+		}
+#endif
+
 		void __cdecl LocalPlayerDrawThunk( void *object )
 		{
+#ifdef _DEBUG
+			ProbeHandBones( object );
+#endif
 			DrawCallback original = nullptr;
 			for( unsigned i = 0; i < s_patchCount; ++i )
 			{
