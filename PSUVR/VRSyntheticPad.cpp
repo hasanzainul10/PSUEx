@@ -76,6 +76,8 @@ namespace PSUVR
 		PSUCombat::State s_combat;
 		int s_lastAttackHand = 1;     // the combo buzz goes to the hand that attacked
 
+		bool s_aimModeOn = false;         // free aim mode (left stick click)
+		bool s_gunInView = false;         // the gun hand is raised into view
 		bool s_dpadMode = false;          // manual flip of the D-pad mode (left grip + stick click)
 		bool s_ui = false;                // a menu has the input (UiContext)
 
@@ -566,8 +568,6 @@ namespace PSUVR
 		// Free aim mode (left stick click): while on, PSU's free aim (R3, camera state 4) follows
 		// the gun hand: raised into view = free aim with the reticle, lowered out of view =
 		// back to normal targeting. The mode only does anything with a left-hand gun.
-		bool s_aimModeOn = false;
-		bool s_gunInView = false;
 		float s_r3Pulse = 0.0f;        // R3 held for the current toggle
 		float s_r3Cooldown = 0.0f;     // wait for the camera to follow before toggling again
 		constexpr float kR3PulseSeconds = 0.08f;
@@ -1005,8 +1005,9 @@ namespace PSUVR
 					continue;
 				}
 				Output output = modifier ? entry.chord : entry.plain;
-				// Free aim: the right stick click is the scan (R1) instead of START.
-				if( output == Output::Start && VRCamera::CameraState() == 4 )
+				// Free aim mode with the gun up (in view, game in free aim): the right stick
+				// click is the scan (R1) instead of START.
+				if( output == Output::Start && s_aimModeOn && s_gunInView && VRCamera::CameraState() == 4 )
 				{
 					output = Output::R1;
 				}
