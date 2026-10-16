@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <unordered_map>
 #include <vector>
 
 namespace PSUVR
@@ -38,7 +39,22 @@ namespace PSUVR
 		};
 		bool s_watching = false;
 		unsigned s_watchLines = 0;
-		constexpr unsigned kMaxWatchLines = 3000;
+		constexpr unsigned kMaxWatchLines = 8000;
+
+		// At most one line per value every 250 ms, so a value that changes every frame
+		// doesn't drown the rest (its latest change still shows at that rate).
+		std::unordered_map< uint32_t, DWORD > s_lastLogged;
+
+		bool RateOk( uint32_t key, DWORD tick )
+		{
+			auto it = s_lastLogged.find( key );
+			if( it != s_lastLogged.end() && tick - it->second < 250 )
+			{
+				return false;
+			}
+			s_lastLogged[ key ] = tick;
+			return true;
+		}
 
 		std::vector< uint8_t > s_playerSnapshot;
 		uintptr_t s_playerSnapshotAddress = 0;
@@ -217,7 +233,8 @@ namespace PSUVR
 				{
 					s_playerMuted[ offset / 4 ] = true;
 				}
-				else if( !s_playerMuted[ offset / 4 ] && s_watchLines < kMaxWatchLines )
+				else if( !s_playerMuted[ offset / 4 ] && s_watchLines < kMaxWatchLines &&
+					RateOk( 0x10000u | static_cast< uint32_t >( offset ), tick ) )
 				{
 					++s_watchLines;
 					PSU_LOG( "Probe %lu player+0x%03X: %08X -> %08X (float %.3f)\n", tick,
@@ -272,7 +289,8 @@ namespace PSUVR
 				{
 					s_cameraMuted[ offset / 4 ] = true;
 				}
-				else if( !s_cameraMuted[ offset / 4 ] && s_watchLines < kMaxWatchLines )
+				else if( !s_cameraMuted[ offset / 4 ] && s_watchLines < kMaxWatchLines &&
+					RateOk( 0x20000u | static_cast< uint32_t >( offset ), tick ) )
 				{
 					++s_watchLines;
 					PSU_LOG( "Probe %lu camera+0x%03X: %08X -> %08X (float %.3f)\n", tick,
