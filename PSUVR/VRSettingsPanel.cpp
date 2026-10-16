@@ -325,6 +325,32 @@ namespace PSUVR
 			ImGui::Checkbox( "Show controllers", &s.m_showControllers );
 			ImGui::Checkbox( "Arms follow the controllers (first person)", &s.m_handsFollow );
 			Help( "The character's arms reach for where you hold the controllers." );
+			if( s.m_handsFollow )
+			{
+				bool attackAnimation = s.m_handsAttack == "animation";
+				if( ImGui::Checkbox( "Play the game's attack animation", &attackAnimation ) )
+				{
+					s.m_handsAttack = attackAnimation ? "animation" : "controller";
+				}
+				Help( "Off: your arms stay on the controllers while attacking (your swing is the swing). "
+					"On: the arms hand over to the game's attack animation. Photon Arts always use the game's animation." );
+				if( context.inGame )
+				{
+					if( ImGui::Button( "Calibrate hand angles" ) )
+					{
+						++s.m_handCalibRequest;
+					}
+					ImGui::SameLine();
+					ImGui::TextDisabled( s.m_handCalibrated ? "(calibrated)" : "(hands keep the game's angle)" );
+					Help( "Look down at your character's hands, hold each controller at the same angle as the hand "
+						"(or its weapon) and keep still: the angle is taken 5 seconds after the click (a buzz each second). "
+						"Then press Save." );
+					if( s.m_handCalibrated && ImGui::Button( "Clear hand calibration" ) )
+					{
+						s.m_handCalibrated = false;
+					}
+				}
+			}
 			ImGui::Checkbox( "Left stick works menus (D-pad) automatically", &s.m_autoDpad );
 			Help( "In menus, shops, the mission counter, login screens and the weapon / item palette the left stick sends the D-pad. "
 				"Left grip + left stick click still flips it by hand." );

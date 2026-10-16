@@ -2,6 +2,7 @@
 
 #include "VRCamera.h"
 #include "VRControllers.h"
+#include "../PSUStructs/PSUCombat.h"
 #include "../Misc/Log.h"
 #include "../PSUExConfig.h"
 #include "../PSUMemory/Memory.hpp"
@@ -26,6 +27,24 @@ namespace PSUVR
 			int shoulder, upper, fore, hand;
 		};
 		constexpr Arm kArms[ 2 ] = { { 14, 15, 16, 17 }, { 19, 20, 21, 22 } };
+		// Waist (above the hips): its subtree is the upper body. Neck: its subtree is the head.
+		constexpr int kWaistBone = 9;
+		constexpr int kNeckBone = 12;
+		// The model faces +Z (left side is +X, up +Y).
+		const D3DXVECTOR3 kModelForward( 0.0f, 0.0f, 1.0f );
+		DWORD s_headHiddenTick = 0;
+
+		// How much the arms follow the controllers (0 = the game's animation), eased.
+		float s_weight = 0.0f;
+		DWORD s_weightTick = 0;
+		constexpr float kBlendSeconds = 0.2f;
+
+		// Hand angle calibration: countdown after the panel's button.
+		int s_seenCalibRequest = 0;
+		DWORD s_calibStart = 0;
+		bool s_calibPending = false;
+		int s_calibBuzz = 0;
+		constexpr DWORD kCalibDelayMs = 5000;
 
 		// The wrist sits this far behind the controller's grip point (grip +Z points back).
 		constexpr float kWristBackMeters = 0.06f;
@@ -157,6 +176,70 @@ namespace PSUVR
 			return m;
 		}
 
+		// 3x3 with unit rows (axes), no translation.
+		D3DXMATRIX Axes( const D3DXMATRIX &m )
+		{
+			D3DXMATRIX r;
+			D3DXMatrixIdentity( &r );
+			for( int i = 0; i < 3; ++i )
+			{
+				D3DXVECTOR3 row( m( i, 0 ), m( i, 1 ), m( i, 2 ) );
+				const float len = D3DXVec3Length( &row );
+				row = len > 1.0e-6f ? row / len : row;
+				r( i, 0 ) = row.x;
+				r( i, 1 ) = row.y;
+				r( i, 2 ) = row.z;
+			}
+			return r;
+		}
+
+		// Controller grip axes in game world (rows X, Y, Z).
+		bool ControllerAxes( const ControllerState &c, D3DXMATRIX &axes )
+		{
+			D3DXMatrixIdentity( &axes );
+			const D3DXVECTOR3 local[ 3 ] = { { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } };
+			for( int i = 0; i < 3; ++i )
+			{
+				const D3DXVECTOR3 t = RotateByQuat( c.gripOrientation, local[ i ] );
+				const float in[ 3 ] = { t.x, t.y, t.z };
+				float w[ 3 ];
+				if( !VRCamera::TrackingDirToWorld( in, w ) )
+				{
+					return false;
+				}
+				axes( i, 0 ) = w[ 0 ];
+				axes( i, 1 ) = w[ 1 ];
+				axes( i, 2 ) = w[ 2 ];
+			}
+			return true;
+		}
+
+		D3DXQUATERNION CalibQuat( int hand )
+		{
+			const auto &vr = Config::Get().vr;
+			D3DXQUATERNION q = hand == 0 ? D3DXQUATERNION( vr.m_handRotL0, vr.m_handRotL1, vr.m_handRotL2, vr.m_handRotL3 )
+				: D3DXQUATERNION( vr.m_handRotR0, vr.m_handRotR1, vr.m_handRotR2, vr.m_handRotR3 );
+			D3DXQuaternionNormalize( &q, &q );
+			return q;
+		}
+
+		void StoreCalib( int hand, const D3DXQUATERNION &q )
+		{
+			auto &vr = Config::Get().vr;
+			float *dst[ 4 ] = { &vr.m_handRotL0, &vr.m_handRotL1, &vr.m_handRotL2, &vr.m_handRotL3 };
+			if( hand == 1 )
+			{
+				dst[ 0 ] = &vr.m_handRotR0;
+				dst[ 1 ] = &vr.m_handRotR1;
+				dst[ 2 ] = &vr.m_handRotR2;
+				dst[ 3 ] = &vr.m_handRotR3;
+			}
+			*dst[ 0 ] = q.x;
+			*dst[ 1 ] = q.y;
+			*dst[ 2 ] = q.z;
+			*dst[ 3 ] = q.w;
+		}
+
 		void ApplyToSubtree( float *out, const uint8_t *records, int root, const D3DXMATRIX &delta )
 		{
 			for( int b = 0; b < kBoneCount; ++b )
@@ -270,6 +353,11 @@ namespace PSUVR
 			s_inWorldQuery = false;
 		}
 
+		bool HeadHidden()
+		{
+			return s_headHiddenTick != 0 && GetTickCount() - s_headHiddenTick < 300;
+		}
+
 		void Apply( void *model, float *out, const uint8_t *skeleton )
 		{
 			// Also runs inside the world query's pose rebuild, so the second eye keeps the arms.
@@ -347,6 +435,86 @@ namespace PSUVR
 				{
 					s_lastLog = GetTickCount();
 				}
+
+				// Ease toward the game's animation during Photon Arts (and attacks, if chosen).
+				const DWORD now = GetTickCount();
+				float dt = s_weightTick ? static_cast< float >( now - s_weightTick ) / 1000.0f : 0.0f;
+				dt = dt > 0.1f ? 0.1f : dt;
+				s_weightTick = now;
+				PSUCombat::State combat{};
+				const bool haveCombat = PSUCombat::Read( combat );
+				const bool attacking = haveCombat && ( combat.comboStep > 0 || PSUCombat::Swinging( combat ) );
+				const bool animation = haveCombat && ( combat.photonArt ||
+					( attacking && Config::Get().vr.m_handsAttack == "animation" ) );
+				const float goal = animation ? 0.0f : 1.0f;
+				const float step = dt / kBlendSeconds;
+				s_weight += goal > s_weight ? ( goal - s_weight < step ? goal - s_weight : step )
+					: ( s_weight - goal < step ? goal - s_weight : -step );
+				const float w = s_weight;
+
+				// Calibration countdown (buzz each second; taken at the end).
+				auto &vr = Config::Get().vr;
+				if( vr.m_handCalibRequest != s_seenCalibRequest )
+				{
+					s_seenCalibRequest = vr.m_handCalibRequest;
+					s_calibPending = true;
+					s_calibStart = now;
+					s_calibBuzz = 0;
+				}
+				bool captureNow = false;
+				if( s_calibPending )
+				{
+					const int second = static_cast< int >( ( now - s_calibStart ) / 1000 );
+					if( now - s_calibStart >= kCalibDelayMs )
+					{
+						captureNow = true;
+						s_calibPending = false;
+					}
+					else if( second >= s_calibBuzz )
+					{
+						s_calibBuzz = second + 1;
+						VRControllers::Haptic( 0, 0.3f, 0.03f );
+						VRControllers::Haptic( 1, 0.3f, 0.03f );
+					}
+				}
+
+				// The game turns the character only when it moves; turn the upper body to where
+				// you look, so the shoulders sit where your arms are.
+				float lookYaw = 0.0f;
+				if( w > 0.0f && VRCamera::LookYaw( lookYaw ) )
+				{
+					const D3DXVECTOR3 lookWorld( std::sin( lookYaw ), 0.0f, std::cos( lookYaw ) );
+					D3DXVECTOR3 lookModel;
+					D3DXVec3TransformNormal( &lookModel, &lookWorld, &toModel );
+					const float angle = std::atan2( lookModel.x, lookModel.z ) * w;
+					const D3DXVECTOR3 turned( std::sin( angle ), 0.0f, std::cos( angle ) );
+					ApplyToSubtree( out, records, kWaistBone, RotationAbout( kModelForward, turned, Position( out, kWaistBone ) ) );
+					if( log )
+					{
+						PSU_LOG( "VRHands: torso turn %.0f deg, weight %.2f\n", angle * 57.29578f, w );
+					}
+				}
+
+				// Headless first person: fold the neck and head into the top of the chest, so the
+				// clip plane (which also cut raised hands) isn't needed.
+				if( vr.m_fpBody == "headless" )
+				{
+					const D3DXVECTOR3 neck = Position( out, kNeckBone );
+					constexpr float kTiny = 0.001f;
+					D3DXMATRIX fold;
+					D3DXMatrixScaling( &fold, kTiny, kTiny, kTiny );
+					fold._41 = neck.x * ( 1.0f - kTiny );
+					fold._42 = neck.y * ( 1.0f - kTiny );
+					fold._43 = neck.z * ( 1.0f - kTiny );
+					ApplyToSubtree( out, records, kNeckBone, fold );
+					s_headHiddenTick = now;
+				}
+				if( w <= 0.0f && !captureNow )
+				{
+					Note( kSolved );
+					return;
+				}
+
 				for( int hand = 0; hand < 2; ++hand )
 				{
 					const ControllerState &c = *pads[ hand ];
@@ -374,16 +542,70 @@ namespace PSUVR
 					pole = Normalized( pole, { 0.0f, -1.0f, 0.0f } );
 
 					const Arm &arm = kArms[ hand ];
+					// Blend: reach part of the way from the animated wrist.
+					const D3DXVECTOR3 animated = Position( out, arm.hand );
+					const D3DXVECTOR3 reach = animated + ( target - animated ) * w;
 					if( log )
 					{
 						const D3DXVECTOR3 s = Position( out, arm.upper );
-						const D3DXVECTOR3 h = Position( out, arm.hand );
-						const D3DXVECTOR3 reach = target - s;
-						PSU_LOG( "VRHands: %s target world (%.1f %.1f %.1f) model (%.2f %.2f %.2f) shoulder (%.2f %.2f %.2f) hand (%.2f %.2f %.2f) reach %.2f\n",
-							hand == 0 ? "L" : "R", targetWorld[ 0 ], targetWorld[ 1 ], targetWorld[ 2 ], target.x, target.y, target.z,
-							s.x, s.y, s.z, h.x, h.y, h.z, D3DXVec3Length( &reach ) );
+						const D3DXVECTOR3 d = target - s;
+						PSU_LOG( "VRHands: %s target model (%.2f %.2f %.2f) shoulder (%.2f %.2f %.2f) reach %.2f\n",
+							hand == 0 ? "L" : "R", target.x, target.y, target.z, s.x, s.y, s.z, D3DXVec3Length( &d ) );
 					}
-					SolveArm( out, records, arm, target, pole );
+					SolveArm( out, records, arm, reach, pole );
+
+					// Hand angle: hand axes = calibration x controller axes (both in world).
+					D3DXMATRIX controller;
+					if( !ControllerAxes( c, controller ) )
+					{
+						continue;
+					}
+					D3DXMATRIX handWorld;
+					D3DXMatrixMultiply( &handWorld, reinterpret_cast< const D3DXMATRIX * >( out + arm.hand * 16 ), &world );
+					const D3DXMATRIX handAxes = Axes( handWorld );
+					if( captureNow )
+					{
+						// K = H x C^T (rows are axes, so C^-1 = C^T).
+						D3DXMATRIX controllerT, k;
+						D3DXMatrixTranspose( &controllerT, &controller );
+						D3DXMatrixMultiply( &k, &handAxes, &controllerT );
+						D3DXQUATERNION q;
+						D3DXQuaternionRotationMatrix( &q, &k );
+						StoreCalib( hand, q );
+						vr.m_handCalibrated = true;
+						VRControllers::Haptic( hand, 0.8f, 0.15f );
+						PSU_LOG( "VRHands: calibrated %s hand (%.3f %.3f %.3f %.3f)\n", hand == 0 ? "left" : "right", q.x, q.y, q.z, q.w );
+						continue;
+					}
+					if( !vr.m_handCalibrated || w <= 0.0f )
+					{
+						continue;
+					}
+					D3DXMATRIX k, desired, handT, delta;
+					const D3DXQUATERNION q = CalibQuat( hand );
+					D3DXMatrixRotationQuaternion( &k, &q );
+					D3DXMatrixMultiply( &desired, &k, &controller );
+					D3DXMatrixTranspose( &handT, &handAxes );
+					D3DXMatrixMultiply( &delta, &handT, &desired );  // H x delta = desired
+					if( w < 1.0f )
+					{
+						D3DXQUATERNION dq, partial;
+						const D3DXQUATERNION identity( 0.0f, 0.0f, 0.0f, 1.0f );
+						D3DXQuaternionRotationMatrix( &dq, &delta );
+						D3DXQuaternionSlerp( &partial, &identity, &dq, w );
+						D3DXMatrixRotationQuaternion( &delta, &partial );
+					}
+					// About the wrist, in world; then into model space: W x A x W^-1.
+					const D3DXVECTOR3 wrist( handWorld._41, handWorld._42, handWorld._43 );
+					D3DXVECTOR3 moved;
+					D3DXVec3TransformNormal( &moved, &wrist, &delta );
+					delta._41 = wrist.x - moved.x;
+					delta._42 = wrist.y - moved.y;
+					delta._43 = wrist.z - moved.z;
+					D3DXMATRIX modelDelta;
+					D3DXMatrixMultiply( &modelDelta, &world, &delta );
+					D3DXMatrixMultiply( &modelDelta, &modelDelta, &toModel );
+					ApplyToSubtree( out, records, arm.hand, modelDelta );
 				}
 				Note( kSolved );
 			}

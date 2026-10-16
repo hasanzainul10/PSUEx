@@ -112,6 +112,15 @@ struct VRSettings
 	bool m_showControllers = true;
 	// First person: the character's arms reach for the controllers (two-bone IK).
 	bool m_handsFollow = true;
+	// Arms while attacking: "controller" (your swing) or "animation" (the game's). Photon
+	// Arts always play the game's animation.
+	std::string m_handsAttack = "controller";
+	// Hand angle calibration (controller -> hand rotation, quaternion x y z w per hand).
+	bool m_handCalibrated = false;
+	float m_handRotL0 = 0.0f, m_handRotL1 = 0.0f, m_handRotL2 = 0.0f, m_handRotL3 = 1.0f;
+	float m_handRotR0 = 0.0f, m_handRotR1 = 0.0f, m_handRotR2 = 0.0f, m_handRotR3 = 1.0f;
+	// Runtime only (not saved): bumped by the panel's Calibrate button.
+	int m_handCalibRequest = 0;
 	// Button names in the controller layout picture: "psvr2" (Sense) or "generic" (A/B/X/Y).
 	std::string m_motionProfile = "psvr2";
 	// Buzz the right controller when the game's combo window opens (melee).

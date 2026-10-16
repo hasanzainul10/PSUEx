@@ -559,6 +559,21 @@ namespace PSUVR
 			return true;
 		}
 
+		bool TrackingDirToWorld( const float tracking[ 3 ], float world[ 3 ] )
+		{
+			if( !FirstPersonActive() || !s_haveReference )
+			{
+				return false;
+			}
+			const Vec3 local = Rotate( YawQuat( -s_refYaw ), { tracking[ 0 ], tracking[ 1 ], tracking[ 2 ] } );
+			const float fx = std::sin( s_bodyYaw );
+			const float fz = std::cos( s_bodyYaw );
+			world[ 0 ] = -fz * local.x - fx * local.z;
+			world[ 1 ] = local.y;
+			world[ 2 ] = fx * local.x - fz * local.z;
+			return true;
+		}
+
 		bool BodyAxes( float forward[ 3 ], float right[ 3 ] )
 		{
 			if( !FirstPersonActive() )

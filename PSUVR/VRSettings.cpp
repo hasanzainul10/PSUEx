@@ -56,6 +56,16 @@ namespace
 	X( m_comfortVignette, "comfortVignette" ) \
 	X( m_showControllers, "showControllers" ) \
 	X( m_handsFollow, "handsFollow" ) \
+	X( m_handsAttack, "handsAttack" ) \
+	X( m_handCalibrated, "handCalibrated" ) \
+	X( m_handRotL0, "handRotL0" ) \
+	X( m_handRotL1, "handRotL1" ) \
+	X( m_handRotL2, "handRotL2" ) \
+	X( m_handRotL3, "handRotL3" ) \
+	X( m_handRotR0, "handRotR0" ) \
+	X( m_handRotR1, "handRotR1" ) \
+	X( m_handRotR2, "handRotR2" ) \
+	X( m_handRotR3, "handRotR3" ) \
 	X( m_motionProfile, "motionProfile" ) \
 	X( m_comboHaptic, "comboHaptic" ) \
 	X( m_autoDpad, "autoDpad" ) \
