@@ -338,6 +338,40 @@ namespace PSUVR
 							}
 							PSU_LOG( "VRPlayerDraw: draw object %p vtable=%p [0]=%p [1]=%p [2]=%p [3]=%p [4]=%p [5]=%p class=%.60s\n",
 								drawObject, vtable, vtable[ 0 ], vtable[ 1 ], vtable[ 2 ], vtable[ 3 ], vtable[ 4 ], vtable[ 5 ], className );
+							// Hands RE: the render object at +0x160 holds the models at +0x04 / +0x20 / +0x24
+							// (bone matrix by index at vtable +0x18, skeleton at vtable +0x28).
+							const auto logObject = [ & ]( const char *label, const void *object )
+							{
+								if( !Readable( object, 4 ) )
+								{
+									return;
+								}
+								void *const *vt = *static_cast< void *const *const * >( object );
+								if( !Readable( vt - 1, 0x40 ) )
+								{
+									return;
+								}
+								const char *name = "?";
+								const uint8_t *col = static_cast< const uint8_t * >( vt[ -1 ] );
+								if( Readable( col, 0x14 ) )
+								{
+									const uint8_t *td = *reinterpret_cast< const uint8_t * const * >( col + 0x0C );
+									if( Readable( td, 0x20 ) )
+									{
+										name = reinterpret_cast< const char * >( td + 8 );
+									}
+								}
+								PSU_LOG( "VRPlayerDraw:   %s %p vtable=%p [4]=%p [6]=%p [10]=%p class=%.60s\n",
+									label, object, vt, vt[ 4 ], vt[ 6 ], vt[ 10 ], name );
+							};
+							const uint8_t *renderObject = *reinterpret_cast< const uint8_t * const * >(
+								static_cast< const uint8_t * >( drawObject ) + 0x160 );
+							if( Readable( renderObject, 0x30 ) )
+							{
+								logObject( "render+0x04", *reinterpret_cast< void * const * >( renderObject + 0x04 ) );
+								logObject( "render+0x20", *reinterpret_cast< void * const * >( renderObject + 0x20 ) );
+								logObject( "render+0x24", *reinterpret_cast< void * const * >( renderObject + 0x24 ) );
+							}
 						}
 					}
 				}
