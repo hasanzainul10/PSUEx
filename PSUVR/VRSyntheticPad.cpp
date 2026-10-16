@@ -1082,6 +1082,16 @@ namespace PSUVR
 				pad.lx = Deadzone( left.stick[ 0 ], 0.15f );
 				pad.ly = Deadzone( left.stick[ 1 ], 0.15f );
 			}
+			// Walking in the room walks the character (the player's own stick takes over).
+			{
+				float roomX = 0.0f, roomY = 0.0f;
+				const bool userIdle = pad.lx == 0.0f && pad.ly == 0.0f;
+				if( VRCamera::RoomWalkStick( userIdle && !s_ui && !DpadActive(), roomX, roomY ) )
+				{
+					pad.lx = roomX;
+					pad.ly = roomY;
+				}
+			}
 			Combat( dt, modifier, pad );
 			pad.rx = Deadzone( right.stick[ 0 ], 0.15f );
 			pad.ry = Deadzone( right.stick[ 1 ], 0.15f );

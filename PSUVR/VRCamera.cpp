@@ -818,6 +818,124 @@ namespace PSUVR
 			return RenderCameraAngles( yaw, pitch );
 		}
 
+		namespace
+		{
+			// Room walk: the head's offset from the anchor (body frame, meters) and whether the
+			// stick is walking the character toward it.
+			constexpr float kRoomWalkStop = 0.08f;     // meters
+			constexpr float kRoomMaxOffset = 1.0f;     // the character is stuck: the view stops drifting
+			constexpr float kRoomTeleportUnits = 20.0f;
+			bool s_roomWanted = false;
+			bool s_roomDriving = false;
+			float s_roomStick[ 2 ]{};
+			Vec3 s_prevHeadWorld{};
+			bool s_havePrevHeadWorld = false;
+			DWORD s_roomLogTick = 0;
+
+			bool RoomWalkOn()
+			{
+				return Config::Get().vr.m_roomWalk && FirstPersonActive();
+			}
+
+			// The character moved this frame while the stick walked it: move the anchor along
+			// the head's offset by as much (never past the head), so the view stays where the
+			// head is and the offset shrinks as the character catches up.
+			void FollowCharacter( const Vec3 &head )
+			{
+				const Vec3 moved{ s_headWorld.x - s_prevHeadWorld.x, 0.0f, s_headWorld.z - s_prevHeadWorld.z };
+				const bool valid = s_havePrevHeadWorld;
+				s_prevHeadWorld = s_headWorld;
+				s_havePrevHeadWorld = true;
+				if( !valid || !s_roomDriving )
+				{
+					return;
+				}
+				const float movedLength = std::sqrt( moved.x * moved.x + moved.z * moved.z );
+				if( movedLength < 1.0e-5f || movedLength > kRoomTeleportUnits )
+				{
+					return;
+				}
+				const auto &vr = Config::Get().vr;
+				const float unitsPerMeter = kGameUnitsPerMeter * ( vr.m_worldScale > 0.01f ? vr.m_worldScale : 1.0f );
+				// World -> body frame (x right, z back): game forward ( sin, 0, cos ), right ( -cos, 0, sin ).
+				const float fx = std::sin( s_bodyYaw ), fz = std::cos( s_bodyYaw );
+				const float forward = ( moved.x * fx + moved.z * fz ) / unitsPerMeter;
+				const float right = ( -moved.x * fz + moved.z * fx ) / unitsPerMeter;
+				const Vec3 offset = Rotate( YawQuat( -s_refYaw ), { head.x - s_fpAnchor.x, 0.0f, head.z - s_fpAnchor.z } );
+				const float offsetLength = std::sqrt( offset.x * offset.x + offset.z * offset.z );
+				if( offsetLength < 1.0e-4f )
+				{
+					return;
+				}
+				const Vec3 dir{ offset.x / offsetLength, 0.0f, offset.z / offsetLength };
+				float t = right * dir.x + ( -forward ) * dir.z;
+				t = t < 0.0f ? 0.0f : ( t > offsetLength ? offsetLength : t );
+				const Vec3 step = Rotate( YawQuat( s_refYaw ), Scale( dir, t ) );
+				s_fpAnchor.x += step.x;
+				s_fpAnchor.z += step.z;
+			}
+
+			// Stick toward the head's offset, relative to the camera (the game moves the left
+			// stick relative to where the camera looks).
+			void UpdateRoomStick( const Vec3 &head )
+			{
+				const auto &vr = Config::Get().vr;
+				const Vec3 offset = Rotate( YawQuat( -s_refYaw ), { head.x - s_fpAnchor.x, 0.0f, head.z - s_fpAnchor.z } );
+				const float distance = std::sqrt( offset.x * offset.x + offset.z * offset.z );
+				const float start = vr.m_roomWalkStart > kRoomWalkStop ? vr.m_roomWalkStart : kRoomWalkStop + 0.02f;
+				const bool wanted = s_roomWanted ? distance > kRoomWalkStop : distance > start;
+				if( wanted != s_roomWanted )
+				{
+					s_roomWanted = wanted;
+					PSU_LOG( "VRRoomWalk: %s (offset %.2f m)\n", wanted ? "walking" : "stopped", distance );
+				}
+				if( !wanted )
+				{
+					s_roomStick[ 0 ] = s_roomStick[ 1 ] = 0.0f;
+					return;
+				}
+				// Body frame -> world direction.
+				const float bx = std::sin( s_bodyYaw ), bz = std::cos( s_bodyYaw );
+				const float wx = -bz * offset.x - bx * offset.z;
+				const float wz = bx * offset.x - bz * offset.z;
+				// World -> camera stick (forward = camera's ground forward, x = its right).
+				const float cx = std::sin( s_lastWrittenYaw ), cz = std::cos( s_lastWrittenYaw );
+				float sy = wx * cx + wz * cz;
+				float sx = -wx * cz + wz * cx;
+				const float length = std::sqrt( sx * sx + sy * sy );
+				if( length < 1.0e-5f )
+				{
+					s_roomStick[ 0 ] = s_roomStick[ 1 ] = 0.0f;
+					return;
+				}
+				// Walk slowly for small steps, run for big ones.
+				float magnitude = 0.35f + ( distance - kRoomWalkStop ) * 1.3f;
+				magnitude = magnitude > 1.0f ? 1.0f : magnitude;
+				s_roomStick[ 0 ] = sx / length * magnitude;
+				s_roomStick[ 1 ] = sy / length * magnitude;
+				if( GetTickCount() - s_roomLogTick >= 2000 )
+				{
+					s_roomLogTick = GetTickCount();
+					PSU_LOG( "VRRoomWalk: offset %.2f m stick (%.2f, %.2f)%s\n", distance, s_roomStick[ 0 ], s_roomStick[ 1 ],
+						s_roomDriving ? "" : " (not driving)" );
+				}
+			}
+		}
+
+		bool RoomWalkStick( bool userStickIdle, float &x, float &y )
+		{
+			const int state = CameraState();
+			const bool playState = state == 1 || state == 3;
+			s_roomDriving = RoomWalkOn() && playState && userStickIdle && s_roomWanted;
+			if( !s_roomDriving )
+			{
+				return false;
+			}
+			x = s_roomStick[ 0 ];
+			y = s_roomStick[ 1 ];
+			return true;
+		}
+
 		void UpdateFirstPersonAnchor( const EyePose views[ 2 ] )
 		{
 			const auto &vr = Config::Get().vr;
@@ -825,8 +943,25 @@ namespace PSUVR
 				( views[ 0 ].position[ 0 ] + views[ 1 ].position[ 0 ] ) * 0.5f,
 				( views[ 0 ].position[ 1 ] + views[ 1 ].position[ 1 ] ) * 0.5f,
 				( views[ 0 ].position[ 2 ] + views[ 1 ].position[ 2 ] ) * 0.5f };
-			// Horizontal leash: lean up to fpLeanLimit, then the anchor follows the head.
-			const float lean = vr.m_fpLeanLimit < 0.0f ? 0.0f : vr.m_fpLeanLimit;
+			const bool roomWalk = RoomWalkOn();
+			if( roomWalk )
+			{
+				FollowCharacter( head );
+				UpdateRoomStick( head );
+			}
+			else
+			{
+				s_roomWanted = false;
+				s_havePrevHeadWorld = false;
+			}
+			// Horizontal leash: lean up to fpLeanLimit, then the anchor follows the head. With
+			// room walk the character walks to the head instead; the leash only stops the view
+			// drifting off when it can't (a wall).
+			float lean = vr.m_fpLeanLimit < 0.0f ? 0.0f : vr.m_fpLeanLimit;
+			if( roomWalk && lean < kRoomMaxOffset )
+			{
+				lean = kRoomMaxOffset;
+			}
 			const float dx = head.x - s_fpAnchor.x;
 			const float dz = head.z - s_fpAnchor.z;
 			const float horizontal = std::sqrt( dx * dx + dz * dz );

@@ -247,6 +247,13 @@ namespace PSUVR
 			ImGui::SliderFloat( "Neck cut below eyes (m)", &s.m_fpNeckDrop, 0.05f, 0.5f, "%.2f" );
 			ImGui::SliderFloat( "Lean limit (m)", &s.m_fpLeanLimit, 0.0f, 0.5f, "%.2f" );
 			ImGui::SliderFloat( "Crouch limit (m)", &s.m_fpCrouchLimit, 0.0f, 0.5f, "%.2f" );
+			ImGui::Checkbox( "Walk in the room moves the character", &s.m_roomWalk );
+			Help( "Step away from your character and it walks to where you are (the left stick still works and takes "
+				"over). Needs the motion controllers (Play with motion controllers)." );
+			if( s.m_roomWalk )
+			{
+				ImGui::SliderFloat( "Room walk starts at (m)", &s.m_roomWalkStart, 0.1f, 0.6f, "%.2f" );
+			}
 			static const char *const lbIds[] = { "off", "follow" };
 			static const char *const lbFpNames[] = { "Off (lock-on only, view stays yours)", "Turn view toward the target" };
 			Combo( "LB camera##fp", s.m_fpLbCamera, lbIds, lbFpNames, 2 );

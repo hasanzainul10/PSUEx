@@ -87,6 +87,10 @@ struct VRSettings
 	// How far the head may lean / crouch away from the body before the body follows (meters).
 	float m_fpLeanLimit = 0.15f;
 	float m_fpCrouchLimit = 0.2f;
+	// First person: walking in the room walks the character (left stick toward where you
+	// stepped, until it is under you again). Starts past roomWalkStart meters.
+	bool m_roomWalk = true;
+	float m_roomWalkStart = 0.25f;
 	// Third person: camera distance behind and height above the head (meters), right-stick
 	// zoom speed (m/s) and range, and the Back + right stick orbit / height steps.
 	float m_tpDistance = 4.0f;

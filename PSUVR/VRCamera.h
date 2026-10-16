@@ -91,6 +91,10 @@ namespace PSUVR
 		// Leash the first-person head to the body: physical lean/crouch beyond
 		// vr.fpLeanLimit / vr.fpCrouchLimit drags the anchor instead of the view.
 		void UpdateFirstPersonAnchor( const EyePose views[ 2 ] );
+		// Room walk (vr.roomWalk): the left stick that walks the character toward where the
+		// head stepped in the room. userStickIdle = the player isn't using the stick (it takes
+		// over). False = nothing to do; the caller leaves the stick alone.
+		bool RoomWalkStick( bool userStickIdle, float &x, float &y );
 		// Eye at the head, expressed in the camera the game actually renders from, so any
 		// game re-aim (NPC talk camera, smoothing) is cancelled out.
 		void BuildEyeFirstPerson( const EyePose &eye, float unitsPerMeter, const D3DMATRIX &gameProj,

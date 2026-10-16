@@ -55,6 +55,8 @@ namespace
 	X( m_snapTurn, "snapTurn" ) \
 	X( m_comfortVignette, "comfortVignette" ) \
 	X( m_showControllers, "showControllers" ) \
+	X( m_roomWalk, "roomWalk" ) \
+	X( m_roomWalkStart, "roomWalkStart" ) \
 	X( m_emulateControllers, "emulateControllers" ) \
 	X( m_simScript, "simScript" ) \
 	X( m_handsFollow, "handsFollow" ) \
