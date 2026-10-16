@@ -16,7 +16,11 @@ public class Disasm extends GhidraScript {
 		try( PrintWriter out = new PrintWriter( new FileWriter( args[ 0 ] ) ) ) {
 			for( int i = 2; i < args.length; ++i ) {
 				Address addr = toAddr( Long.decode( args[ i ] ) );
-				disassemble( addr );
+				if( getInstructionAt( addr ) == null ) {
+					// Bytes analysed as data: clear them first.
+					clearListing( addr, addr.add( 0x400 ) );
+					disassemble( addr );
+				}
 				out.println( "; ===== " + addr );
 				Instruction ins = getInstructionAt( addr );
 				for( int n = 0; ins != null && n < count; ++n ) {
