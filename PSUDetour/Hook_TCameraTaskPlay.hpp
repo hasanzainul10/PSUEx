@@ -111,6 +111,8 @@ namespace TCameraTaskPlay
 		return object;
 	}
 
+	constexpr uint8_t kCameraStateFreeAim = 4;
+
 	// Calls any time the camera updates.
 	int __fastcall Hook_48DA90( int thisPtr )
 	{
@@ -162,7 +164,9 @@ namespace TCameraTaskPlay
 		// OpenXR session is active. Kill orbit rates until VR input is owned by us.
 		// First person keeps them only when XInput is missing and the orbit is read back as turning.
 		const bool firstPerson = PSUVR::VRCamera::FirstPersonMode();
-		if( Config::Get().vr.m_enabled && !Config::Get().vr.m_paused &&
+		// Camera state 4 = free aim (R3 with a gun): the right stick aims, so its rates stay.
+		const bool freeAim = *reinterpret_cast< uint8_t * >( reinterpret_cast< uint8_t * >( camera ) + 0x20 ) == kCameraStateFreeAim;
+		if( Config::Get().vr.m_enabled && !Config::Get().vr.m_paused && !freeAim &&
 			( !firstPerson || PSUVR::VRCamera::TurnFromStick() ) )
 		{
 			static bool s_loggedVrCam = false;
@@ -179,8 +183,11 @@ namespace TCameraTaskPlay
 		const int result = pOriginal48DA90( thisPtr );
 		PSUVR::VRProbe::NoteCameraTask( camera );
 
-		// Camera state byte (+0x20): 1 = follow, 3 = refocus, 5 = NPC talk.
+		// Camera state byte (+0x20): 1 = follow, 2 = LB held (lock-on), 3 = refocus,
+		// 4 = free aim, 5 = NPC talk.
 		const int cameraState = *reinterpret_cast< uint8_t * >( reinterpret_cast< uint8_t * >( camera ) + 0x20 );
+		// Free aim: the game's aim camera stays as it is (the headset looks around on top).
+		const bool steerAllowed = cameraState != kCameraStateFreeAim;
 		uint8_t *renderCamera = RenderCameraObject( camera );
 		// The eyes are built from what the game actually renders (talk camera included).
 		PSUVR::VRCamera::NoteRenderCamera(
@@ -190,7 +197,7 @@ namespace TCameraTaskPlay
 		// First person: steer the orbit camera level behind the head so the game's
 		// camera-relative movement and culling follow the player.
 		bool steered = false;
-		if( firstPerson )
+		if( firstPerson && steerAllowed )
 		{
 			// Get() refreshes the player pointer; it returns a zeroed dummy while not ready.
 			const PSUPlayer &player = PSUPlayer::Get();
@@ -215,7 +222,7 @@ namespace TCameraTaskPlay
 
 		// Third person: our own orbit camera (right stick zoom, Back + stick orbit steps).
 		bool steeredThird = false;
-		if( !firstPerson && PSUVR::VRCamera::ThirdPersonMode() && renderCamera )
+		if( !firstPerson && steerAllowed && PSUVR::VRCamera::ThirdPersonMode() && renderCamera )
 		{
 			const PSUPlayer &player = PSUPlayer::Get();
 			if( PSUPlayer::IsReady() )
