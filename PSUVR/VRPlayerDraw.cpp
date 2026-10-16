@@ -318,6 +318,28 @@ namespace PSUVR
 					s_loggedPatch = true;
 					PSU_LOG( "VRPlayerDraw: patched local player draw (layer=0x%02X node=%p object=%p callback=%p)\n",
 						found[ f ].layer, node, playerObject, reinterpret_cast< void * >( callback ) );
+					// The callback calls the node object's vtable +0x0C (update) and +0x10 (draw):
+					// log them and the MSVC RTTI class name (vtable[-1] = complete object locator).
+					void *drawObject = *reinterpret_cast< void ** >( node + kNodeObject );
+					if( Readable( drawObject, 4 ) )
+					{
+						void **vtable = *static_cast< void *** >( drawObject );
+						if( Readable( vtable - 1, 0x20 ) )
+						{
+							const char *className = "?";
+							const uint8_t *locator = static_cast< const uint8_t * >( vtable[ -1 ] );
+							if( Readable( locator, 0x14 ) )
+							{
+								const uint8_t *typeDescriptor = *reinterpret_cast< const uint8_t * const * >( locator + 0x0C );
+								if( Readable( typeDescriptor, 0x20 ) )
+								{
+									className = reinterpret_cast< const char * >( typeDescriptor + 8 );
+								}
+							}
+							PSU_LOG( "VRPlayerDraw: draw object %p vtable=%p [0]=%p [1]=%p [2]=%p [3]=%p [4]=%p [5]=%p class=%.60s\n",
+								drawObject, vtable, vtable[ 0 ], vtable[ 1 ], vtable[ 2 ], vtable[ 3 ], vtable[ 4 ], vtable[ 5 ], className );
+						}
+					}
 				}
 			}
 			if( foundCount == 0 )
