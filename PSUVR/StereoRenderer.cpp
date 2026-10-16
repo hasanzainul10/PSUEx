@@ -5,6 +5,7 @@
 #include "VRControllers.h"
 #include "VRHud.h"
 #include "VRPlayerDraw.h"
+#include "VRSyntheticPad.h"
 #include "VRSystem.h"
 #include "../Misc/Log.h"
 #include "../PSUExConfig.h"
@@ -504,6 +505,42 @@ namespace PSUVR
 					diagState, ( drawFvf & D3DFVF_POSITION_MASK ) == D3DFVF_XYZRHW ? 1 : 0, userPointer ? 1 : 0, primitiveCount,
 					drawFvf, vs ? 1 : 0, texW, texH, texRT, ret );
 				if( vs ) vs->Release();
+			}
+		}
+		// Free aim with the gun up: the game's reticle billboard (a 2-triangle 3D quad with a
+		// 256 x 256 texture at the aim point) is replaced by our reticle at the controller ray.
+		int aimHand = 0;
+		if( s_inEyePass && device && primitiveCount == 2 && VRSyntheticPad::GunAiming( aimHand ) )
+		{
+			DWORD drawFvf = 0;
+			device->GetFVF( &drawFvf );
+			if( ( drawFvf & D3DFVF_POSITION_MASK ) != D3DFVF_XYZRHW )
+			{
+				IDirect3DBaseTexture9 *texture = nullptr;
+				if( SUCCEEDED( device->GetTexture( 0, &texture ) ) && texture )
+				{
+					IDirect3DTexture9 *tex2d = nullptr;
+					texture->QueryInterface( __uuidof( IDirect3DTexture9 ), reinterpret_cast< void ** >( &tex2d ) );
+					texture->Release();
+					bool reticle = false;
+					if( tex2d )
+					{
+						D3DSURFACE_DESC desc{};
+						tex2d->GetLevelDesc( 0, &desc );
+						reticle = desc.Width == 256 && desc.Height == 256 && ( desc.Usage & D3DUSAGE_RENDERTARGET ) == 0;
+						tex2d->Release();
+					}
+					if( reticle )
+					{
+						static unsigned s_logs = 0;
+						if( s_logs < 10 )
+						{
+							++s_logs;
+							PSU_LOG( "Stereo: free aim, dropped a 256x256 billboard (game reticle?) fvf=0x%X ret=%p\n", drawFvf, ret );
+						}
+						return true;
+					}
+				}
 			}
 		}
 		if( !s_inEyePass || !device || !Config::Get().vr.m_stereoSkipScreenQuads )
