@@ -283,6 +283,61 @@ namespace PSUVR
 		return instance;
 	}
 
+	namespace
+	{
+		// The eye pose of the pass being drawn (set by RenderEyes before each eye pass).
+		EyePose s_passEye{};
+
+		// Camera state 5 (dressing room): the background is a full-screen image. Stretched
+		// over the eye it would follow the head, so it is mapped onto a large picture fixed in
+		// the play space (kBackdropDistance in front of the recenter point) and drawn per eye
+		// with perspective-correct coordinates, behind everything else.
+		constexpr float kBackdropDistance = 4.0f;
+		constexpr float kBackdropHalfWidth = 4.0f;
+
+		struct BV3 { float x, y, z; };
+
+		BV3 RotateQ( const float q[ 4 ], const BV3 &v )
+		{
+			const float ux = q[ 0 ], uy = q[ 1 ], uz = q[ 2 ], w = q[ 3 ];
+			const BV3 t{ 2.0f * ( uy * v.z - uz * v.y ), 2.0f * ( uz * v.x - ux * v.z ), 2.0f * ( ux * v.y - uy * v.x ) };
+			return { v.x + w * t.x + ( uy * t.z - uz * t.y ), v.y + w * t.y + ( uz * t.x - ux * t.z ),
+				v.z + w * t.z + ( ux * t.y - uy * t.x ) };
+		}
+
+		bool MapBackdropVertex( float gx, float gy, const float center[ 3 ], const float orientation[ 4 ],
+			float &sx, float &sy, float &rhw )
+		{
+			const float u = gx / static_cast< float >( s_gameW ) - 0.5f;
+			const float v = 0.5f - gy / static_cast< float >( s_gameH );
+			const float halfH = kBackdropHalfWidth * static_cast< float >( s_gameH ) / static_cast< float >( s_gameW );
+			const BV3 right = RotateQ( orientation, { 1.0f, 0.0f, 0.0f } );
+			const BV3 up = RotateQ( orientation, { 0.0f, 1.0f, 0.0f } );
+			const BV3 p{ center[ 0 ] + right.x * u * 2.0f * kBackdropHalfWidth + up.x * v * 2.0f * halfH,
+				center[ 1 ] + right.y * u * 2.0f * kBackdropHalfWidth + up.y * v * 2.0f * halfH,
+				center[ 2 ] + right.z * u * 2.0f * kBackdropHalfWidth + up.z * v * 2.0f * halfH };
+			const float inverse[ 4 ] = { -s_passEye.orientation[ 0 ], -s_passEye.orientation[ 1 ], -s_passEye.orientation[ 2 ],
+				s_passEye.orientation[ 3 ] };
+			const BV3 d = RotateQ( inverse, { p.x - s_passEye.position[ 0 ], p.y - s_passEye.position[ 1 ], p.z - s_passEye.position[ 2 ] } );
+			const float depth = -d.z;
+			if( depth < 0.05f )
+			{
+				return false;
+			}
+			const float tanL = std::tan( s_passEye.fovAngleLeft ), tanR = std::tan( s_passEye.fovAngleRight );
+			const float tanU = std::tan( s_passEye.fovAngleUp ), tanD = std::tan( s_passEye.fovAngleDown );
+			sx = ( d.x / depth - tanL ) / ( tanR - tanL ) * static_cast< float >( s_eyeW );
+			sy = ( tanU - d.y / depth ) / ( tanU - tanD ) * static_cast< float >( s_eyeH );
+			rhw = 1.0f / depth;
+			return true;
+		}
+	}
+
+	void StereoRenderer::SetPassEye( const EyePose &eye )
+	{
+		s_passEye = eye;
+	}
+
 	bool StereoRenderer::InEyePass()
 	{
 		return s_inEyePass;
@@ -521,6 +576,54 @@ namespace PSUVR
 		if( boxW < 0.8f * static_cast< float >( s_gameW ) || boxH < 0.8f * static_cast< float >( s_gameH ) )
 		{
 			return nullptr;
+		}
+
+		// Dressing room background (camera state 5, a plain texture): fixed in the room.
+		if( VRCamera::CameraState() == 5 )
+		{
+			bool plainTexture = false;
+			IDirect3DBaseTexture9 *stage0 = nullptr;
+			if( SUCCEEDED( device->GetTexture( 0, &stage0 ) ) && stage0 )
+			{
+				IDirect3DTexture9 *tex9 = nullptr;
+				stage0->QueryInterface( __uuidof( IDirect3DTexture9 ), reinterpret_cast< void ** >( &tex9 ) );
+				stage0->Release();
+				if( tex9 )
+				{
+					D3DSURFACE_DESC desc{};
+					tex9->GetLevelDesc( 0, &desc );
+					plainTexture = ( desc.Usage & D3DUSAGE_RENDERTARGET ) == 0;
+					tex9->Release();
+				}
+			}
+			float center[ 3 ]{};
+			float orientation[ 4 ]{ 0.0f, 0.0f, 0.0f, 1.0f };
+			if( plainTexture && VRCamera::HasReference() )
+			{
+				VRCamera::PanelPose( kBackdropDistance, 0.0f, center, orientation );
+				std::memcpy( s_stretchQuadBuf, verts, vertCount * stride );
+				bool mapped = true;
+				for( unsigned i = 0; i < vertCount && mapped; ++i )
+				{
+					float *xyzw = reinterpret_cast< float * >( s_stretchQuadBuf + i * stride );
+					float sx = 0.0f, sy = 0.0f, rhw = 1.0f;
+					mapped = MapBackdropVertex( xyzw[ 0 ], xyzw[ 1 ], center, orientation, sx, sy, rhw );
+					xyzw[ 0 ] = sx;
+					xyzw[ 1 ] = sy;
+					xyzw[ 2 ] = 0.9999f;  // behind the character and the menu
+					xyzw[ 3 ] = rhw;
+				}
+				if( mapped )
+				{
+					static bool s_logged = false;
+					if( !s_logged )
+					{
+						s_logged = true;
+						PSU_LOG( "Stereo: dressing room background fixed in the room (%u verts)\n", vertCount );
+					}
+					return s_stretchQuadBuf;
+				}
+			}
 		}
 
 		const float sx = static_cast< float >( s_eyeW ) / static_cast< float >( s_gameW );
@@ -808,6 +911,7 @@ namespace PSUVR
 				device->SetTransform( D3DTS_VIEW, &eyeView );
 				device->SetTransform( D3DTS_PROJECTION, &eyeProj );
 
+				SetPassEye( views[ eye ] );
 				BeginEyePass( eyeSurface, eyeW, eyeH, targetDesc.Width, targetDesc.Height );
 				pass();
 				EndEyePass();

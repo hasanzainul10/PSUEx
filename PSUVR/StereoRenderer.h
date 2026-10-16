@@ -71,6 +71,8 @@ namespace PSUVR
 			unsigned gameW, unsigned gameH );
 		static void EndEyePass();
 		static void MarkSurfaceTexture( IDirect3DSurface9 *surface );
+		// The eye pose of the next eye pass (dressing room background placement).
+		static void SetPassEye( const EyePose &eye );
 
 		bool m_hasFrame = false;
 		bool m_loggedFirst = false;
