@@ -707,6 +707,12 @@ namespace PSUVR
 		{
 			return false;
 		}
+		// Camera state 5 (NPC talk, dressing room): the game frames the shot itself, so it goes
+		// on the body-locked panel like the 2D scenes instead of being rendered per eye.
+		if( vr.m_flatTalkScenes && VRCamera::CameraState() == 5 )
+		{
+			return false;
+		}
 		const unsigned sceneMode = *reinterpret_cast< unsigned * >( 0x00B90EA8 );
 		return vr.m_stereoMode == 0 || sceneMode == vr.m_stereoMode;
 	}

@@ -306,6 +306,9 @@ namespace PSUVR
 		if( ImGui::CollapsingHeader( "Comfort" ) )
 		{
 			ImGui::Checkbox( "Vignette while moving / smooth turning", &s.m_comfortVignette );
+			ImGui::Checkbox( "NPC talk and dressing room on the screen panel", &s.m_flatTalkScenes );
+			Help( "These scenes use the game's own camera; showing them on the body-locked panel avoids "
+				"a head-locked view." );
 			ImGui::SliderFloat( "Vignette strength", &s.m_vignetteStrength, 0.0f, 1.0f, "%.2f" );
 		}
 

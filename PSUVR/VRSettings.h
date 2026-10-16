@@ -108,6 +108,8 @@ struct VRSettings
 	float m_lbWindowSeconds = 2.0f;
 	bool m_snapTurn = true;
 	bool m_comfortVignette = false;
+	// NPC talk and the dressing room (camera state 5) on the body-locked panel instead of in 3D.
+	bool m_flatTalkScenes = true;
 	// Motion controllers: draw a marker and pointer ray at each tracked controller.
 	bool m_showControllers = true;
 	// Button names in the controller layout picture: "psvr2" (Sense) or "generic" (A/B/X/Y).
