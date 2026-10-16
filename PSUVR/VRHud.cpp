@@ -3,6 +3,7 @@
 #include "D3D11Bridge.h"
 #include "StereoRenderer.h"
 #include "VRCamera.h"
+#include "VRSyntheticPad.h"
 #include "VRSystem.h"
 #include "../Misc/Log.h"
 #include "../PSUExConfig.h"
@@ -1217,6 +1218,24 @@ namespace PSUVR
 		{
 			LogRoute( ret, "skip-fullscreen-3d", verts, vertCount, stride );
 			return;
+		}
+		// Free aim with the gun up: the game's reticle (small elements around the screen
+		// centre) is replaced by ours at the controller ray, so it isn't put on the panel.
+		int aimHand = 0;
+		if( VRSyntheticPad::GunAiming( aimHand ) )
+		{
+			float minX = 0, minY = 0, maxX = 0, maxY = 0;
+			ComputeAabb( verts, vertCount, stride, minX, minY, maxX, maxY );
+			const float gw = static_cast< float >( m_w );
+			const float gh = static_cast< float >( m_h );
+			const float cx = ( minX + maxX ) * 0.5f;
+			const float cy = ( minY + maxY ) * 0.5f;
+			if( std::fabs( cx - gw * 0.5f ) < gw * 0.08f && std::fabs( cy - gh * 0.5f ) < gh * 0.12f &&
+				( maxX - minX ) < gw * 0.3f && ( maxY - minY ) < gh * 0.4f )
+			{
+				LogRoute( ret, "skip-reticle", verts, vertCount, stride );
+				return;
+			}
 		}
 		// World-anchored 2D from draw-layer objects: z holds the projected depth
 		// (0.94-0.98 seen), which DrawNameplateToEyes uses to place it in 3D.

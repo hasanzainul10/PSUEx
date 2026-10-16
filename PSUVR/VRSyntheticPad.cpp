@@ -1065,6 +1065,12 @@ namespace PSUVR
 			return s_active && GetTickCount() - s_updateTick < 250;
 		}
 
+		bool GunAiming( int &hand )
+		{
+			hand = 0;  // the left-hand gun aims
+			return s_aimModeOn && s_gunInView && VRCamera::CameraState() == 4;
+		}
+
 		unsigned TakeActions()
 		{
 			const unsigned actions = s_actions;

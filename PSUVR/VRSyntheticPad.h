@@ -15,6 +15,9 @@ namespace PSUVR
 		void Update();
 		// True while the controllers drive the pad (motion mode, a controller active).
 		bool Active();
+		// Free aim mode with the gun raised and the game in free aim: the hand whose ray aims
+		// (0 left, 1 right). Our reticle is drawn there and the game's centre reticle hidden.
+		bool GunAiming( int &hand );
 		// VRAction bits fired by grip chords since the last call.
 		unsigned TakeActions();
 

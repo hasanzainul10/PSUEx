@@ -1,5 +1,7 @@
 #include "VRControllers.h"
 
+#include "VRSyntheticPad.h"
+
 #include "../Misc/Log.h"
 #include "../PSUExConfig.h"
 
@@ -169,55 +171,32 @@ namespace PSUVR
 			device->DrawPrimitiveUP( D3DPT_TRIANGLEFAN, kSegments, fan, sizeof( Vertex ) );
 		}
 
-		// Thick screen-space line between two LOCAL points (clipped near the eye by sampling).
-		void DrawRay( IDirect3DDevice9 *device, const Projector &proj, const V3 &from, const V3 &to,
-			float thicknessPx, DWORD colorNear, DWORD colorFar )
+		// Ring + centre dot (with a dark outline so it reads on bright and dark backgrounds).
+		// radius: pixels; about 1 degree of view.
+		void DrawRing( IDirect3DDevice9 *device, float cx, float cy, float inner, float outer, DWORD color )
 		{
-			constexpr int kSteps = 16;
-			Vertex strip[ ( kSteps + 1 ) * 2 ];
-			int count = 0;
-			float prevX = 0.0f, prevY = 0.0f;
-			bool havePrev = false;
-			for( int i = 0; i <= kSteps; ++i )
+			constexpr int kSegments = 32;
+			Vertex strip[ ( kSegments + 1 ) * 2 ];
+			for( int i = 0; i <= kSegments; ++i )
 			{
-				const float t = static_cast< float >( i ) / kSteps;
-				const V3 p{ from.x + ( to.x - from.x ) * t, from.y + ( to.y - from.y ) * t, from.z + ( to.z - from.z ) * t };
-				float sx, sy, depth;
-				if( !proj.Project( p, sx, sy, depth ) )
-				{
-					continue;
-				}
-				if( !havePrev )
-				{
-					prevX = sx;
-					prevY = sy;
-					havePrev = true;
-					continue;
-				}
-				float dx = sx - prevX, dy = sy - prevY;
-				const float length = std::sqrt( dx * dx + dy * dy );
-				if( length < 0.5f )
-				{
-					continue;
-				}
-				dx /= length;
-				dy /= length;
-				const float half = thicknessPx * 0.5f;
-				const DWORD color = t < 0.5f ? colorNear : colorFar;
-				if( count == 0 )
-				{
-					strip[ count++ ] = { prevX - dy * half, prevY + dx * half, 0.0f, 1.0f, colorNear };
-					strip[ count++ ] = { prevX + dy * half, prevY - dx * half, 0.0f, 1.0f, colorNear };
-				}
-				strip[ count++ ] = { sx - dy * half, sy + dx * half, 0.0f, 1.0f, color };
-				strip[ count++ ] = { sx + dy * half, sy - dx * half, 0.0f, 1.0f, color };
-				prevX = sx;
-				prevY = sy;
+				const float a = 6.2831853f * static_cast< float >( i ) / kSegments;
+				const float c = std::cos( a ), s = std::sin( a );
+				strip[ i * 2 + 0 ] = { cx + c * inner, cy + s * inner, 0.0f, 1.0f, color };
+				strip[ i * 2 + 1 ] = { cx + c * outer, cy + s * outer, 0.0f, 1.0f, color };
 			}
-			if( count >= 4 )
-			{
-				device->DrawPrimitiveUP( D3DPT_TRIANGLESTRIP, count - 2, strip, sizeof( Vertex ) );
-			}
+			device->DrawPrimitiveUP( D3DPT_TRIANGLESTRIP, kSegments * 2, strip, sizeof( Vertex ) );
+		}
+
+		void DrawReticle( IDirect3DDevice9 *device, float cx, float cy, float radius, bool firing )
+		{
+			radius = radius < 6.0f ? 6.0f : radius;
+			const float width = radius * 0.18f < 1.5f ? 1.5f : radius * 0.18f;
+			const DWORD shadow = D3DCOLOR_ARGB( 140, 0, 0, 0 );
+			const DWORD light = firing ? D3DCOLOR_ARGB( 240, 255, 200, 80 ) : D3DCOLOR_ARGB( 230, 255, 255, 255 );
+			DrawRing( device, cx, cy, radius - width * 1.5f, radius + width * 1.5f, shadow );
+			DrawRing( device, cx, cy, radius - width * 0.5f, radius + width * 0.5f, light );
+			DrawDisc( device, cx, cy, width * 1.4f, shadow );
+			DrawDisc( device, cx, cy, width * 0.8f, light );
 		}
 	}
 
@@ -320,14 +299,20 @@ namespace PSUVR
 				const BYTE alpha = trigger ? 230 : 160;
 				const DWORD color = hand == 0 ? D3DCOLOR_ARGB( alpha, 80, 160, 255 ) : D3DCOLOR_ARGB( alpha, 255, 150, 60 );
 
-				if( c.aimValid )
+				int aimHand = -1;
+				if( c.aimValid && VRSyntheticPad::GunAiming( aimHand ) && aimHand == hand )
 				{
+					// Reticle where the gun points, a few metres out (both eyes converge there).
 					const V3 origin{ c.aimPosition[ 0 ], c.aimPosition[ 1 ], c.aimPosition[ 2 ] };
 					const V3 dir = Rotate( c.aimOrientation, { 0.0f, 0.0f, -1.0f } );
-					constexpr float kRayLength = 2.0f;
-					const V3 end{ origin.x + dir.x * kRayLength, origin.y + dir.y * kRayLength, origin.z + dir.z * kRayLength };
-					const DWORD farColor = ( color & 0x00FFFFFFu ) | 0x30000000u;
-					DrawRay( device, proj, origin, end, trigger ? 4.0f : 2.5f, color, farColor );
+					constexpr float kReticleDistance = 6.0f;
+					const V3 point{ origin.x + dir.x * kReticleDistance, origin.y + dir.y * kReticleDistance,
+						origin.z + dir.z * kReticleDistance };
+					float sx, sy, depth;
+					if( proj.Project( point, sx, sy, depth ) )
+					{
+						DrawReticle( device, sx, sy, proj.Scale( 1.0f ) * 0.017f, trigger );
+					}
 				}
 				if( c.gripValid )
 				{
