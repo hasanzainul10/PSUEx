@@ -510,6 +510,33 @@ namespace PSUVR
 			return true;
 		}
 
+		bool HoldFirstPerson( const float playerPosition[ 3 ] )
+		{
+			if( !FirstPersonMode() || !s_fpPrimed || !s_haveReference )
+			{
+				return false;
+			}
+			// The head follows the body; the eyes keep cancelling whatever the game camera does
+			// (BuildEyeFirstPerson), so the view doesn't follow the game's aim camera.
+			const auto &vr = Config::Get().vr;
+			s_headWorld = { playerPosition[ 0 ], playerPosition[ 1 ] + vr.m_fpEyeHeight * kGameUnitsPerMeter, playerPosition[ 2 ] };
+			s_lastSteerTick = GetTickCount();
+			s_fpActive = true;
+			return true;
+		}
+
+		bool WorldAimFromTracking( float trackingYaw, float trackingPitch, float &yaw, float &pitch )
+		{
+			if( !FirstPersonActive() )
+			{
+				return false;
+			}
+			// Same mapping as the head: game yaw = body yaw + (tracking yaw - recenter yaw).
+			yaw = WrapAngle( s_bodyYaw + WrapAngle( trackingYaw - s_refYaw ) );
+			pitch = trackingPitch;
+			return true;
+		}
+
 		bool ThirdPersonMode()
 		{
 			return Config::Get().vr.m_cameraMode != "firstPerson" && StereoRenderer::SceneAllowsStereo();

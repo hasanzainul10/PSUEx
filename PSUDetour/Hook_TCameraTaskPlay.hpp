@@ -217,6 +217,16 @@ namespace TCameraTaskPlay
 				}
 			}
 		}
+		// Free aim in first person: the game turns its aim camera; the view stays on the head.
+		if( !steered && firstPerson && cameraState == kCameraStateFreeAim )
+		{
+			const PSUPlayer &player = PSUPlayer::Get();
+			if( PSUPlayer::IsReady() )
+			{
+				const float playerPos[ 3 ] = { player.position.x, player.position.y, player.position.z };
+				steered = PSUVR::VRCamera::HoldFirstPerson( playerPos );
+			}
+		}
 		if( !steered )
 		{
 			PSUVR::VRCamera::ClearFirstPerson();

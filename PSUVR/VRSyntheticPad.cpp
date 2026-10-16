@@ -443,8 +443,12 @@ namespace PSUVR
 			{
 				return;
 			}
-			pad.buttons |= Bit( kPadR1 );
-
+			// Free aim: the gun is already up and R1 would start scan mode; only press X.
+			const bool freeAim = VRCamera::CameraState() == 4;
+			if( !freeAim )
+			{
+				pad.buttons |= Bit( kPadR1 );
+			}
 			if( s_gunGap > 0.0f )
 			{
 				s_gunGap -= dt;
@@ -460,7 +464,7 @@ namespace PSUVR
 			{
 				s_gunUpTime = 0.0f;
 			}
-			const bool gunUp = s_gunUpTime >= kGunSettleSeconds;
+			const bool gunUp = freeAim || s_gunUpTime >= kGunSettleSeconds;
 			const bool ready = !PSUCombat::Swinging( s_combat );
 			if( ( held || s_gunShot ) && gunUp && ready && s_pulseButton < 0 )
 			{
@@ -526,9 +530,15 @@ namespace PSUVR
 					camYaw * 57.29578f, camPitch * 57.29578f );
 #endif
 			}
-			// Game yaw turns the same way as OpenXR yaw (both grow turning left).
-			const float wantYaw = WrapRadians( s_aimCamYaw0 + WrapRadians( handYaw - s_aimHandYaw0 ) );
-			const float wantPitch = s_aimCamPitch0 + ( handPitch - s_aimHandPitch0 );
+			// First person: aim where the controller points in the world (the view doesn't move).
+			// Otherwise: turning the hand turns the aim by the same angle from where it started.
+			float wantYaw = 0.0f, wantPitch = 0.0f;
+			if( !VRCamera::WorldAimFromTracking( handYaw, handPitch, wantYaw, wantPitch ) )
+			{
+				// Game yaw turns the same way as OpenXR yaw (both grow turning left).
+				wantYaw = WrapRadians( s_aimCamYaw0 + WrapRadians( handYaw - s_aimHandYaw0 ) );
+				wantPitch = s_aimCamPitch0 + ( handPitch - s_aimHandPitch0 );
+			}
 			const float yawError = WrapRadians( wantYaw - camYaw );
 			const float pitchError = wantPitch - camPitch;
 			const auto drive = []( float error )
@@ -994,7 +1004,12 @@ namespace PSUVR
 				{
 					continue;
 				}
-				const Output output = modifier ? entry.chord : entry.plain;
+				Output output = modifier ? entry.chord : entry.plain;
+				// Free aim: the right stick click is the scan (R1) instead of START.
+				if( output == Output::Start && VRCamera::CameraState() == 4 )
+				{
+					output = Output::R1;
+				}
 				const int button = PadButtonFor( output );
 				if( button >= 0 )
 				{

@@ -52,6 +52,13 @@ namespace PSUVR
 		void ClearThirdPerson( bool leftThirdPerson );
 		// True once a steer happened for the current camera; eyes then use BuildEyeFirstPerson.
 		bool FirstPersonActive();
+		// Free aim in first person: keep the first-person view (head on the body) without
+		// writing the game camera, so the game's aim camera can turn underneath. False when
+		// first person isn't primed.
+		bool HoldFirstPerson( const float playerPosition[ 3 ] );
+		// A tracking-space direction (OpenXR yaw, pitch) as a game-world yaw / pitch, using the
+		// first-person body frame. False outside first person.
+		bool WorldAimFromTracking( float trackingYaw, float trackingPitch, float &yaw, float &pitch );
 		void ClearFirstPerson();
 		// The right stick is read through XInput (false = turning falls back to the game's orbit).
 		bool TurnFromStick();
