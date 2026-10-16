@@ -607,13 +607,10 @@ namespace PSUVR
 		}
 		const float boxW = maxX - minX;
 		const float boxH = maxY - minY;
-		// Eye-pass tint: only near-fullscreen quads.
-		if( boxW < 0.8f * static_cast< float >( s_gameW ) || boxH < 0.8f * static_cast< float >( s_gameH ) )
-		{
-			return nullptr;
-		}
+		const bool fullscreen = boxW >= 0.8f * static_cast< float >( s_gameW ) && boxH >= 0.8f * static_cast< float >( s_gameH );
 
-		// Dressing room background (camera state 5, a plain texture): fixed in the room.
+		// Dressing room background (camera state 5): tiles of plain textures (512x512 seen),
+		// any size, fixed in the room.
 		if( VRCamera::CameraState() == 5 )
 		{
 			bool plainTexture = false;
@@ -659,6 +656,12 @@ namespace PSUVR
 					return s_stretchQuadBuf;
 				}
 			}
+		}
+
+		// Eye-pass tint: only near-fullscreen quads.
+		if( !fullscreen )
+		{
+			return nullptr;
 		}
 
 		const float sx = static_cast< float >( s_eyeW ) / static_cast< float >( s_gameW );
