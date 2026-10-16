@@ -630,6 +630,11 @@ namespace PSUVR
 			}
 			float center[ 3 ]{};
 			float orientation[ 4 ]{ 0.0f, 0.0f, 0.0f, 1.0f };
+			if( plainTexture )
+			{
+				// Only the dressing room draws these tiles in camera state 5 (NPC talk doesn't).
+				VRCamera::NoteDressingRoom();
+			}
 			if( plainTexture && VRCamera::HasReference() )
 			{
 				VRCamera::PanelPose( kBackdropDistance, 0.0f, center, orientation );
@@ -655,6 +660,17 @@ namespace PSUVR
 					}
 					return s_stretchQuadBuf;
 				}
+				// A corner behind the eye (looking far to the side): drop the tile rather than
+				// drawing it head-locked. All vertices off screen = nothing rasterised.
+				for( unsigned i = 0; i < vertCount; ++i )
+				{
+					float *xyzw = reinterpret_cast< float * >( s_stretchQuadBuf + i * stride );
+					xyzw[ 0 ] = -100000.0f;
+					xyzw[ 1 ] = -100000.0f;
+					xyzw[ 2 ] = 0.9999f;
+					xyzw[ 3 ] = 1.0f;
+				}
+				return s_stretchQuadBuf;
 			}
 		}
 

@@ -188,7 +188,8 @@ namespace TCameraTaskPlay
 		const int cameraState = *reinterpret_cast< uint8_t * >( reinterpret_cast< uint8_t * >( camera ) + 0x20 );
 		PSUVR::VRCamera::NoteCameraState( cameraState );
 		// Free aim: the game's aim camera stays as it is (the headset looks around on top).
-		const bool steerAllowed = cameraState != kCameraStateFreeAim;
+		// The dressing room shows the game's framed shot (no first / third person steer).
+		const bool steerAllowed = cameraState != kCameraStateFreeAim && !PSUVR::VRCamera::DressingRoom();
 		uint8_t *renderCamera = RenderCameraObject( camera );
 		// The eyes are built from what the game actually renders (talk camera included).
 		PSUVR::VRCamera::NoteRenderCamera(

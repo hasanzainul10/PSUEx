@@ -679,6 +679,17 @@ namespace PSUVR
 		{
 			int s_cameraState = 0;
 			bool s_recenterRequest = false;
+			DWORD s_dressingRoomTick = 0;
+		}
+
+		void NoteDressingRoom()
+		{
+			s_dressingRoomTick = GetTickCount();
+		}
+
+		bool DressingRoom()
+		{
+			return s_cameraState == 5 && s_dressingRoomTick != 0 && GetTickCount() - s_dressingRoomTick < 500;
 		}
 
 		bool ConsumeRecenterRequest()

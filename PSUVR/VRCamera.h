@@ -67,6 +67,10 @@ namespace PSUVR
 		void NoteCameraState( int state );
 		// True once after the camera entered state 5; the stereo renderer then recenters.
 		bool ConsumeRecenterRequest();
+		// The dressing room (camera state 5 with its background tiles, which NPC talk lacks):
+		// the game's own camera is shown, like third person, whatever vr.cameraMode says.
+		void NoteDressingRoom();
+		bool DressingRoom();
 		int CameraState();
 		// The render camera's yaw (game convention) and pitch (positive = up).
 		bool RenderCameraYawPitch( float &yaw, float &pitch );
