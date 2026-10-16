@@ -867,7 +867,7 @@ namespace PSUVR
 		{
 			return;
 		}
-		if( !VRCamera::HasReference() )
+		if( !VRCamera::HasReference() || VRCamera::ConsumeRecenterRequest() )
 		{
 			VRCamera::Recenter( views );
 		}

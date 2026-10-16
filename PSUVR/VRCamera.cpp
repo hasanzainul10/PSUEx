@@ -678,6 +678,14 @@ namespace PSUVR
 		namespace
 		{
 			int s_cameraState = 0;
+			bool s_recenterRequest = false;
+		}
+
+		bool ConsumeRecenterRequest()
+		{
+			const bool request = s_recenterRequest;
+			s_recenterRequest = false;
+			return request;
 		}
 
 		void NoteCameraState( int state )
@@ -687,6 +695,12 @@ namespace PSUVR
 			{
 				++s_logs;
 				PSU_LOG( "VRCamera: camera state %d -> %d\n", s_cameraState, state );
+			}
+			// Entering the game's framed shots (dressing room, NPC talk): recenter so the
+			// shot is in front of the player.
+			if( state == 5 && s_cameraState != 5 )
+			{
+				s_recenterRequest = true;
 			}
 			s_cameraState = state;
 		}

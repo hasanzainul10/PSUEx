@@ -65,6 +65,8 @@ namespace PSUVR
 		// Camera task state byte from the camera hook (1 follow, 2 LB held, 3 refocus,
 		// 4 free aim, 5 NPC talk).
 		void NoteCameraState( int state );
+		// True once after the camera entered state 5; the stereo renderer then recenters.
+		bool ConsumeRecenterRequest();
 		int CameraState();
 		// The render camera's yaw (game convention) and pitch (positive = up).
 		bool RenderCameraYawPitch( float &yaw, float &pitch );
