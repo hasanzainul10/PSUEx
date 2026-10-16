@@ -407,6 +407,7 @@ namespace PSUVR
 		// holding the trigger fires again each time the game takes the next shot. R1 stays held
 		// until the shot is over, so releasing doesn't cancel it.
 		bool s_gunShot = false;          // a click still owed a shot
+		bool s_gunPhotonArt = false;     // left grip held with the trigger: Y (Photon Art) instead of X
 		float s_gunShotTime = 0.0f;
 		float s_gunTail = 0.0f;          // keep R1 held a little after the last shot
 		float s_gunGap = 0.0f;           // after an X press, wait before judging the state
@@ -470,11 +471,13 @@ namespace PSUVR
 			const bool ready = !PSUCombat::Swinging( s_combat );
 			if( ( held || s_gunShot ) && gunUp && ready && s_pulseButton < 0 )
 			{
-				// Same as a swing: the first shot of a chain turns toward where you look.
-				StartAttack( kPadX, 0 );
+				// Same as a swing: the first shot of a chain turns toward where you look. A held
+				// trigger keeps the choice made by its click (grip held = Photon Art).
+				StartAttack( s_gunPhotonArt ? kPadY : kPadX, 0 );
 				s_gunGap = kAttackPulseSeconds + kGunGapSeconds;
 #ifdef _DEBUG
-				PSU_LOG( "VRGun: shot (%s), step %d\n", s_gunShot ? "click" : "held", s_combat.comboStep );
+				PSU_LOG( "VRGun: %s (%s), step %d\n", s_gunPhotonArt ? "Photon Art" : "shot", s_gunShot ? "click" : "held",
+					s_combat.comboStep );
 #endif
 				s_gunShot = false;
 			}
@@ -676,9 +679,16 @@ namespace PSUVR
 					}
 					if( roles.shoot[ hand ] && ( VRControllers::Pressed( hand ) & kControllerTrigger ) )
 					{
-						// One click = one shot (even if released before the gun is up).
+						// One click = one shot (even if released before the gun is up). With the
+						// left grip held it is the gun's Photon Art, and that grip sends no L1.
 						s_gunShot = true;
 						s_gunShotTime = kGunShotWaitSeconds;
+						s_gunPhotonArt = vr.m_paGesture && ( VRControllers::State( hand ).buttons & kControllerGrip ) != 0;
+						if( s_gunPhotonArt && hand == 0 && s_grip[ 0 ] != Grip::Modifier )
+						{
+							s_grip[ 0 ] = Grip::Consumed;
+							s_pulse[ 0 ] = 0.0f;
+						}
 						VRControllers::Haptic( hand, 0.25f, 0.02f );
 					}
 				}

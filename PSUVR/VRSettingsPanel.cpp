@@ -334,7 +334,8 @@ namespace PSUVR
 				"Needs 'Play with motion controllers'." );
 			if( s.m_swingAttack )
 			{
-				ImGui::Checkbox( "Swing with the trigger held = Photon Art", &s.m_paGesture );
+				ImGui::Checkbox( "Photon Art gestures", &s.m_paGesture );
+				Help( "Melee: swing with that hand's trigger held. Left-hand gun: left grip + trigger." );
 				ImGui::Checkbox( "Turn to where I look before attacking", &s.m_attackFaceLook );
 				ImGui::Checkbox( "Aim free aim with the gun hand", &s.m_controllerAim );
 				Help( "Left stick click turns free aim mode on / off. While on, raising the gun hand into view "
