@@ -20,6 +20,9 @@ namespace PSUVR
 		bool GunAiming( int &hand );
 		// VRAction bits fired by grip chords since the last call.
 		unsigned TakeActions();
+		// Free aim with the controller: the game yaw / pitch (radians) the aim is being steered
+		// to this frame. False when the controller isn't aiming.
+		bool LastFreeAim( float &yaw, float &pitch );
 
 		// state: DIJOYSTATE2. axisMin / axisMax: the device range of lX, lY, lZ, lRx, lRy,
 		// lRz, slider 0, slider 1. replace: drop the device's own input first (the device is

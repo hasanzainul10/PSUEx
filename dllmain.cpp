@@ -146,6 +146,9 @@ DetoursHookAll()
 		sub_74B760::Hook();			// Bone pose build (VR hands)
 		sub_5089C0::Hook();			// Near-camera hide (VR hands in free aim)
 		sub_562070::Hook();			// Model part cull (VR hands in free aim)
+#ifdef _DEBUG
+		sub_4F9F50::Hook();			// Aim shot angles (free aim reticle calibration log)
+#endif
 		sub_814040::Hook();			// File Processing
 
 		HardwareInfo::Hook();		// CPU Affinity Fix

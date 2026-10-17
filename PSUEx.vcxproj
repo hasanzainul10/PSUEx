@@ -198,6 +198,7 @@
     <ClInclude Include="PSUDetour\Hook_0074B760_BonePose.hpp" />
     <ClInclude Include="PSUDetour\Hook_005089C0_NearCull.hpp" />
     <ClInclude Include="PSUDetour\Hook_00562070_PartCull.hpp" />
+    <ClInclude Include="PSUDetour\Hook_004F9F50_AimShot.hpp" />
     <ClInclude Include="PSUDetour\Hook_UIScale.hpp" />
     <ClInclude Include="PSUDetour\Hook_TextDraw.hpp" />
     <ClInclude Include="PSUTranslation\Translation.h" />

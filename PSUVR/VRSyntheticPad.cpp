@@ -488,6 +488,7 @@ namespace PSUVR
 		// the hand's direction and the aim are paired; turning the hand by some angle turns the
 		// aim by the same angle (at the game's aim speed). Input only: nothing is written.
 		bool s_freeAim = false;
+		float s_lastWantYaw = 0.0f, s_lastWantPitch = 0.0f;
 		float s_aimHandYaw0 = 0.0f, s_aimHandPitch0 = 0.0f;
 		float s_aimCamYaw0 = 0.0f, s_aimCamPitch0 = 0.0f;
 		DWORD s_aimLogTick = 0;
@@ -544,6 +545,8 @@ namespace PSUVR
 				wantYaw = WrapRadians( s_aimCamYaw0 + WrapRadians( handYaw - s_aimHandYaw0 ) );
 				wantPitch = s_aimCamPitch0 + ( handPitch - s_aimHandPitch0 );
 			}
+			s_lastWantYaw = wantYaw;
+			s_lastWantPitch = wantPitch;
 			const float yawError = WrapRadians( wantYaw - camYaw );
 			const float pitchError = wantPitch - camPitch;
 			const auto drive = []( float error )
@@ -1115,6 +1118,13 @@ namespace PSUVR
 		{
 			hand = 0;  // the left-hand gun aims
 			return s_aimModeOn && s_gunInView && VRCamera::CameraState() == 4;
+		}
+
+		bool LastFreeAim( float &yaw, float &pitch )
+		{
+			yaw = s_lastWantYaw;
+			pitch = s_lastWantPitch;
+			return s_freeAim;
 		}
 
 		unsigned TakeActions()
