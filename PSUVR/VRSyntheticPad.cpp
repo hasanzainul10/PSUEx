@@ -562,6 +562,7 @@ namespace PSUVR
 		// the hand's direction and the aim are paired; turning the hand by some angle turns the
 		// aim by the same angle (at the game's aim speed). Input only: nothing is written.
 		bool s_freeAim = false;
+		int s_aimHand = -1;            // the hand whose gun free aim follows (-1: none; set in AimModeFollow)
 		float s_lastWantYaw = 0.0f, s_lastWantPitch = 0.0f;
 		bool s_directAim = false;
 		DWORD s_directAimTick = 0;
@@ -591,8 +592,9 @@ namespace PSUVR
 		void FreeAim( PadState &pad )
 		{
 			const bool active = Config::Get().vr.m_controllerAim && VRCamera::CameraState() == 4;
-			// The gun hand: the left one with a left-hand gun, otherwise the right.
-			const int hand = s_combatValid && PSUCombat::ClassifyWeapon( s_combat.leftClass ) == PSUCombat::WeaponKind::Gun1H ? 0 : 1;
+			// The gun hand, as AimModeFollow picked it (the bow is held, and aimed, left).
+			const int hand = s_aimHand >= 0 ? s_aimHand
+				: ( s_combatValid && PSUCombat::ClassifyWeapon( s_combat.leftClass ) == PSUCombat::WeaponKind::Gun1H ? 0 : 1 );
 			float handYaw = 0.0f, handPitch = 0.0f, camYaw = 0.0f, camPitch = 0.0f;
 			s_directAim = false;
 			if( !active || !AimAngles( VRControllers::State( hand ), handYaw, handPitch ) ||
@@ -662,7 +664,6 @@ namespace PSUVR
 		// the gun hand: raised into view = free aim with the reticle, lowered out of view =
 		// back to normal targeting. The mode only does anything with a left-hand gun.
 		float s_r3Pulse = 0.0f;        // R3 held for the current toggle
-		int s_aimHand = -1;            // the hand whose gun free aim follows (-1: none)
 		float s_r3Cooldown = 0.0f;     // wait for the camera to follow before toggling again
 		// Moving (left stick) or turning (right stick) leaves free aim until the sticks rest.
 		float s_stickRest = 1.0f;
