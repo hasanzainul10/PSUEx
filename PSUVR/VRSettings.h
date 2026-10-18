@@ -69,6 +69,9 @@ struct VRSettings
 	// Menus / 2D scenes: a dark backdrop behind the panel instead of the runtime's own
 	// environment (which also shows the play-area boundary).
 	bool m_menuBackdrop = true;
+	// Menu overlays bigger than the screen (mission menu scanlines) go on the menu panel in their
+	// draw order instead of being dropped as a background.
+	bool m_hudOverlays = true;
 	// Degrees the head may look away before the panel glides back in front.
 	float m_hudFollowAngle = 35.0f;
 	// How far below eye level the panel sits (meters).

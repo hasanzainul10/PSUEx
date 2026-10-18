@@ -117,6 +117,52 @@ namespace PSUVR
 			return boxW >= gw * 0.90f && boxH >= gh * 0.85f;
 		}
 
+		// A menu overlay bigger than the screen (mission menu scanlines, 2026-10-19 log): the 2D sprite
+		// draw (0x00747248) at the HUD depth 0.9, alpha blended, a plain texture of 1024 or more,
+		// overhanging the screen on both axes. Drawn on the panel, not dropped as a background.
+		bool IsMenuOverlay( IDirect3DDevice9 *device, const void *verts, unsigned vertCount, unsigned stride,
+			unsigned gameW, unsigned gameH, void *ret )
+		{
+			if( !Config::Get().vr.m_hudOverlays || reinterpret_cast< uintptr_t >( ret ) != 0x00747248 || !verts ||
+				vertCount < 3 || stride < 16 )
+			{
+				return false;
+			}
+			float minX = 0, minY = 0, maxX = 0, maxY = 0;
+			if( !ComputeAabb( verts, vertCount, stride, minX, minY, maxX, maxY ) )
+			{
+				return false;
+			}
+			const float z = static_cast< const float * >( verts )[ 2 ];
+			if( std::fabs( z - 0.9f ) > 0.001f || minX >= 0.0f || minY >= 0.0f ||
+				maxX <= static_cast< float >( gameW ) || maxY <= static_cast< float >( gameH ) )
+			{
+				return false;
+			}
+			DWORD blend = 0;
+			device->GetRenderState( D3DRS_ALPHABLENDENABLE, &blend );
+			if( !blend )
+			{
+				return false;
+			}
+			bool plain = false;
+			IDirect3DBaseTexture9 *texture = nullptr;
+			if( SUCCEEDED( device->GetTexture( 0, &texture ) ) && texture )
+			{
+				IDirect3DTexture9 *tex2d = nullptr;
+				texture->QueryInterface( __uuidof( IDirect3DTexture9 ), reinterpret_cast< void ** >( &tex2d ) );
+				texture->Release();
+				if( tex2d )
+				{
+					D3DSURFACE_DESC desc{};
+					tex2d->GetLevelDesc( 0, &desc );
+					plain = ( desc.Usage & D3DUSAGE_RENDERTARGET ) == 0 && desc.Width >= 1024;
+					tex2d->Release();
+				}
+			}
+			return plain;
+		}
+
 		// Screen-space 2D UI: every vertex at rhw 1 and one shared z (nothing came through a 3D camera).
 		bool IsFlatScreenSpace( const void *verts, unsigned vertCount, unsigned stride )
 		{
@@ -1299,7 +1345,8 @@ namespace PSUVR
 			LogRoute( ret, "skip-offscreen", verts, vertCount, stride );
 			return;
 		}
-		if( IsNearFullscreenDraw( verts, vertCount, stride, m_w, m_h ) )
+		if( IsNearFullscreenDraw( verts, vertCount, stride, m_w, m_h ) &&
+			!IsMenuOverlay( device, verts, vertCount, stride, m_w, m_h, ret ) )
 		{
 			LogRoute( ret, "skip-fullscreen", verts, vertCount, stride );
 			return;

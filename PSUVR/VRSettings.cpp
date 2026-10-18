@@ -29,6 +29,7 @@ namespace
 	X( m_hudMapBlackAlpha, "hudMapBlackAlpha" ) \
 	X( m_hudFollow, "hudFollow" ) \
 	X( m_menuBackdrop, "menuBackdrop" ) \
+	X( m_hudOverlays, "hudOverlays" ) \
 	X( m_hudFollowAngle, "hudFollowAngle" ) \
 	X( m_hudDrop, "hudDrop" ) \
 	X( m_fpEyeHeight, "fpEyeHeight" ) \

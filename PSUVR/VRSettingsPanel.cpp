@@ -304,6 +304,9 @@ namespace PSUVR
 		{
 			ImGui::Checkbox( "Body-locked panel (lazy follow)", &s.m_hudFollow );
 			ImGui::Checkbox( "Dark backdrop behind menus", &s.m_menuBackdrop );
+			ImGui::Checkbox( "Menu overlays on the menu (scanlines)", &s.m_hudOverlays );
+			Help( "Overlays bigger than the screen, like the mission menu's moving scanlines, are drawn on "
+				"the menu panel over the menu, as on a flat screen." );
 			Help( "Menus and 2D screens float on a dark background. Off: SteamVR's own space shows "
 				"around them, and with it the play-area boundary." );
 			ImGui::SliderFloat( "Follow angle (deg)", &s.m_hudFollowAngle, 10.0f, 90.0f, "%.0f" );
