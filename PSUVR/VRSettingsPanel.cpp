@@ -347,6 +347,9 @@ namespace PSUVR
 				}
 				Help( "Off: your arms stay on the controllers while attacking (your swing is the swing). "
 					"On: the arms hand over to the game's attack animation. Photon Arts always use the game's animation." );
+				ImGui::Checkbox( "Staff / rod stays in the hand while casting", &s.m_techWeaponStill );
+				Help( "The staff or rod keeps the hold it had before the cast instead of moving with the casting "
+					"animation. The technique itself is unchanged. The TCSM keeps its animation." );
 				if( context.inGame )
 				{
 					if( ImGui::Button( "Calibrate hand angles" ) )

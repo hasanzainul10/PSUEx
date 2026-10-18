@@ -161,6 +161,9 @@ struct VRSettings
 	bool m_reticleOnShot = true;
 	// Free aim: turn the gun hand about the wrist so the barrel points along the shot.
 	bool m_gunPointsAtAim = true;
+	// Staff / rod: the weapon stays in the hand as held before the cast instead of following the
+	// casting animation (arms following, first person). The TCSM keeps its animation.
+	bool m_techWeaponStill = true;
 	// Free aim hides the player; what is undone to keep the hands and gun in view (arms
 	// following, first person). Each can be turned off to find what costs frame rate.
 	bool m_freeAimNoNearHide = true;     // ignore the near-camera hide (0x005089C0) for the player

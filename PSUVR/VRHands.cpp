@@ -44,6 +44,15 @@ namespace PSUVR
 		DWORD s_attachTick[ 2 ]{};
 		D3DXVECTOR3 s_barrelLocal[ 2 ];
 		bool s_haveBarrel[ 2 ]{};
+
+		// Staff / rod held still while casting: each weapon bone relative to its hand bone, taken
+		// while not attacking, and put back over the casting animation.
+		D3DXMATRIX s_weaponRest[ 2 ];
+		bool s_haveWeaponRest[ 2 ]{};
+		uint32_t s_weaponRestClass = 0;
+		DWORD s_castTick = 0;
+		// After a cast, the animation returns the weapon: keep holding it this long.
+		constexpr DWORD kCastSettleMs = 400;
 		const std::string kHeadlessBody = "headless";
 
 		// How much the arms follow the controllers (0 = the game's animation), eased.
@@ -871,6 +880,51 @@ namespace PSUVR
 					D3DXMatrixMultiply( &modelDelta, &world, &delta );
 					D3DXMatrixMultiply( &modelDelta, &modelDelta, &toModel );
 					ApplyToSubtree( out, records, arm.hand, modelDelta );
+				}
+				// Staff (category 8) / rod (3): keep each weapon bone where it sits in the hand outside
+				// attacks, so casting doesn't swing the weapon about. Not the TCSM (left category B).
+				const bool techWeapon = haveCombat && ( combat.rightCategory == 3 || combat.rightCategory == 8 );
+				if( !techWeapon || combat.weaponClass != s_weaponRestClass )
+				{
+					s_haveWeaponRest[ 0 ] = s_haveWeaponRest[ 1 ] = false;
+					s_weaponRestClass = haveCombat ? combat.weaponClass : 0;
+				}
+				if( techWeapon && vr.m_techWeaponStill && w > 0.0f )
+				{
+					if( combat.comboStep > 0 || PSUCombat::Swinging( combat ) )
+					{
+						s_castTick = now;
+					}
+					const bool settled = now - s_castTick > kCastSettleMs;
+					for( int hand = 0; hand < 2; ++hand )
+					{
+						const int handBone = kArms[ hand ].hand;
+						const int weaponBone = handBone + 1;
+						if( ( hand == 0 && combat.leftCategory == 0xB ) || Parent( records, weaponBone ) != handBone )
+						{
+							continue;
+						}
+						const D3DXMATRIX &handM = *reinterpret_cast< const D3DXMATRIX * >( out + handBone * 16 );
+						const D3DXMATRIX &weaponM = *reinterpret_cast< const D3DXMATRIX * >( out + weaponBone * 16 );
+						D3DXMATRIX handInverse, weaponInverse;
+						if( !D3DXMatrixInverse( &handInverse, nullptr, &handM ) )
+						{
+							continue;
+						}
+						if( settled )
+						{
+							// weapon = rest x hand (row vectors).
+							D3DXMatrixMultiply( &s_weaponRest[ hand ], &weaponM, &handInverse );
+							s_haveWeaponRest[ hand ] = true;
+						}
+						else if( s_haveWeaponRest[ hand ] && D3DXMatrixInverse( &weaponInverse, nullptr, &weaponM ) )
+						{
+							D3DXMATRIX desired, delta;
+							D3DXMatrixMultiply( &desired, &s_weaponRest[ hand ], &handM );
+							D3DXMatrixMultiply( &delta, &weaponInverse, &desired );
+							ApplyToSubtree( out, records, weaponBone, delta );
+						}
+					}
 				}
 				// Free aim: turn the gun hand about the wrist so the barrel points along the shot
 				// (the player's facing and aim pitch, which bullets fly along; +0x220 is positive down).
