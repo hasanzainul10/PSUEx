@@ -149,6 +149,7 @@ DetoursHookAll()
 #ifdef _DEBUG
 		sub_4F9F50::Hook();			// Aim shot angles (free aim reticle calibration log)
 		sub_4D50B0::Hook();			// Technique aim (log each technique once)
+		sub_4CB3A0::Hook();			// Bullet direction (log each bullet)
 #endif
 		sub_814040::Hook();			// File Processing
 
