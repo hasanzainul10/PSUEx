@@ -12,7 +12,8 @@ namespace PSUCombat
 	// 0 = both hands (two-handed or twin), 1 = right hand, 2 = left hand. Seen so far:
 	// 0x02 two-handed sword, 0x04 twin knuckles, 0x06 spear, 0x0C twin daggers, 0x0E twin sabers,
 	// 0x12 saber, 0x14 dagger, 0x22 handgun, 0x25 machinegun, 0x28 RCSM.
-	enum class WeaponKind { None, Melee1H, Melee2H, Twin, Gun1H, Unknown };
+	// Auto: fires by itself (RCSM), nothing for the hand to do.
+	enum class WeaponKind { None, Melee1H, Melee2H, Twin, Gun1H, Auto, Unknown };
 
 	inline WeaponKind ClassifyWeapon( uint32_t weaponClass )
 	{
@@ -28,6 +29,7 @@ namespace PSUCombat
 			case 0x06: return WeaponKind::Melee2H;
 			case 0x12: return WeaponKind::Melee1H;
 			case 0x22: return WeaponKind::Gun1H;
+			case 0x28: return WeaponKind::Auto;
 			default: break;
 		}
 		switch( weaponClass >> 4 )
@@ -54,6 +56,7 @@ namespace PSUCombat
 			case WeaponKind::Melee2H: return "melee 2H";
 			case WeaponKind::Twin: return "twin";
 			case WeaponKind::Gun1H: return "gun 1H";
+			case WeaponKind::Auto: return "auto";
 			default: return "unknown";
 		}
 	}
