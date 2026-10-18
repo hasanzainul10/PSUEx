@@ -42,8 +42,6 @@
 #include "PSUDetour/Hook_0050B790_LogChatMessage.hpp"
 #include "PSUDetour/Hook_0074B490_memset32.hpp"
 #include "PSUDetour/Hook_0074B760_BonePose.hpp"
-#include "PSUDetour/Hook_005089C0_NearCull.hpp"
-#include "PSUDetour/Hook_00562070_PartCull.hpp"
 #include "PSUDetour/Hook_004F9F50_AimShot.hpp"
 #include "PSUDetour/Hook_004D50B0_TechAim.hpp"
 #include "PSUDetour/Hook_004CB3A0_BulletAim.hpp"

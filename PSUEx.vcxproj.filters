@@ -228,12 +228,6 @@
     <ClInclude Include="PSUDetour\Hook_0074B760_BonePose.hpp">
       <Filter>Header Files\PSUFunction</Filter>
     </ClInclude>
-    <ClInclude Include="PSUDetour\Hook_005089C0_NearCull.hpp">
-      <Filter>Header Files\PSUFunction</Filter>
-    </ClInclude>
-    <ClInclude Include="PSUDetour\Hook_00562070_PartCull.hpp">
-      <Filter>Header Files\PSUFunction</Filter>
-    </ClInclude>
     <ClInclude Include="PSUDetour\Hook_004F9F50_AimShot.hpp">
       <Filter>Header Files\PSUFunction</Filter>
     </ClInclude>

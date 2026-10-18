@@ -24,9 +24,6 @@ namespace PSUVR
 		// cleared for the eye passes and restored after.
 		void BeginEyePasses();
 		void EndEyePasses();
-		// Inside the local player's draw in free aim with the arms following: the game's
-		// near-camera hide (0x005089C0) is bypassed.
-		bool ForcingVisible();
 
 		// Right after 0x0074B760 wrote a model's bone-indexed, model-space bone matrices
 		// (out = model +0x64 buffer). The loaded player character takes this path.
