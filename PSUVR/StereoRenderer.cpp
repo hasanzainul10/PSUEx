@@ -672,7 +672,7 @@ namespace PSUVR
 			kind = &s_effectKinds[ s_effectKindCount ];
 			*kind = { ret, texW, texH, where, 0 };
 			const unsigned id = s_effectKindCount++;
-			char box[ 160 ] = "(vertex buffer)";
+			char box[ 512 ] = "(vertex buffer)";
 			const unsigned vertCount = VertCountForPrimitive( primitiveType, primitiveCount );
 			if( verts && stride >= 16 && vertCount > 0 && vertCount < 4096 )
 			{
@@ -687,7 +687,7 @@ namespace PSUVR
 					minZ = ( std::min )( minZ, v[ 2 ] ); maxZ = ( std::max )( maxZ, v[ 2 ] );
 					minW = ( std::min )( minW, v[ 3 ] ); maxW = ( std::max )( maxW, v[ 3 ] );
 				}
-				sprintf_s( box, "box (%.0f,%.0f)-(%.0f,%.0f) z %.4f..%.4f rhw %.4f..%.4f", minX, minY, maxX, maxY, minZ, maxZ,
+				_snprintf_s( box, _TRUNCATE, "box (%.0f,%.0f)-(%.0f,%.0f) z %.4f..%.4f rhw %.4f..%.4f", minX, minY, maxX, maxY, minZ, maxZ,
 					minW, maxW );
 			}
 			DWORD blend = 0, src = 0, dst = 0, zEnable = 0;
@@ -715,7 +715,7 @@ namespace PSUVR
 			{
 				if( s_effectKinds[ i ].count )
 				{
-					len += sprintf_s( line + len, sizeof( line ) - len, " #%u=%u", i, s_effectKinds[ i ].count );
+					len += _snprintf_s( line + len, sizeof( line ) - len, _TRUNCATE, " #%u=%u", i, s_effectKinds[ i ].count );
 					s_effectKinds[ i ].count = 0;
 				}
 			}
