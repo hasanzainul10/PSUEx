@@ -376,13 +376,21 @@ namespace PSUVR
 			ImGui::Checkbox( "Buzz when the next combo hit can be pressed", &s.m_comboHaptic );
 			Help( "A short buzz in the right hand the moment the game accepts the next attack of a melee combo." );
 			ImGui::Checkbox( "Motion combat (swing / shoot)", &s.m_swingAttack );
-			Help( "Follows what each hand holds: swing a melee hand to attack, pull the trigger of the hand "
-				"holding a gun to shoot. Two-handed and twin weapons swing with either hand. "
+			Help( "Follows what each hand holds: swing or pull the trigger of a melee / technique hand to "
+				"attack or cast, pull the trigger of the hand holding a gun to shoot. Two-handed and twin "
+				"weapons swing with either hand; with a rod the left hand casts slots 3 / 4. "
 				"Needs 'Play with motion controllers'." );
 			if( s.m_swingAttack )
 			{
 				ImGui::Checkbox( "Photon Art gestures", &s.m_paGesture );
-				Help( "Melee: swing with that hand's trigger held. Left-hand gun: left grip + trigger." );
+				Help( "Hold that hand's grip while you swing or pull the trigger: Photon Art, or technique slot 2." );
+				if( s.m_paGesture )
+				{
+					ImGui::Checkbox( "Grip = Photon Art (trigger also attacks)", &s.m_gripPhotonArt );
+					Help( "On: trigger or swing attacks, grip + trigger / swing is the Photon Art; the right grip "
+						"sends no R1 while the right weapon has controls. Off: the old scheme: melee attacks by "
+						"swing only, swing with the trigger held is the Photon Art." );
+				}
 				ImGui::Checkbox( "Turn to where I look before attacking", &s.m_attackFaceLook );
 				ImGui::Checkbox( "Aim free aim with the gun hand", &s.m_controllerAim );
 				Help( "Left stick click turns free aim mode on / off. While on, raising the gun hand into view "

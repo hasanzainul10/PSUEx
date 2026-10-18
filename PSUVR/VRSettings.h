@@ -143,8 +143,12 @@ struct VRSettings
 	// Motion mode combat: swing a melee hand to attack (X), pull a gun hand's trigger to
 	// shoot (R1 = left-hand weapon). Weapon per hand comes from the game.
 	bool m_swingAttack = true;
-	// Swing with that hand's trigger held = Photon Art (Y).
+	// Photon Art (Y) / technique slot 2 gestures.
 	bool m_paGesture = true;
+	// On: trigger click or swing = attack / slot 1, with that hand's grip held = Photon Art /
+	// slot 2 (the right grip sends no R1 while the right weapon has controls). Off: the old
+	// scheme, melee swings only, swing with the trigger held = Photon Art.
+	bool m_gripPhotonArt = true;
 	// Before the first hit of a chain, turn the character toward where you look.
 	bool m_attackFaceLook = true;
 	// Free aim (R3 with a gun): the gun hand steers the aim.

@@ -242,28 +242,84 @@ namespace PSUVR
 				kind == PSUCombat::WeaponKind::Twin;
 		}
 
-		// Whether a hand's gestures are melee swings / gun triggers, from both hands' weapons.
+		// What a hand's gestures do, from both hands' weapons (by category, +0x2D4 / +0x2D8).
+		//   swing: a swing attacks (melee, techniques).
+		//   trigger: a trigger click attacks (guns always; melee / techniques with grip = PA).
+		//   shoot: presses go through Gun() (R1 held for the left hand) instead of RequestAttack.
 		struct HandRoles
 		{
 			bool swing[ 2 ]{};
+			bool trigger[ 2 ]{};
 			bool shoot[ 2 ]{};
+			bool Any( int hand ) const { return swing[ hand ] || trigger[ hand ] || shoot[ hand ]; }
 		};
 
 		HandRoles Roles()
 		{
 			HandRoles roles;
+			const auto &vr = Config::Get().vr;
 			// No combat gestures while a menu or the palette has the input.
-			if( !s_combatValid || !Config::Get().vr.m_swingAttack || s_ui || s_combat.paletteOpen )
+			if( !s_combatValid || !vr.m_swingAttack || s_ui || s_combat.paletteOpen )
 			{
 				return roles;
 			}
+			const bool gripPa = vr.m_gripPhotonArt;
+			const uint32_t rightCat = s_combat.rightCategory;
+			const uint32_t leftCat = s_combat.leftCategory;
 			const PSUCombat::WeaponKind right = PSUCombat::ClassifyWeapon( s_combat.weaponClass );
 			const PSUCombat::WeaponKind left = PSUCombat::ClassifyWeapon( s_combat.leftClass );
-			roles.swing[ 1 ] = MeleeKind( right );
-			// Two-handed and twin weapons: either hand swings.
-			roles.swing[ 0 ] = right == PSUCombat::WeaponKind::Melee2H || right == PSUCombat::WeaponKind::Twin;
-			roles.shoot[ 0 ] = left == PSUCombat::WeaponKind::Gun1H;
-			roles.shoot[ 1 ] = right == PSUCombat::WeaponKind::Gun2H;
+			// Melee or technique on the active weapon: swing (and the trigger with grip = PA).
+			const auto direct = [ & ]( int hand )
+			{
+				roles.swing[ hand ] = true;
+				roles.trigger[ hand ] = gripPa;
+			};
+			// Through Gun(): trigger (and swing for techniques).
+			const auto shoot = [ & ]( int hand, bool swing )
+			{
+				roles.shoot[ hand ] = true;
+				roles.trigger[ hand ] = true;
+				roles.swing[ hand ] = swing;
+			};
+			// Right hand.
+			if( rightCat == 1 || rightCat == 7 || rightCat == 3 || rightCat == 8 )
+			{
+				direct( 1 );  // melee, rod, staff
+			}
+			else if( rightCat == 2 )
+			{
+				shoot( 1, false );  // two-handed gun, the active weapon: no R1
+			}
+			else if( rightCat == 0 && MeleeKind( right ) )
+			{
+				direct( 1 );  // category not read yet / unmapped: by class
+			}
+			else if( rightCat == 0 && right == PSUCombat::WeaponKind::Gun2H )
+			{
+				shoot( 1, false );
+			}
+			// Left hand.
+			if( rightCat == 1 || ( rightCat == 0 && ( right == PSUCombat::WeaponKind::Melee2H || right == PSUCombat::WeaponKind::Twin ) ) )
+			{
+				direct( 0 );  // two-handed and twin melee: either hand swings
+			}
+			else if( leftCat == 9 || leftCat == 0xA )
+			{
+				shoot( 0, false );  // handgun, machinegun
+			}
+			else if( leftCat == 0xB )
+			{
+				shoot( 0, true );  // TCSM: R1 + X / Y
+			}
+			else if( leftCat == 0 && rightCat == 3 )
+			{
+				shoot( 0, true );  // rod: slots 3 / 4 with R1
+			}
+			else if( leftCat == 0 && left == PSUCombat::WeaponKind::Gun1H )
+			{
+				shoot( 0, false );
+			}
+			// 0xC RCSM fires by itself: nothing.
 			return roles;
 		}
 
@@ -414,6 +470,9 @@ namespace PSUVR
 		float s_gunGap = 0.0f;           // after an X press, wait before judging the state
 		float s_gunUpTime = 0.0f;        // how long the left gun has been the active weapon
 		constexpr float kGunSettleSeconds = 0.1f;
+		// Left techniques (TCSM, rod slots 3 / 4) don't change +0x1DC (TCSM and staff are both 0x28,
+		// the rod has no left class): wait this long with R1 held instead.
+		constexpr float kCastSettleSeconds = 0.25f;
 		constexpr float kGunShotWaitSeconds = 0.8f;
 		constexpr float kGunTailSeconds = 0.2f;
 		constexpr float kGunGapSeconds = 0.15f;
@@ -426,6 +485,7 @@ namespace PSUVR
 			{
 				s_gunShot = false;
 				s_gunTail = 0.0f;
+				s_gunUpTime = 0.0f;
 				return;
 			}
 			const bool leftGun = hand == 0;
@@ -448,6 +508,7 @@ namespace PSUVR
 			}
 			if( s_gunTail <= 0.0f )
 			{
+				s_gunUpTime = 0.0f;
 				return;
 			}
 			// Free aim: the gun is already up and R1 would start scan mode; only press X. A
@@ -464,7 +525,8 @@ namespace PSUVR
 			}
 			// +0x710 stays 0x..06 (gun stance) the whole time R1 is held: only the active weapon
 			// tells that the gun is up; give it a moment to settle.
-			if( s_combat.activeClass == ( leftGun ? s_combat.leftClass : s_combat.weaponClass ) )
+			const bool byClass = !leftGun || ( s_combat.leftClass != 0xFFFFFFFFu && s_combat.leftClass != s_combat.weaponClass );
+			if( !byClass || s_combat.activeClass == ( leftGun ? s_combat.leftClass : s_combat.weaponClass ) )
 			{
 				s_gunUpTime += dt;
 			}
@@ -472,7 +534,7 @@ namespace PSUVR
 			{
 				s_gunUpTime = 0.0f;
 			}
-			const bool gunUp = freeAim || s_gunUpTime >= kGunSettleSeconds;
+			const bool gunUp = freeAim || s_gunUpTime >= ( byClass ? kGunSettleSeconds : kCastSettleSeconds );
 			const bool ready = !PSUCombat::Swinging( s_combat );
 			if( ( held || s_gunShot ) && gunUp && ready && s_pulseButton < 0 )
 			{
@@ -702,29 +764,35 @@ namespace PSUVR
 			{
 				for( int hand = 0; hand < 2; ++hand )
 				{
-					if( roles.swing[ hand ] && Swung( hand ) )
+					const bool gripDown = ( VRControllers::State( hand ).buttons & kControllerGrip ) != 0;
+					const bool swung = Swung( hand );  // always run: keeps the armed state current
+					const bool clicked = roles.trigger[ hand ] && ( VRControllers::Pressed( hand ) & kControllerTrigger );
+					if( !( roles.swing[ hand ] && swung ) && !clicked )
 					{
-						// Photon Art: swing while holding that hand's trigger.
-						const bool pa = vr.m_paGesture && s_triggerDown[ hand ];
-						RequestAttack( pa ? kPadY : kPadX, hand, 0, pa ? "swing+trigger" : "swing" );
+						continue;
 					}
-					else if( !roles.swing[ hand ] )
+					// Photon Art / technique slot 2: that hand's grip held (old scheme: a melee
+					// swing with the trigger held).
+					const bool byGrip = vr.m_gripPhotonArt || roles.shoot[ hand ];
+					const bool pa = vr.m_paGesture && ( byGrip ? gripDown : s_triggerDown[ hand ] );
+					if( pa && byGrip && s_grip[ hand ] != Grip::Modifier )
 					{
-						Swung( hand );  // keep the detector armed state current
+						// The grip was the modifier: it sends no L1 / R1.
+						s_grip[ hand ] = Grip::Consumed;
+						s_pulse[ hand ] = 0.0f;
 					}
-					if( roles.shoot[ hand ] && ( VRControllers::Pressed( hand ) & kControllerTrigger ) )
+					if( roles.shoot[ hand ] )
 					{
-						// One click = one shot (even if released before the gun is up). With that
-						// hand's grip held it is the gun's Photon Art, and the grip sends no L1 / R1.
+						// One press = one shot / cast (even if released before the weapon is up).
 						s_gunShot = true;
 						s_gunShotTime = kGunShotWaitSeconds;
-						s_gunPhotonArt = vr.m_paGesture && ( VRControllers::State( hand ).buttons & kControllerGrip ) != 0;
-						if( s_gunPhotonArt && s_grip[ hand ] != Grip::Modifier )
-						{
-							s_grip[ hand ] = Grip::Consumed;
-							s_pulse[ hand ] = 0.0f;
-						}
+						s_gunPhotonArt = pa;
 						VRControllers::Haptic( hand, 0.25f, 0.02f );
+					}
+					else
+					{
+						RequestAttack( pa ? kPadY : kPadX, hand, 0,
+							clicked ? ( pa ? "grip+trigger" : "trigger" ) : ( pa ? ( byGrip ? "grip+swing" : "swing+trigger" ) : "swing" ) );
 					}
 				}
 			}
@@ -1035,7 +1103,10 @@ namespace PSUVR
 			// left grip + trigger is only the gun's Photon Art (Y). Scan stays on R3.
 			const bool freeAim = s_aimModeOn && VRCamera::CameraState() == 4;
 			if( l1 && !modifier && !freeAim ) pad.buttons |= Bit( kPadL1 );
-			if( r1 && !modifier && !freeAim ) pad.buttons |= Bit( kPadR1 );
+			// Grip = Photon Art: the right grip is the right weapon's modifier, not R1 (the left
+			// weapon is used from the left hand).
+			const bool rightGripPa = Config::Get().vr.m_gripPhotonArt && roles.Any( 1 );
+			if( r1 && !modifier && !freeAim && !rightGripPa ) pad.buttons |= Bit( kPadR1 );
 			for( const VRMotionLayout::Entry &entry : VRMotionLayout::kLayout )
 			{
 				if( entry.control == Control::Grip || entry.control == Control::Stick )
@@ -1061,8 +1132,8 @@ namespace PSUVR
 					}
 					continue;
 				}
-				// A hand's trigger is its Photon Art modifier (melee) or its gun trigger.
-				if( entry.control == Control::Trigger && ( roles.swing[ entry.hand ] || roles.shoot[ entry.hand ] ) )
+				// A hand's trigger is its attack (or, old scheme, its melee Photon Art modifier).
+				if( entry.control == Control::Trigger && roles.Any( entry.hand ) )
 				{
 					continue;
 				}

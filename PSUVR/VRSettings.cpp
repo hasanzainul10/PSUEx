@@ -77,6 +77,7 @@ namespace
 	X( m_autoDpad, "autoDpad" ) \
 	X( m_swingAttack, "swingAttack" ) \
 	X( m_paGesture, "paGesture" ) \
+	X( m_gripPhotonArt, "gripPhotonArt" ) \
 	X( m_attackFaceLook, "attackFaceLook" ) \
 	X( m_controllerAim, "controllerAim" ) \
 	X( m_aimInvertPitch, "aimInvertPitch" ) \

@@ -11,8 +11,9 @@ namespace PSUCombat
 	// What a hand holds, from the weapon class (+0x1F0 right, +0x1F4 left). The high digit is
 	// 0 = both hands (two-handed or twin), 1 = right hand, 2 = left hand. Seen so far:
 	// 0x02 two-handed sword, 0x04 twin knuckles, 0x06 spear, 0x0C twin daggers, 0x0E twin sabers,
-	// 0x12 saber, 0x14 dagger, 0x1C sniper rifle, 0x1D shotgun (two-handed guns despite the 1),
-	// 0x22 handgun, 0x25 machinegun, 0x28 RCSM.
+	// 0x12 saber, 0x14 dagger, 0x1C sniper rifle, 0x1D shotgun, 0x1E bow (two-handed guns despite
+	// the 1), 0x22 handgun, 0x25 machinegun, 0x26 rod, 0x28 staff / TCSM / RCSM (the category
+	// below tells those apart).
 	// Gun1H: left-hand gun (fired with R1 held, which makes it the active weapon). Gun2H:
 	// two-handed gun held in both hands (the active weapon, fired with the attack button).
 	// Auto: fires by itself (RCSM), nothing for the hand to do.
@@ -32,7 +33,8 @@ namespace PSUCombat
 			case 0x06: return WeaponKind::Melee2H;
 			case 0x12: return WeaponKind::Melee1H;
 			case 0x1C:
-			case 0x1D: return WeaponKind::Gun2H;
+			case 0x1D:
+			case 0x1E: return WeaponKind::Gun2H;
 			case 0x22: return WeaponKind::Gun1H;
 			case 0x28: return WeaponKind::Auto;
 			default: break;
@@ -78,6 +80,10 @@ namespace PSUCombat
 		uint32_t weaponClass = 0;  // +0x1F0 right hand (0xFFFFFFFF = none)
 		uint32_t leftClass = 0;    // +0x1F4 left hand
 		uint32_t activeClass = 0;  // +0x1DC >> 8: the weapon being used (switches to the left one on R1)
+		// Weapon category (+0x2D4 right, +0x2D8 left; 0 = none): 1 two-handed melee / twin,
+		// 2 two-handed gun, 3 rod, 7 one-handed melee, 8 staff, 9 handgun, A machinegun, B TCSM, C RCSM.
+		uint32_t rightCategory = 0;
+		uint32_t leftCategory = 0;
 		uint16_t facing = 0;       // +0x124, 0x10000 = 360 degrees
 		int16_t aimPitch = 0;      // +0x220, free aim pitch (same units, positive = DOWN); shots fly at -aimPitch
 		bool paletteOpen = false;  // weapon / item palette shown (+0x700 top byte: 7 open, counts down closing)
@@ -111,6 +117,8 @@ namespace PSUCombat
 		out.weaponClass = dword( 0x1F0 );
 		out.leftClass = dword( 0x1F4 );
 		out.activeClass = ( dword( 0x1DC ) >> 8 ) & 0xFF;  // upper half can be 0xFFFF
+		out.rightCategory = dword( 0x2D4 ) & 0xFF;
+		out.leftCategory = dword( 0x2D8 ) & 0xFF;
 		out.facing = static_cast< uint16_t >( dword( 0x124 ) & 0xFFFF );
 		out.aimPitch = *reinterpret_cast< const int16_t * >( player + 0x220 );
 		out.paletteOpen = ( dword( 0x700 ) & 0xFF000000u ) != 0;
