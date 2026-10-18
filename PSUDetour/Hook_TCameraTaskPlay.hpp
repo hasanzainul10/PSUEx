@@ -119,7 +119,7 @@ namespace TCameraTaskPlay
 	// Local player aim angles (16-bit game angles, 0x10000 = 360 degrees, 2 pi / 65536 per unit).
 	constexpr uintptr_t kPlayerTable = 0x009CA8AC;
 	constexpr uintptr_t kPlayerFacing = 0x124;     // int, low 16 bits are the angle
-	constexpr uintptr_t kPlayerAimPitch = 0x220;   // int16
+	constexpr uintptr_t kPlayerAimPitch = 0x220;   // int16, positive = down (shots fly at -this)
 	constexpr float kRadiansToGameAngle = 65536.0f / 6.2831853f;
 	constexpr int kMaxAimPitch = 0x2AAA;           // 60 degrees
 
@@ -135,7 +135,8 @@ namespace TCameraTaskPlay
 		const int wantFacing = static_cast< int >( std::lround( yaw * kRadiansToGameAngle ) );
 		const int delta = static_cast< int16_t >( static_cast< uint16_t >( wantFacing - facing ) );
 		PSUMemory::WriteAbsoluteMemory< int >( player + kPlayerFacing, facing + delta );
-		int wantPitch = static_cast< int >( std::lround( pitch * kRadiansToGameAngle ) );
+		// Our pitch is positive up; the game's aim pitch is positive down.
+		int wantPitch = -static_cast< int >( std::lround( pitch * kRadiansToGameAngle ) );
 		wantPitch = wantPitch > kMaxAimPitch ? kMaxAimPitch : ( wantPitch < -kMaxAimPitch ? -kMaxAimPitch : wantPitch );
 		PSUMemory::WriteAbsoluteMemory< int16_t >( player + kPlayerAimPitch, static_cast< int16_t >( wantPitch ) );
 	}

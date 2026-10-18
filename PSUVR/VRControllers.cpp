@@ -325,7 +325,7 @@ namespace PSUVR
 					float trackYaw = 0.0f, trackPitch = 0.0f;
 					constexpr float kGameAngle = 6.2831853f / 65536.0f;
 					if( Config::Get().vr.m_reticleOnShot && PSUCombat::Read( aim ) &&
-						VRCamera::TrackingAimFromWorld( static_cast< int16_t >( aim.facing ) * kGameAngle, aim.aimPitch * kGameAngle,
+						VRCamera::TrackingAimFromWorld( static_cast< int16_t >( aim.facing ) * kGameAngle, -aim.aimPitch * kGameAngle,
 							trackYaw, trackPitch ) )
 					{
 						const float cp = std::cos( trackPitch );
