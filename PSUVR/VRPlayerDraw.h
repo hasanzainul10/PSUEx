@@ -18,6 +18,12 @@ namespace PSUVR
 
 		// Inside the local player's draw callback.
 		bool DrawingLocalPlayer();
+		// Around the eye passes. PSU_DrawLayer only calls a node whose object has none of the
+		// bits 0x223 in its 16-bit flags at +8; free aim sets one on the local player, so the
+		// character, hands and weapons vanish. With the arms on the controllers the bits are
+		// cleared for the eye passes and restored after.
+		void BeginEyePasses();
+		void EndEyePasses();
 		// Inside the local player's draw in free aim with the arms following: the game's
 		// near-camera hide (0x005089C0) is bypassed.
 		bool ForcingVisible();

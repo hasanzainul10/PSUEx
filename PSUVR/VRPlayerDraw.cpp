@@ -536,6 +536,59 @@ namespace PSUVR
 			return s_drawingLocalPlayer;
 		}
 
+		namespace
+		{
+			constexpr uint16_t kNodeSkipBits = 0x223;
+			uint16_t *s_forcedFlags = nullptr;
+			uint16_t s_savedFlags = 0;
+		}
+
+		void BeginEyePasses()
+		{
+			s_forcedFlags = nullptr;
+			if( VRCamera::CameraState() != 4 || !Config::Get().vr.m_handsFollow || s_patchCount == 0 )
+			{
+				return;
+			}
+			uint8_t *object = *reinterpret_cast< uint8_t ** >( s_patches[ 0 ].node + kNodeObject );
+			if( !Readable( object, 0x10 ) )
+			{
+				return;
+			}
+			uint16_t *flags = reinterpret_cast< uint16_t * >( object + 8 );
+#ifdef _DEBUG
+			static DWORD s_lastLog = 0;
+			if( GetTickCount() - s_lastLog >= 2000 )
+			{
+				s_lastLog = GetTickCount();
+				PSU_LOG( "VRPlayerDraw: free aim node flags +8=%04X (skip bits %04X)\n", *flags, *flags & kNodeSkipBits );
+			}
+#endif
+			if( ( *flags & kNodeSkipBits ) == 0 )
+			{
+				return;
+			}
+			s_savedFlags = *flags;
+			*flags = static_cast< uint16_t >( *flags & ~kNodeSkipBits );
+			s_forcedFlags = flags;
+		}
+
+		void EndEyePasses()
+		{
+			if( !s_forcedFlags )
+			{
+				return;
+			}
+			__try
+			{
+				*s_forcedFlags = static_cast< uint16_t >( ( *s_forcedFlags & ~kNodeSkipBits ) | ( s_savedFlags & kNodeSkipBits ) );
+			}
+			__except( EXCEPTION_EXECUTE_HANDLER )
+			{
+			}
+			s_forcedFlags = nullptr;
+		}
+
 		bool ForcingVisible()
 		{
 			return s_forcingVisible;

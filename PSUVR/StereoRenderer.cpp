@@ -981,6 +981,8 @@ namespace PSUVR
 			m_haveEyeMatrices = InvertMatrix( gameProj, m_invGameProj );
 			const float vignette = vr.m_comfortVignette ? UpdateVignetteStrength() : 0.0f;
 
+			// Free aim hides the local player from the layer draw; keep it for the eyes.
+			VRPlayerDraw::BeginEyePasses();
 			for( int eye = 0; eye < 2; ++eye )
 			{
 				D3DMATRIX eyeView{};
@@ -1016,6 +1018,7 @@ namespace PSUVR
 				m_poses[ eye ] = views[ eye ];
 				m_viewSpacePoses[ eye ] = viewSpace[ eye ];
 			}
+			VRPlayerDraw::EndEyePasses();
 
 			device->SetRenderTarget( 0, gameTarget );
 			device->SetDepthStencilSurface( gameDepth );
