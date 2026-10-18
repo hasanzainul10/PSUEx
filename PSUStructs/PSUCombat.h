@@ -95,6 +95,7 @@ namespace PSUCombat
 		uint32_t rightCategory = 0;
 		uint32_t leftCategory = 0;
 		uint16_t facing = 0;       // +0x124, 0x10000 = 360 degrees
+		float position[ 3 ]{};     // +0x114, game world
 		int16_t aimPitch = 0;      // +0x220, free aim pitch (same units, positive = DOWN); shots fly at -aimPitch
 		bool paletteOpen = false;  // weapon / item palette shown (+0x700 top byte: 7 open, counts down closing)
 	};
@@ -130,6 +131,10 @@ namespace PSUCombat
 		out.rightCategory = dword( 0x2D4 ) & 0xFF;
 		out.leftCategory = dword( 0x2D8 ) & 0xFF;
 		out.facing = static_cast< uint16_t >( dword( 0x124 ) & 0xFFFF );
+		for( int i = 0; i < 3; ++i )
+		{
+			out.position[ i ] = *reinterpret_cast< const float * >( player + 0x114 + i * 4 );
+		}
 		out.aimPitch = *reinterpret_cast< const int16_t * >( player + 0x220 );
 		out.paletteOpen = ( dword( 0x700 ) & 0xFF000000u ) != 0;
 		return true;

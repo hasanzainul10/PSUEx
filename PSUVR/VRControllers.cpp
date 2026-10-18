@@ -190,6 +190,31 @@ namespace PSUVR
 			device->DrawPrimitiveUP( D3DPT_TRIANGLESTRIP, kSegments * 2, strip, sizeof( Vertex ) );
 		}
 
+		// Free aim shot start relative to the player (game world units), from the last free aim bullet.
+		float s_shotOffset[ 3 ]{};
+		bool s_haveShotOffset = false;
+
+		// A point `meters` along the shot line in tracking space: the game's aim (facing +0x124, pitch
+		// -+0x220) from the free aim shot start. False before the first free aim shot.
+		bool ShotLinePoint( float meters, float tracking[ 3 ] )
+		{
+			PSUCombat::State aim{};
+			if( !s_haveShotOffset || VRCamera::CameraState() != 4 || !PSUCombat::Read( aim ) )
+			{
+				return false;
+			}
+			constexpr float kGameAngle = 6.2831853f / 65536.0f;
+			const float yaw = static_cast< int16_t >( aim.facing ) * kGameAngle;
+			const float pitch = -aim.aimPitch * kGameAngle;
+			const auto &vr = Config::Get().vr;
+			const float units = meters * VRCamera::kGameUnitsPerMeter * ( vr.m_worldScale > 0.01f ? vr.m_worldScale : 1.0f );
+			const float world[ 3 ] = {
+				aim.position[ 0 ] + s_shotOffset[ 0 ] + std::sin( yaw ) * std::cos( pitch ) * units,
+				aim.position[ 1 ] + s_shotOffset[ 1 ] + std::sin( pitch ) * units,
+				aim.position[ 2 ] + s_shotOffset[ 2 ] + std::cos( yaw ) * std::cos( pitch ) * units };
+			return VRCamera::WorldToTracking( world, tracking );
+		}
+
 		void DrawReticle( IDirect3DDevice9 *device, float cx, float cy, float radius, bool firing )
 		{
 			radius = radius < 6.0f ? 6.0f : radius;
@@ -205,6 +230,39 @@ namespace PSUVR
 
 	namespace VRControllers
 	{
+		void NoteShotStart( const float start[ 3 ] )
+		{
+			PSUCombat::State player{};
+			if( VRCamera::CameraState() != 4 || !PSUCombat::Read( player ) || !std::isfinite( start[ 0 ] ) )
+			{
+				return;
+			}
+			float offset[ 3 ];
+			for( int i = 0; i < 3; ++i )
+			{
+				offset[ i ] = start[ i ] - player.position[ i ];
+			}
+			// Sanity: by the character (a few metres at most).
+			if( offset[ 0 ] * offset[ 0 ] + offset[ 1 ] * offset[ 1 ] + offset[ 2 ] * offset[ 2 ] > 40.0f * 40.0f )
+			{
+				return;
+			}
+			const bool first = !s_haveShotOffset;
+			for( int i = 0; i < 3; ++i )
+			{
+				s_shotOffset[ i ] = offset[ i ];
+			}
+			s_haveShotOffset = true;
+#ifdef _DEBUG
+			if( first )
+			{
+				PSU_LOG( "VRControllers: free aim shots start at player + (%.2f %.2f %.2f)\n", offset[ 0 ], offset[ 1 ], offset[ 2 ] );
+			}
+#else
+			( void )first;
+#endif
+		}
+
 		void Update( IVRRuntime *runtime )
 		{
 			s_runtime = runtime;
@@ -332,8 +390,15 @@ namespace PSUVR
 						dir = { -std::sin( trackYaw ) * cp, std::sin( trackPitch ), -std::cos( trackYaw ) * cp };
 					}
 					constexpr float kReticleDistance = 6.0f;
-					const V3 point{ origin.x + dir.x * kReticleDistance, origin.y + dir.y * kReticleDistance,
+					V3 point{ origin.x + dir.x * kReticleDistance, origin.y + dir.y * kReticleDistance,
 						origin.z + dir.z * kReticleDistance };
+					// On the real shot line: from where free aim shots start (by the character, not
+					// the hand), along the aim.
+					float shotPoint[ 3 ];
+					if( Config::Get().vr.m_reticleOnShot && ShotLinePoint( kReticleDistance, shotPoint ) )
+					{
+						point = { shotPoint[ 0 ], shotPoint[ 1 ], shotPoint[ 2 ] };
+					}
 					float sx, sy, depth;
 					if( proj.Project( point, sx, sy, depth ) )
 					{

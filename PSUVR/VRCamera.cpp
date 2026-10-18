@@ -560,6 +560,29 @@ namespace PSUVR
 			return true;
 		}
 
+		bool WorldToTracking( const float world[ 3 ], float tracking[ 3 ] )
+		{
+			if( !FirstPersonActive() || !s_haveReference )
+			{
+				return false;
+			}
+			const auto &vr = Config::Get().vr;
+			const float unitsPerMeter = kGameUnitsPerMeter * ( vr.m_worldScale > 0.01f ? vr.m_worldScale : 1.0f );
+			// Undo TrackingToWorld step by step.
+			const float fx = std::sin( s_bodyYaw );
+			const float fz = std::cos( s_bodyYaw );
+			const float dx = world[ 0 ] - s_headWorld.x;
+			const float dy = world[ 1 ] - s_headWorld.y;
+			const float dz = world[ 2 ] - s_headWorld.z;
+			Vec3 local{ -fz * dx + fx * dz, dy, -fx * dx - fz * dz };
+			local = Add( local, Scale( s_eyeLook, -vr.m_fpEyeForward * kGameUnitsPerMeter ) );
+			const Vec3 t = Rotate( YawQuat( s_refYaw ), Scale( local, 1.0f / unitsPerMeter ) );
+			tracking[ 0 ] = t.x + s_fpAnchor.x;
+			tracking[ 1 ] = t.y + s_fpAnchor.y;
+			tracking[ 2 ] = t.z + s_fpAnchor.z;
+			return true;
+		}
+
 		bool TrackingDirToWorld( const float tracking[ 3 ], float world[ 3 ] )
 		{
 			if( !FirstPersonActive() || !s_haveReference )

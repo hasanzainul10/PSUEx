@@ -13,6 +13,7 @@
 #include "../Misc/Log.h"
 #include "../PSUStructs/PSUCombat.h"
 #include "../PSUVR/VRCamera.h"
+#include "../PSUVR/VRControllers.h"
 #include "../PSUVR/VRSyntheticPad.h"
 
 namespace sub_4CB3A0
@@ -27,6 +28,13 @@ namespace sub_4CB3A0
 	void __stdcall Hook_4CB3A0( void *bullet, int spread, int *pitch, int *yaw, float *pitchRad, float *yawRad, void *extra )
 	{
 		pOriginal( bullet, spread, pitch, yaw, pitchRad, yawRad, extra );
+		__try
+		{
+			PSUVR::VRControllers::NoteShotStart( reinterpret_cast< const float * >( static_cast< const uint8_t * >( bullet ) + 0x44 ) );
+		}
+		__except( EXCEPTION_EXECUTE_HANDLER )
+		{
+		}
 #ifdef _DEBUG
 		if( s_logs >= kMaxLogs )
 		{
