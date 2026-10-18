@@ -183,6 +183,8 @@ namespace PSUVR
 
 		bool s_inEyePass = false;
 		bool s_inNameplateDraw = false;
+		int s_passEyeIndex = 0;  // the eye being drawn (valid while s_inEyePass)
+		unsigned char s_spriteBuf[ 64 * 1024 ];
 		IDirect3DSurface9 *s_eyeSurface = nullptr;
 		unsigned s_eyeW = 0;
 		unsigned s_eyeH = 0;
@@ -727,6 +729,95 @@ namespace PSUVR
 #endif
 	}
 
+	const void *StereoRenderer::ReprojectSpriteIfNeeded( IDirect3DDevice9 *device, unsigned primitiveType,
+		unsigned primitiveCount, const void *verts, unsigned stride, void *ret )
+	{
+		// The game's 2D sprite draw; HUD pieces come through it too, but those are drawn in pass B
+		// (not an eye pass) or carry no projected depth.
+		constexpr uintptr_t kSpriteDraw = 0x00747248;
+		if( !s_inEyePass || !device || !verts || reinterpret_cast< uintptr_t >( ret ) != kSpriteDraw ||
+			!Config::Get().vr.m_reprojectSprites || stride < 16 || s_gameW < 1 || s_gameH < 1 || s_eyeW < 1 || s_eyeH < 1 )
+		{
+			return nullptr;
+		}
+		StereoRenderer &self = Get();
+		if( !self.m_haveEyeMatrices || !self.m_haveInvGameView )
+		{
+			return nullptr;
+		}
+		DWORD fvf = 0;
+		if( FAILED( device->GetFVF( &fvf ) ) || ( fvf & D3DFVF_POSITION_MASK ) != D3DFVF_XYZRHW )
+		{
+			return nullptr;
+		}
+		const unsigned vertCount = VertCountForPrimitive( primitiveType, primitiveCount );
+		if( vertCount < 3 || vertCount * stride > sizeof( s_spriteBuf ) )
+		{
+			return nullptr;
+		}
+		// Projected depth only (HUD sprites use z 0); skip garbage (off-screen sentinels).
+		const auto *bytes = static_cast< const unsigned char * >( verts );
+		for( unsigned i = 0; i < vertCount; ++i )
+		{
+			const float *v = reinterpret_cast< const float * >( bytes + i * stride );
+			if( !( v[ 2 ] > 0.0f && v[ 2 ] < 1.0f ) || !std::isfinite( v[ 0 ] ) || !std::isfinite( v[ 1 ] ) ||
+				std::fabs( v[ 0 ] ) > 1.0e5f || std::fabs( v[ 1 ] ) > 1.0e5f || !( v[ 3 ] > 0.0f ) )
+			{
+				return nullptr;
+			}
+		}
+		const int eye = s_passEyeIndex & 1;
+		const float gw = static_cast< float >( s_gameW );
+		const float gh = static_cast< float >( s_gameH );
+		const float ew = static_cast< float >( s_eyeW );
+		const float eh = static_cast< float >( s_eyeH );
+		std::memcpy( s_spriteBuf, verts, vertCount * stride );
+		bool behind = false;
+		for( unsigned i = 0; i < vertCount; ++i )
+		{
+			float *xyzw = reinterpret_cast< float * >( s_spriteBuf + i * stride );
+			// Flat screen -> game camera -> world (homogeneous) -> this eye.
+			const float w = 1.0f / xyzw[ 3 ];
+			const float clip[ 4 ] = { ( ( xyzw[ 0 ] / gw ) * 2.0f - 1.0f ) * w, ( 1.0f - ( xyzw[ 1 ] / gh ) * 2.0f ) * w, xyzw[ 2 ] * w, w };
+			float cam[ 4 ]{}, world[ 4 ]{}, view[ 4 ]{}, eyeClip[ 4 ]{};
+			MulVec4Mat( clip, self.m_invGameProj, cam );
+			MulVec4Mat( cam, self.m_invGameView, world );
+			MulVec4Mat( world, self.m_eyeView[ eye ], view );
+			MulVec4Mat( view, self.m_eyeProj[ eye ], eyeClip );
+			if( !( eyeClip[ 3 ] > 1.0e-6f ) )
+			{
+				behind = true;
+				break;
+			}
+			const float invW = 1.0f / eyeClip[ 3 ];
+			xyzw[ 0 ] = ( eyeClip[ 0 ] * invW * 0.5f + 0.5f ) * ew;
+			xyzw[ 1 ] = ( 0.5f - eyeClip[ 1 ] * invW * 0.5f ) * eh;
+			xyzw[ 2 ] = eyeClip[ 2 ] * invW;
+			xyzw[ 3 ] = invW;
+		}
+		if( behind )
+		{
+			// Behind this eye: nothing to draw (all vertices off screen).
+			for( unsigned i = 0; i < vertCount; ++i )
+			{
+				float *xyzw = reinterpret_cast< float * >( s_spriteBuf + i * stride );
+				xyzw[ 0 ] = -100000.0f;
+				xyzw[ 1 ] = -100000.0f;
+				xyzw[ 2 ] = 0.5f;
+				xyzw[ 3 ] = 1.0f;
+			}
+		}
+#ifdef _DEBUG
+		static unsigned s_logs = 0;
+		if( s_logs < 20 )
+		{
+			++s_logs;
+			PSU_LOG( "Stereo: sprite re-projected for eye %d (%u verts%s)\n", eye, vertCount, behind ? ", behind the eye" : "" );
+		}
+#endif
+		return s_spriteBuf;
+	}
+
 	const void *StereoRenderer::StretchScreenQuadIfNeeded( IDirect3DDevice9 *device, unsigned primitiveType,
 		unsigned primitiveCount, const void *verts, unsigned stride, void *ret )
 	{
@@ -1117,6 +1208,7 @@ namespace PSUVR
 
 			m_gameProj = gameProj;
 			m_haveEyeMatrices = InvertMatrix( gameProj, m_invGameProj );
+			m_haveInvGameView = InvertMatrix( gameView, m_invGameView );
 			const float vignette = vr.m_comfortVignette ? UpdateVignetteStrength() : 0.0f;
 
 			// Free aim hides the local player from the layer draw; keep it for the eyes.
@@ -1146,6 +1238,7 @@ namespace PSUVR
 				device->SetTransform( D3DTS_PROJECTION, &eyeProj );
 
 				SetPassEye( views[ eye ] );
+				s_passEyeIndex = eye;
 				BeginEyePass( eyeSurface, eyeW, eyeH, targetDesc.Width, targetDesc.Height );
 				pass();
 				EndEyePass();

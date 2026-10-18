@@ -185,6 +185,10 @@ struct VRSettings
 	// During eye passes, skip XYZRHW quads that sample an RT filled only by the flat pass
 	// (glare / afterimage ghosts the mono camera over stereo). Shadows rewritten per eye stay.
 	bool m_stereoSkipScreenQuads = true;
+	// During eye passes, world sprites the game projects itself (2D sprite draw 0x00747248 with
+	// a projected depth: item / combo glows, mission overlays) are re-projected for each eye
+	// instead of keeping the flat screen's pixel positions.
+	bool m_reprojectSprites = true;
 	// When stereo is on, also submit the flat game frame as a world-locked quad (HUD stand-in).
 	// Default off — the panel reads as a dark PiP sliding over the stereo floor.
 	bool m_stereoPanel = false;

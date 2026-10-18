@@ -64,6 +64,10 @@ namespace PSUVR
 		// rewritten vertex buffer scaled to the eye RT. Otherwise return nullptr (use original).
 		static const void *StretchScreenQuadIfNeeded( IDirect3DDevice9 *device, unsigned primitiveType,
 			unsigned primitiveCount, const void *verts, unsigned stride, void *ret );
+		// Eye pass: a world sprite the game projected with the flat camera (2D sprite draw with a
+		// projected depth), re-projected for the current eye. Null = draw as is.
+		static const void *ReprojectSpriteIfNeeded( IDirect3DDevice9 *device, unsigned primitiveType,
+			unsigned primitiveCount, const void *verts, unsigned stride, void *ret );
 
 		// True when RT0 is the current eye color target (shadow RTs return false).
 		static bool EyeColorTargetBound( IDirect3DDevice9 *device );
@@ -95,6 +99,8 @@ namespace PSUVR
 	private:
 		D3DMATRIX m_gameProj{};
 		D3DMATRIX m_invGameProj{};
+		D3DMATRIX m_invGameView{};
+		bool m_haveInvGameView = false;
 		D3DMATRIX m_eyeView[ 2 ]{};
 		D3DMATRIX m_eyeProj[ 2 ]{};
 		EyePose m_poses[ 2 ]{};

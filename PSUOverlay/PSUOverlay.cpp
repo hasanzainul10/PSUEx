@@ -437,7 +437,13 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3
 		return D3D_OK;
 	}
 	const void *verts = pVertexStreamZeroData;
-	if( const void *stretched = PSUVR::StereoRenderer::StretchScreenQuadIfNeeded(
+	if( const void *reprojected = PSUVR::StereoRenderer::ReprojectSpriteIfNeeded(
+			pDevice, static_cast< unsigned >( PrimitiveType ), PrimitiveCount,
+			pVertexStreamZeroData, VertexStreamZeroStride, _ReturnAddress() ) )
+	{
+		verts = reprojected;
+	}
+	else if( const void *stretched = PSUVR::StereoRenderer::StretchScreenQuadIfNeeded(
 			pDevice, static_cast< unsigned >( PrimitiveType ), PrimitiveCount,
 			pVertexStreamZeroData, VertexStreamZeroStride, _ReturnAddress() ) )
 	{
