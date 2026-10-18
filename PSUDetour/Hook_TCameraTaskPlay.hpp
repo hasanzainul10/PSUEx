@@ -6,6 +6,9 @@
 #include "../PSUStructs/PSUPlayerData.h"
 #include "../PSUVR/VRCamera.h"
 #include "../PSUVR/VRProbe.h"
+#include "../PSUVR/VRSyntheticPad.h"
+
+#include <cmath>
 
 namespace TCameraTaskPlay
 {
@@ -113,6 +116,30 @@ namespace TCameraTaskPlay
 
 	constexpr uint8_t kCameraStateFreeAim = 4;
 
+	// Local player aim angles (16-bit game angles, 0x10000 = 360 degrees, 2 pi / 65536 per unit).
+	constexpr uintptr_t kPlayerTable = 0x009CA8AC;
+	constexpr uintptr_t kPlayerFacing = 0x124;     // int, low 16 bits are the angle
+	constexpr uintptr_t kPlayerAimPitch = 0x220;   // int16
+	constexpr float kRadiansToGameAngle = 65536.0f / 6.2831853f;
+	constexpr int kMaxAimPitch = 0x2AAA;           // 60 degrees
+
+	void WriteFreeAim( float yaw, float pitch )
+	{
+		const uintptr_t player = PSUMemory::ReadAbsoluteMemory< uintptr_t >( kPlayerTable );
+		if( !player )
+		{
+			return;
+		}
+		// Facing: move by the shortest way to the wanted angle, keeping any whole turns.
+		const int facing = PSUMemory::ReadAbsoluteMemory< int >( player + kPlayerFacing );
+		const int wantFacing = static_cast< int >( std::lround( yaw * kRadiansToGameAngle ) );
+		const int delta = static_cast< int16_t >( static_cast< uint16_t >( wantFacing - facing ) );
+		PSUMemory::WriteAbsoluteMemory< int >( player + kPlayerFacing, facing + delta );
+		int wantPitch = static_cast< int >( std::lround( pitch * kRadiansToGameAngle ) );
+		wantPitch = wantPitch > kMaxAimPitch ? kMaxAimPitch : ( wantPitch < -kMaxAimPitch ? -kMaxAimPitch : wantPitch );
+		PSUMemory::WriteAbsoluteMemory< int16_t >( player + kPlayerAimPitch, static_cast< int16_t >( wantPitch ) );
+	}
+
 	// Calls any time the camera updates.
 	int __fastcall Hook_48DA90( int thisPtr )
 	{
@@ -178,6 +205,15 @@ namespace TCameraTaskPlay
 			camera->m_rotateSpeedH = 0.0f;
 			camera->m_rotateSpeedV = 0.0f;
 			camera->m_turnAcceleration = 0.0f;
+		}
+
+		// Free aim, first person: the aim camera (handler 0x0048E9A0) and the bullets aim along the
+		// player's facing (+0x124) and aim pitch (+0x220), 16-bit game angles. Write the gun
+		// hand's angles there before the update, so the aim matches the hand with no lag.
+		float aimYaw = 0.0f, aimPitch = 0.0f;
+		if( freeAim && PSUVR::VRSyntheticPad::DirectAim( aimYaw, aimPitch ) )
+		{
+			WriteFreeAim( aimYaw, aimPitch );
 		}
 
 		const int result = pOriginal48DA90( thisPtr );

@@ -391,6 +391,11 @@ namespace PSUVR
 				if( s.m_controllerAim )
 				{
 					ImGui::Checkbox( "Invert aim up / down", &s.m_aimInvertPitch );
+					ImGui::Checkbox( "Set the aim directly (first person)", &s.m_aimDirect );
+					Help( "The game's aim follows the gun hand exactly, with no lag. Off: it is steered toward the "
+						"hand like a stick, which trails behind." );
+					ImGui::Checkbox( "Reticle shows where the shot goes", &s.m_reticleOnShot );
+					Help( "On: the reticle sits on the game's actual aim. Off: on the line the gun hand points along." );
 					ImGui::SliderFloat( "Reticle size (degrees)", &s.m_reticleSize, 0.5f, 8.0f, "%.1f" );
 				}
 				Help( "First person: if the character faces another way (after strafing or backing up), the "

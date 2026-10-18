@@ -60,6 +60,7 @@ namespace PSUCombat
 		uint32_t leftClass = 0;    // +0x1F4 left hand
 		uint32_t activeClass = 0;  // +0x1DC >> 8: the weapon being used (switches to the left one on R1)
 		uint16_t facing = 0;       // +0x124, 0x10000 = 360 degrees
+		int16_t aimPitch = 0;      // +0x220, free aim pitch (same units); the aim camera and shots use it
 		bool paletteOpen = false;  // weapon / item palette shown (+0x700 top byte: 7 open, counts down closing)
 	};
 
@@ -92,6 +93,7 @@ namespace PSUCombat
 		out.leftClass = dword( 0x1F4 );
 		out.activeClass = ( dword( 0x1DC ) >> 8 ) & 0xFF;  // upper half can be 0xFFFF
 		out.facing = static_cast< uint16_t >( dword( 0x124 ) & 0xFFFF );
+		out.aimPitch = *reinterpret_cast< const int16_t * >( player + 0x220 );
 		out.paletteOpen = ( dword( 0x700 ) & 0xFF000000u ) != 0;
 		return true;
 	}

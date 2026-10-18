@@ -592,6 +592,17 @@ namespace PSUVR
 			return true;
 		}
 
+		bool TrackingAimFromWorld( float yaw, float pitch, float &trackingYaw, float &trackingPitch )
+		{
+			if( !FirstPersonActive() )
+			{
+				return false;
+			}
+			trackingYaw = WrapAngle( s_refYaw + WrapAngle( yaw - s_bodyYaw ) );
+			trackingPitch = pitch;
+			return true;
+		}
+
 		bool ThirdPersonMode()
 		{
 			return Config::Get().vr.m_cameraMode != "firstPerson" && StereoRenderer::SceneAllowsStereo();

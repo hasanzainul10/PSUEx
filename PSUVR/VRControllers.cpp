@@ -1,5 +1,7 @@
 #include "VRControllers.h"
 
+#include "VRCamera.h"
+#include "../PSUStructs/PSUCombat.h"
 #include "VRControllerSim.h"
 #include "VRSyntheticPad.h"
 
@@ -314,9 +316,21 @@ namespace PSUVR
 				int aimHand = -1;
 				if( c.aimValid && VRSyntheticPad::GunAiming( aimHand ) && aimHand == hand )
 				{
-					// Reticle where the gun points, a few metres out (both eyes converge there).
+					// Reticle a few metres out (both eyes converge there): along the game's aim, which
+					// the shot follows, or along the gun hand.
 					const V3 origin{ c.aimPosition[ 0 ], c.aimPosition[ 1 ], c.aimPosition[ 2 ] };
-					const V3 dir = Rotate( c.aimOrientation, { 0.0f, 0.0f, -1.0f } );
+					V3 dir = Rotate( c.aimOrientation, { 0.0f, 0.0f, -1.0f } );
+					// The shot flies along the player's facing (+0x124) and aim pitch (+0x220).
+					PSUCombat::State aim{};
+					float trackYaw = 0.0f, trackPitch = 0.0f;
+					constexpr float kGameAngle = 6.2831853f / 65536.0f;
+					if( Config::Get().vr.m_reticleOnShot && PSUCombat::Read( aim ) &&
+						VRCamera::TrackingAimFromWorld( static_cast< int16_t >( aim.facing ) * kGameAngle, aim.aimPitch * kGameAngle,
+							trackYaw, trackPitch ) )
+					{
+						const float cp = std::cos( trackPitch );
+						dir = { -std::sin( trackYaw ) * cp, std::sin( trackPitch ), -std::cos( trackYaw ) * cp };
+					}
 					constexpr float kReticleDistance = 6.0f;
 					const V3 point{ origin.x + dir.x * kReticleDistance, origin.y + dir.y * kReticleDistance,
 						origin.z + dir.z * kReticleDistance };

@@ -23,6 +23,9 @@ namespace PSUVR
 		// Free aim with the controller: the game yaw / pitch (radians) the aim is being steered
 		// to this frame. False when the controller isn't aiming.
 		bool LastFreeAim( float &yaw, float &pitch );
+		// Direct free aim (vr.aimDirect, first person): the game yaw / pitch (radians) to write
+		// into the player's aim this update. False = leave the game's aim alone.
+		bool DirectAim( float &yaw, float &pitch );
 
 		// state: DIJOYSTATE2. axisMin / axisMax: the device range of lX, lY, lZ, lRx, lRy,
 		// lRz, slider 0, slider 1. replace: drop the device's own input first (the device is

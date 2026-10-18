@@ -44,9 +44,10 @@ namespace sub_4CB3A0
 			constexpr float kAngle = 360.0f / 65536.0f;
 			++s_logs;
 			PSU_LOG( "VRBullet: type %02X spread %d | yaw %.2f pitch %.2f deg (raw %d %d; rad %.4f %.4f) | start (%.1f %.1f %.1f) "
-				"velocity (%.2f %.2f %.2f) | facing %.2f | camera yaw %.2f pitch %.2f%s | controller yaw %.2f pitch %.2f%s | camera state %d\n",
+				"velocity (%.2f %.2f %.2f) | facing %.2f aim pitch %.2f | camera yaw %.2f pitch %.2f%s | controller yaw %.2f pitch %.2f%s | camera state %d\n",
 				weapon ? weapon[ 0x35 ] : 0xFF, spread, *yaw * kAngle, *pitch * kAngle, *yaw, *pitch, *yawRad, *pitchRad, start[ 0 ],
 				start[ 1 ], start[ 2 ], velocity[ 0 ], velocity[ 1 ], velocity[ 2 ], haveCombat ? combat.facing * kAngle : -1.0f,
+				haveCombat ? combat.aimPitch * kAngle : 0.0f,
 				camYaw * 57.29578f, camPitch * 57.29578f, haveCam ? "" : " (none)", wantYaw * 57.29578f, wantPitch * 57.29578f,
 				haveWant ? "" : " (not aiming)", PSUVR::VRCamera::CameraState() );
 		}

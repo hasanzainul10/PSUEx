@@ -489,6 +489,8 @@ namespace PSUVR
 		// aim by the same angle (at the game's aim speed). Input only: nothing is written.
 		bool s_freeAim = false;
 		float s_lastWantYaw = 0.0f, s_lastWantPitch = 0.0f;
+		bool s_directAim = false;
+		DWORD s_directAimTick = 0;
 		float s_aimHandYaw0 = 0.0f, s_aimHandPitch0 = 0.0f;
 		float s_aimCamYaw0 = 0.0f, s_aimCamPitch0 = 0.0f;
 		DWORD s_aimLogTick = 0;
@@ -518,6 +520,7 @@ namespace PSUVR
 			// The gun hand: the left one with a left-hand gun, otherwise the right.
 			const int hand = s_combatValid && PSUCombat::ClassifyWeapon( s_combat.leftClass ) == PSUCombat::WeaponKind::Gun1H ? 0 : 1;
 			float handYaw = 0.0f, handPitch = 0.0f, camYaw = 0.0f, camPitch = 0.0f;
+			s_directAim = false;
 			if( !active || !AimAngles( VRControllers::State( hand ), handYaw, handPitch ) ||
 				!VRCamera::RenderCameraYawPitch( camYaw, camPitch ) )
 			{
@@ -547,6 +550,16 @@ namespace PSUVR
 			}
 			s_lastWantYaw = wantYaw;
 			s_lastWantPitch = wantPitch;
+			// First person: the camera hook writes these into the game's aim; no stick needed.
+			float worldYaw = 0.0f, worldPitch = 0.0f;
+			if( Config::Get().vr.m_aimDirect && VRCamera::WorldAimFromTracking( handYaw, handPitch, worldYaw, worldPitch ) )
+			{
+				s_directAim = true;
+				s_directAimTick = GetTickCount();
+				pad.rx = 0.0f;
+				pad.ry = 0.0f;
+				return;
+			}
 			const float yawError = WrapRadians( wantYaw - camYaw );
 			const float pitchError = wantPitch - camPitch;
 			const auto drive = []( float error )
@@ -1118,6 +1131,17 @@ namespace PSUVR
 		{
 			hand = 0;  // the left-hand gun aims
 			return s_aimModeOn && s_gunInView && VRCamera::CameraState() == 4;
+		}
+
+		bool DirectAim( float &yaw, float &pitch )
+		{
+			if( !s_directAim || GetTickCount() - s_directAimTick > 200 || VRCamera::CameraState() != 4 )
+			{
+				return false;
+			}
+			yaw = s_lastWantYaw;
+			pitch = Config::Get().vr.m_aimInvertPitch ? -s_lastWantPitch : s_lastWantPitch;
+			return true;
 		}
 
 		bool LastFreeAim( float &yaw, float &pitch )

@@ -150,6 +150,11 @@ struct VRSettings
 	// Free aim (R3 with a gun): the gun hand steers the aim.
 	bool m_controllerAim = true;
 	bool m_aimInvertPitch = false;
+	// Free aim in first person: write the controller's angles into the game's aim (player
+	// facing +0x124 and aim pitch +0x220) instead of steering it with the right stick.
+	bool m_aimDirect = true;
+	// Draw our reticle where the game's aim (and so the shot) points, not along the controller.
+	bool m_reticleOnShot = true;
 	// Free aim reticle radius in degrees of view (the game's shots spread around the centre).
 	float m_reticleSize = 3.0f;
 	float m_swingSpeed = 1.8f;      // m/s to count as a swing
