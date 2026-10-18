@@ -192,8 +192,9 @@ struct VRSettings
 	// a projected depth: item / combo glows, mission overlays) are re-projected for each eye
 	// instead of keeping the flat screen's pixel positions.
 	bool m_reprojectSprites = true;
-	// During eye passes, models the game places at its own camera (sky / background boxes) are
-	// moved to the eye, so the eye isn't left outside them looking at their walls.
+	// During eye passes, models the game places at its own camera (a mission's colour tint sheet)
+	// stay locked to each eye, enlarged for the headset's wider view, instead of standing in the
+	// world where the flat camera is.
 	bool m_recenterSky = true;
 	// When stereo is on, also submit the flat game frame as a world-locked quad (HUD stand-in).
 	// Default off — the panel reads as a dark PiP sliding over the stereo floor.

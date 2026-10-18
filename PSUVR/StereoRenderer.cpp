@@ -257,6 +257,20 @@ namespace PSUVR
 			return true;
 		}
 
+		void MulMatrix( const D3DMATRIX &a, const D3DMATRIX &b, D3DMATRIX &out )
+		{
+			D3DMATRIX r{};
+			for( int i = 0; i < 4; ++i )
+			{
+				for( int j = 0; j < 4; ++j )
+				{
+					r.m[ i ][ j ] = a.m[ i ][ 0 ] * b.m[ 0 ][ j ] + a.m[ i ][ 1 ] * b.m[ 1 ][ j ] + a.m[ i ][ 2 ] * b.m[ 2 ][ j ] +
+						a.m[ i ][ 3 ] * b.m[ 3 ][ j ];
+				}
+			}
+			out = r;
+		}
+
 		void MulVec4Mat( const float v[ 4 ], const D3DMATRIX &m, float out[ 4 ] )
 		{
 			out[ 0 ] = v[ 0 ] * m._11 + v[ 1 ] * m._21 + v[ 2 ] * m._31 + v[ 3 ] * m._41;
@@ -761,17 +775,27 @@ namespace PSUVR
 #endif
 			return false;
 		}
-		out = world;
-		out._41 = self.m_eyePosition[ eye ][ 0 ];
-		out._42 = self.m_eyePosition[ eye ][ 1 ];
-		out._43 = self.m_eyePosition[ eye ][ 2 ];
+		// Camera-locked: world -> game camera space, enlarged across the view (the headset sees
+		// far wider than the game's camera), then from this eye into the world.
+		constexpr float kWiden = 3.0f;
+		D3DMATRIX inCamera{}, widened{};
+		MulMatrix( world, self.m_gameView, inCamera );
+		widened = inCamera;
+		for( int c = 0; c < 4; ++c )
+		{
+			widened.m[ c ][ 0 ] *= kWiden;
+			widened.m[ c ][ 1 ] *= kWiden;
+		}
+		MulMatrix( widened, self.m_invEyeView[ eye ], out );
 #ifdef _DEBUG
 		static unsigned s_logs = 0;
 		if( s_logs < 20 )
 		{
 			++s_logs;
 			const float scale = std::sqrt( world._11 * world._11 + world._12 * world._12 + world._13 * world._13 );
-			PSU_LOG( "Stereo: camera-anchored model (scale %.1f) moved to eye %d, ret=%p\n", scale, eye, ret );
+			PSU_LOG( "Stereo: camera-locked model (scale %.1f) kept on eye %d, ret=%p | in camera [%.2f %.2f %.2f | %.2f %.2f %.2f | %.2f %.2f %.2f | %.2f %.2f %.2f]\n",
+				scale, eye, ret, inCamera._11, inCamera._12, inCamera._13, inCamera._21, inCamera._22, inCamera._23,
+				inCamera._31, inCamera._32, inCamera._33, inCamera._41, inCamera._42, inCamera._43 );
 		}
 #else
 		( void )ret;
@@ -1259,6 +1283,7 @@ namespace PSUVR
 			m_gameProj = gameProj;
 			m_haveEyeMatrices = InvertMatrix( gameProj, m_invGameProj );
 			m_haveInvGameView = InvertMatrix( gameView, m_invGameView );
+			m_gameView = gameView;
 			const float vignette = vr.m_comfortVignette ? UpdateVignetteStrength() : 0.0f;
 
 			// Free aim hides the local player from the layer draw; keep it for the eyes.
@@ -1277,11 +1302,7 @@ namespace PSUVR
 				}
 				m_eyeView[ eye ] = eyeView;
 				m_eyeProj[ eye ] = eyeProj;
-				D3DMATRIX invEyeView{};
-				m_haveEyePosition[ eye ] = InvertMatrix( eyeView, invEyeView );
-				m_eyePosition[ eye ][ 0 ] = invEyeView._41;
-				m_eyePosition[ eye ][ 1 ] = invEyeView._42;
-				m_eyePosition[ eye ][ 2 ] = invEyeView._43;
+				m_haveEyePosition[ eye ] = InvertMatrix( eyeView, m_invEyeView[ eye ] );
 
 				IDirect3DSurface9 *eyeSurface = bridge->EyeSurface( eye );
 				device->SetRenderTarget( 0, eyeSurface );

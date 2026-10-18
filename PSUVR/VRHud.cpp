@@ -117,9 +117,9 @@ namespace PSUVR
 			return boxW >= gw * 0.90f && boxH >= gh * 0.85f;
 		}
 
-		// A menu overlay bigger than the screen (mission menu scanlines, 2026-10-19 log): the 2D sprite
-		// draw (0x00747248) at the HUD depth 0.9, alpha blended, a plain texture of 1024 or more,
-		// overhanging the screen on both axes. Drawn on the panel, not dropped as a background.
+		// A menu overlay wider than the screen (mission menu scanline band, 2026-10-19 screenshot): the
+		// 2D sprite draw (0x00747248), alpha blended, a plain texture, overhanging both side edges.
+		// Drawn on the panel in order, not dropped as a background or placed in the world.
 		bool IsMenuOverlay( IDirect3DDevice9 *device, const void *verts, unsigned vertCount, unsigned stride,
 			unsigned gameW, unsigned gameH, void *ret )
 		{
@@ -133,9 +133,9 @@ namespace PSUVR
 			{
 				return false;
 			}
-			const float z = static_cast< const float * >( verts )[ 2 ];
-			if( std::fabs( z - 0.9f ) > 0.001f || minX >= 0.0f || minY >= 0.0f ||
-				maxX <= static_cast< float >( gameW ) || maxY <= static_cast< float >( gameH ) )
+			const float rhw = static_cast< const float * >( verts )[ 3 ];
+			( void )gameH;
+			if( std::fabs( rhw - 1.0f ) > 0.001f || minX >= 0.0f || maxX <= static_cast< float >( gameW ) )
 			{
 				return false;
 			}
@@ -156,7 +156,7 @@ namespace PSUVR
 				{
 					D3DSURFACE_DESC desc{};
 					tex2d->GetLevelDesc( 0, &desc );
-					plain = ( desc.Usage & D3DUSAGE_RENDERTARGET ) == 0 && desc.Width >= 1024;
+					plain = ( desc.Usage & D3DUSAGE_RENDERTARGET ) == 0;
 					tex2d->Release();
 				}
 			}
@@ -1410,7 +1410,12 @@ namespace PSUVR
 		// (0.94-0.98 seen), which DrawNameplateToEyes uses to place it in 3D.
 		// Exact layer from Hook_PassB (stack scans hit stale return addresses).
 		const int layer = s_passBLayer;
-		if( layer >= 0 )
+		const bool menuOverlay = IsMenuOverlay( device, verts, vertCount, stride, m_w, m_h, ret );
+		if( menuOverlay )
+		{
+			LogLayerRoute( layer, "visor-overlay", verts, vertCount, stride );
+		}
+		if( layer >= 0 && !menuOverlay )
 		{
 			float minX = 0, minY = 0, maxX = 0, maxY = 0;
 			ComputeAabb( verts, vertCount, stride, minX, minY, maxX, maxY );

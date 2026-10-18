@@ -103,7 +103,8 @@ namespace PSUVR
 		D3DMATRIX m_gameProj{};
 		D3DMATRIX m_invGameProj{};
 		D3DMATRIX m_invGameView{};
-		float m_eyePosition[ 2 ][ 3 ]{};  // each eye in game world (inverse eye view)
+		D3DMATRIX m_gameView{};
+		D3DMATRIX m_invEyeView[ 2 ]{};  // each eye in game world
 		bool m_haveEyePosition[ 2 ]{};
 		bool m_haveInvGameView = false;
 		D3DMATRIX m_eyeView[ 2 ]{};
