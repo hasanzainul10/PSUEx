@@ -163,7 +163,7 @@ struct VRSettings
 	// Draw our reticle where the game's aim (and so the shot) points, not along the controller.
 	bool m_reticleOnShot = true;
 	// Free aim: turn the gun hand about the wrist so the barrel points along the shot.
-	bool m_gunPointsAtAim = true;
+	bool m_gunPointsAtAim = false;  // off: the game's pose doesn't line up reliably (bow)
 	// Staff / rod: the weapon stays in the hand as held before the cast instead of following the
 	// casting animation (arms following, first person). The TCSM keeps its animation.
 	bool m_techWeaponStill = true;
