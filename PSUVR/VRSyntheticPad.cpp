@@ -263,6 +263,7 @@ namespace PSUVR
 			// Two-handed and twin weapons: either hand swings.
 			roles.swing[ 0 ] = right == PSUCombat::WeaponKind::Melee2H || right == PSUCombat::WeaponKind::Twin;
 			roles.shoot[ 0 ] = left == PSUCombat::WeaponKind::Gun1H;
+			roles.shoot[ 1 ] = right == PSUCombat::WeaponKind::Gun2H;
 			return roles;
 		}
 
@@ -419,13 +420,16 @@ namespace PSUVR
 
 		void Gun( float dt, const HandRoles &roles, PadState &pad )
 		{
-			if( !roles.shoot[ 0 ] )
+			// The left hand's gun (with R1) or a two-handed gun (the right trigger).
+			const int hand = roles.shoot[ 0 ] ? 0 : ( roles.shoot[ 1 ] ? 1 : -1 );
+			if( hand < 0 )
 			{
 				s_gunShot = false;
 				s_gunTail = 0.0f;
 				return;
 			}
-			const bool held = s_triggerDown[ 0 ];
+			const bool leftGun = hand == 0;
+			const bool held = s_triggerDown[ hand ];
 			if( s_gunShot && ( s_gunShotTime -= dt ) <= 0.0f )
 			{
 				s_gunShot = false;
@@ -433,7 +437,7 @@ namespace PSUVR
 				PSU_LOG( "VRGun: shot dropped (gun didn't come up)\n" );
 #endif
 			}
-			const bool shooting = held || s_gunShot || ( s_lastAttackHand == 0 && s_combat.comboStep > 0 );
+			const bool shooting = held || s_gunShot || ( s_lastAttackHand == hand && s_combat.comboStep > 0 );
 			if( shooting )
 			{
 				s_gunTail = kGunTailSeconds;
@@ -446,9 +450,10 @@ namespace PSUVR
 			{
 				return;
 			}
-			// Free aim: the gun is already up and R1 would start scan mode; only press X.
+			// Free aim: the gun is already up and R1 would start scan mode; only press X. A
+			// two-handed gun is the active weapon already: no R1 either.
 			const bool freeAim = VRCamera::CameraState() == 4;
-			if( !freeAim )
+			if( !freeAim && leftGun )
 			{
 				pad.buttons |= Bit( kPadR1 );
 			}
@@ -459,7 +464,7 @@ namespace PSUVR
 			}
 			// +0x710 stays 0x..06 (gun stance) the whole time R1 is held: only the active weapon
 			// tells that the gun is up; give it a moment to settle.
-			if( s_combat.activeClass == s_combat.leftClass )
+			if( s_combat.activeClass == ( leftGun ? s_combat.leftClass : s_combat.weaponClass ) )
 			{
 				s_gunUpTime += dt;
 			}
@@ -473,7 +478,7 @@ namespace PSUVR
 			{
 				// Same as a swing: the first shot of a chain turns toward where you look. A held
 				// trigger keeps the choice made by its click (grip held = Photon Art).
-				StartAttack( s_gunPhotonArt ? kPadY : kPadX, 0 );
+				StartAttack( s_gunPhotonArt ? kPadY : kPadX, hand );
 				s_gunGap = kAttackPulseSeconds + kGunGapSeconds;
 #ifdef _DEBUG
 				PSU_LOG( "VRGun: %s (%s), step %d\n", s_gunPhotonArt ? "Photon Art" : "shot", s_gunShot ? "click" : "held",
@@ -588,6 +593,7 @@ namespace PSUVR
 		// the gun hand: raised into view = free aim with the reticle, lowered out of view =
 		// back to normal targeting. The mode only does anything with a left-hand gun.
 		float s_r3Pulse = 0.0f;        // R3 held for the current toggle
+		int s_aimHand = -1;            // the hand whose gun free aim follows (-1: none)
 		float s_r3Cooldown = 0.0f;     // wait for the camera to follow before toggling again
 		// Moving (left stick) or turning (right stick) leaves free aim until the sticks rest.
 		float s_stickRest = 1.0f;
@@ -649,7 +655,11 @@ namespace PSUVR
 				pad.buttons |= Bit( kPadR3 );
 				return;
 			}
-			const bool gun = s_combatValid && PSUCombat::FreeAimCapable( s_combat.leftClass );
+			// The gun that aims: the left hand's, or a two-handed one (right hand).
+			s_aimHand = !s_combatValid ? -1 : PSUCombat::FreeAimCapable( s_combat.leftClass ) ? 0
+				: ( PSUCombat::FreeAimCapable( s_combat.weaponClass ) &&
+					PSUCombat::ClassifyWeapon( s_combat.weaponClass ) == PSUCombat::WeaponKind::Gun2H ? 1 : -1 );
+			const bool gun = s_aimHand >= 0;
 			const bool inGame = VRCamera::CameraState() == 4;
 			const auto pushed = []( const ControllerState &c ) {
 				return c.stick[ 0 ] * c.stick[ 0 ] + c.stick[ 1 ] * c.stick[ 1 ] > kStickAimThreshold * kStickAimThreshold;
@@ -659,7 +669,7 @@ namespace PSUVR
 			if( s_aimModeOn && gun && !s_ui )
 			{
 				float angle = 0.0f;
-				if( AngleFromView( VRControllers::State( 0 ), angle ) )
+				if( AngleFromView( VRControllers::State( s_aimHand ), angle ) )
 				{
 					s_gunInView = s_gunInView ? angle < kInViewLeaveRadians : angle < kInViewEnterRadians;
 				}
@@ -704,15 +714,15 @@ namespace PSUVR
 					}
 					if( roles.shoot[ hand ] && ( VRControllers::Pressed( hand ) & kControllerTrigger ) )
 					{
-						// One click = one shot (even if released before the gun is up). With the
-						// left grip held it is the gun's Photon Art, and that grip sends no L1.
+						// One click = one shot (even if released before the gun is up). With that
+						// hand's grip held it is the gun's Photon Art, and the grip sends no L1 / R1.
 						s_gunShot = true;
 						s_gunShotTime = kGunShotWaitSeconds;
 						s_gunPhotonArt = vr.m_paGesture && ( VRControllers::State( hand ).buttons & kControllerGrip ) != 0;
-						if( s_gunPhotonArt && hand == 0 && s_grip[ 0 ] != Grip::Modifier )
+						if( s_gunPhotonArt && s_grip[ hand ] != Grip::Modifier )
 						{
-							s_grip[ 0 ] = Grip::Consumed;
-							s_pulse[ 0 ] = 0.0f;
+							s_grip[ hand ] = Grip::Consumed;
+							s_pulse[ hand ] = 0.0f;
 						}
 						VRControllers::Haptic( hand, 0.25f, 0.02f );
 					}
@@ -1129,7 +1139,7 @@ namespace PSUVR
 
 		bool GunAiming( int &hand )
 		{
-			hand = 0;  // the left-hand gun aims
+			hand = s_aimHand < 0 ? 0 : s_aimHand;
 			return s_aimModeOn && s_gunInView && VRCamera::CameraState() == 4;
 		}
 

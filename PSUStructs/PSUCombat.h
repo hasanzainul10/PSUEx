@@ -11,9 +11,12 @@ namespace PSUCombat
 	// What a hand holds, from the weapon class (+0x1F0 right, +0x1F4 left). The high digit is
 	// 0 = both hands (two-handed or twin), 1 = right hand, 2 = left hand. Seen so far:
 	// 0x02 two-handed sword, 0x04 twin knuckles, 0x06 spear, 0x0C twin daggers, 0x0E twin sabers,
-	// 0x12 saber, 0x14 dagger, 0x22 handgun, 0x25 machinegun, 0x28 RCSM.
+	// 0x12 saber, 0x14 dagger, 0x1C sniper rifle, 0x1D shotgun (two-handed guns despite the 1),
+	// 0x22 handgun, 0x25 machinegun, 0x28 RCSM.
+	// Gun1H: left-hand gun (fired with R1 held, which makes it the active weapon). Gun2H:
+	// two-handed gun held in both hands (the active weapon, fired with the attack button).
 	// Auto: fires by itself (RCSM), nothing for the hand to do.
-	enum class WeaponKind { None, Melee1H, Melee2H, Twin, Gun1H, Auto, Unknown };
+	enum class WeaponKind { None, Melee1H, Melee2H, Twin, Gun1H, Gun2H, Auto, Unknown };
 
 	inline WeaponKind ClassifyWeapon( uint32_t weaponClass )
 	{
@@ -28,6 +31,8 @@ namespace PSUCombat
 			case 0x0E: return WeaponKind::Twin;
 			case 0x06: return WeaponKind::Melee2H;
 			case 0x12: return WeaponKind::Melee1H;
+			case 0x1C:
+			case 0x1D: return WeaponKind::Gun2H;
 			case 0x22: return WeaponKind::Gun1H;
 			case 0x28: return WeaponKind::Auto;
 			default: break;
@@ -41,10 +46,11 @@ namespace PSUCombat
 		}
 	}
 
-	// Left-hand guns the game's free aim (R3) works with. The machinegun has none.
+	// Guns the game's free aim (R3) works with. The machinegun and the shotgun have none.
 	inline bool FreeAimCapable( uint32_t weaponClass )
 	{
-		return ClassifyWeapon( weaponClass ) == WeaponKind::Gun1H && weaponClass != 0x25;
+		const WeaponKind kind = ClassifyWeapon( weaponClass );
+		return ( kind == WeaponKind::Gun1H || kind == WeaponKind::Gun2H ) && weaponClass != 0x25 && weaponClass != 0x1D;
 	}
 
 	inline const char *WeaponKindName( WeaponKind kind )
@@ -56,6 +62,7 @@ namespace PSUCombat
 			case WeaponKind::Melee2H: return "melee 2H";
 			case WeaponKind::Twin: return "twin";
 			case WeaponKind::Gun1H: return "gun 1H";
+			case WeaponKind::Gun2H: return "gun 2H";
 			case WeaponKind::Auto: return "auto";
 			default: return "unknown";
 		}
