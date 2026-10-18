@@ -66,6 +66,9 @@ struct VRSettings
 	float m_hudMapBlackAlpha = 0.15f;
 	// HUD/menu panel in front of the body (lazy follow) instead of locked to the head.
 	bool m_hudFollow = true;
+	// Menus / 2D scenes: a dark backdrop behind the panel instead of the runtime's own
+	// environment (which also shows the play-area boundary).
+	bool m_menuBackdrop = true;
 	// Degrees the head may look away before the panel glides back in front.
 	float m_hudFollowAngle = 35.0f;
 	// How far below eye level the panel sits (meters).

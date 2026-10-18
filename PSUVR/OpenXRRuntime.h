@@ -121,6 +121,9 @@ namespace PSUVR
 		bool m_submitUserHud = false;
 		bool m_submitWorldHud = false;
 		bool m_submitStereo = false;
+		// The eyes were cleared this frame (ClearEyes): submit them as a backdrop projection
+		// layer under the panels, so the runtime never shows its own environment / boundary.
+		bool m_submitBackdrop = false;
 		int m_sessionState = 1; // XR_SESSION_STATE_IDLE
 		int64_t m_displayTime = 0;
 		int64_t m_displayPeriod = 0;

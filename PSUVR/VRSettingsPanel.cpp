@@ -303,6 +303,9 @@ namespace PSUVR
 		if( ImGui::CollapsingHeader( "HUD and menus" ) )
 		{
 			ImGui::Checkbox( "Body-locked panel (lazy follow)", &s.m_hudFollow );
+			ImGui::Checkbox( "Dark backdrop behind menus", &s.m_menuBackdrop );
+			Help( "Menus and 2D screens float on a dark background. Off: SteamVR's own space shows "
+				"around them, and with it the play-area boundary." );
 			ImGui::SliderFloat( "Follow angle (deg)", &s.m_hudFollowAngle, 10.0f, 90.0f, "%.0f" );
 			ImGui::SliderFloat( "Distance (m)", &s.m_hudDistance, 1.0f, 4.0f, "%.2f" );
 			ImGui::SliderFloat( "Size", &s.m_hudSize, 0.5f, 2.0f, "%.2f" );

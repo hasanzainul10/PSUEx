@@ -471,6 +471,11 @@ namespace PSUVR
 					worldLocked = true;
 				}
 				m_xr->SetPanelWorldPose( worldLocked, panelPosition, panelOrientation );
+				if( !stereoSubmitted && Config::Get().vr.m_menuBackdrop )
+				{
+					// Before the panel: clearing resets the panel flag.
+					m_xr->ClearEyes( 0.05f, 0.05f, 0.08f );
+				}
 				m_xr->SubmitSharedTexture( m_bridge->GetSharedTexture() );
 				if( !m_loggedVirtualScreen )
 				{

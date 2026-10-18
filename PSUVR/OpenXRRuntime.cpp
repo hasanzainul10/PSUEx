@@ -995,6 +995,7 @@ namespace PSUVR
 			xrReleaseSwapchainImage( static_cast< XrSwapchain >( m_swapchain[ eye ]  ), &ri );
 		}
 		m_clearedThisFrame = ( cleared == 2 );
+		m_submitBackdrop = m_clearedThisFrame;
 		m_submitQuadLayer = false;
 		return m_clearedThisFrame;
 	}
@@ -1452,10 +1453,13 @@ namespace PSUVR
 		{
 			const bool stereo = m_submitStereo;
 			const bool clearOnly = !m_submitStereo && !m_submitQuadLayer && !m_submitUserHud && !m_submitWorldHud;
-			if( stereo || clearOnly )
+			// Menus / 2D scenes: the cleared eyes go under the panel. With only a quad layer
+			// SteamVR draws its own environment, play-area boundary included.
+			const bool backdrop = !stereo && m_submitBackdrop;
+			if( stereo || clearOnly || backdrop )
 			{
 				XrView located[ 2 ]{ { XR_TYPE_VIEW }, { XR_TYPE_VIEW } };
-				if( clearOnly )
+				if( !stereo )
 				{
 					LocateViewsInSpace( session, localSpace, m_displayTime, located );
 				}
@@ -1578,6 +1582,7 @@ namespace PSUVR
 		XrResult r = xrEndFrame( session, &endInfo );
 		m_frameStarted = false;
 		m_clearedThisFrame = false;
+		m_submitBackdrop = false;
 		m_submitQuadLayer = false;
 		m_submitUserHud = false;
 		m_submitWorldHud = false;
