@@ -319,6 +319,9 @@ namespace PSUVR
 		{
 			ImGui::Checkbox( "Vignette while moving / smooth turning", &s.m_comfortVignette );
 			ImGui::Checkbox( "Place glows and sprite effects in 3D", &s.m_reprojectSprites );
+			ImGui::Checkbox( "Keep the sky around my eyes", &s.m_recenterSky );
+			Help( "The sky / background box the game centres on its camera is centred on your eyes instead, "
+				"so its walls don't show up as a box around your head." );
 			Help( "Item / combo glows and similar effects the game draws as flat sprites are placed in "
 				"3D for each eye. Off: they keep the flat screen's position (doubled, stuck to the view)." );
 			ImGui::SliderFloat( "Vignette strength", &s.m_vignetteStrength, 0.0f, 1.0f, "%.2f" );

@@ -729,6 +729,56 @@ namespace PSUVR
 #endif
 	}
 
+	bool StereoRenderer::RecenterCameraAnchored( const D3DMATRIX &world, D3DMATRIX &out, void *ret )
+	{
+		if( !s_inEyePass || !Config::Get().vr.m_recenterSky )
+		{
+			return false;
+		}
+		StereoRenderer &self = Get();
+		const int eye = s_passEyeIndex & 1;
+		if( !self.m_haveInvGameView || !self.m_haveEyePosition[ eye ] )
+		{
+			return false;
+		}
+		// The game camera's position: the inverse view's translation.
+		const float dx = world._41 - self.m_invGameView._41;
+		const float dy = world._42 - self.m_invGameView._42;
+		const float dz = world._43 - self.m_invGameView._43;
+		constexpr float kAnchoredUnits = 0.05f;  // exactly at the camera, give or take float noise
+		if( dx * dx + dy * dy + dz * dz > kAnchoredUnits * kAnchoredUnits )
+		{
+#ifdef _DEBUG
+			// Diagnostics: big models near the camera that aren't exactly at it (a sky placed at
+			// the camera's x / z only would show here).
+			static unsigned s_nearLogs = 0;
+			const float scale = std::sqrt( world._11 * world._11 + world._12 * world._12 + world._13 * world._13 );
+			if( s_nearLogs < 30 && scale > 20.0f && dx * dx + dz * dz < 2500.0f )
+			{
+				++s_nearLogs;
+				PSU_LOG( "Stereo: big model near the camera (scale %.1f, offset %.2f %.2f %.2f) ret=%p\n", scale, dx, dy, dz, ret );
+			}
+#endif
+			return false;
+		}
+		out = world;
+		out._41 = self.m_eyePosition[ eye ][ 0 ];
+		out._42 = self.m_eyePosition[ eye ][ 1 ];
+		out._43 = self.m_eyePosition[ eye ][ 2 ];
+#ifdef _DEBUG
+		static unsigned s_logs = 0;
+		if( s_logs < 20 )
+		{
+			++s_logs;
+			const float scale = std::sqrt( world._11 * world._11 + world._12 * world._12 + world._13 * world._13 );
+			PSU_LOG( "Stereo: camera-anchored model (scale %.1f) moved to eye %d, ret=%p\n", scale, eye, ret );
+		}
+#else
+		( void )ret;
+#endif
+		return true;
+	}
+
 	const void *StereoRenderer::ReprojectSpriteIfNeeded( IDirect3DDevice9 *device, unsigned primitiveType,
 		unsigned primitiveCount, const void *verts, unsigned stride, void *ret )
 	{
@@ -1227,6 +1277,11 @@ namespace PSUVR
 				}
 				m_eyeView[ eye ] = eyeView;
 				m_eyeProj[ eye ] = eyeProj;
+				D3DMATRIX invEyeView{};
+				m_haveEyePosition[ eye ] = InvertMatrix( eyeView, invEyeView );
+				m_eyePosition[ eye ][ 0 ] = invEyeView._41;
+				m_eyePosition[ eye ][ 1 ] = invEyeView._42;
+				m_eyePosition[ eye ][ 2 ] = invEyeView._43;
 
 				IDirect3DSurface9 *eyeSurface = bridge->EyeSurface( eye );
 				device->SetRenderTarget( 0, eyeSurface );

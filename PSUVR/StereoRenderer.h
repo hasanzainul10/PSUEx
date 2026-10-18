@@ -66,6 +66,9 @@ namespace PSUVR
 			unsigned primitiveCount, const void *verts, unsigned stride, void *ret );
 		// Eye pass: a world sprite the game projected with the flat camera (2D sprite draw with a
 		// projected depth), re-projected for the current eye. Null = draw as is.
+		// Eye pass: a world matrix that puts a model at the game camera (sky box) is moved to the
+		// current eye. True = use `out`.
+		static bool RecenterCameraAnchored( const D3DMATRIX &world, D3DMATRIX &out, void *ret );
 		static const void *ReprojectSpriteIfNeeded( IDirect3DDevice9 *device, unsigned primitiveType,
 			unsigned primitiveCount, const void *verts, unsigned stride, void *ret );
 
@@ -100,6 +103,8 @@ namespace PSUVR
 		D3DMATRIX m_gameProj{};
 		D3DMATRIX m_invGameProj{};
 		D3DMATRIX m_invGameView{};
+		float m_eyePosition[ 2 ][ 3 ]{};  // each eye in game world (inverse eye view)
+		bool m_haveEyePosition[ 2 ]{};
 		bool m_haveInvGameView = false;
 		D3DMATRIX m_eyeView[ 2 ]{};
 		D3DMATRIX m_eyeProj[ 2 ]{};

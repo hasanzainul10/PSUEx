@@ -690,6 +690,12 @@ HRESULT APIENTRY PSUOverlay::Hook_Swapchain_Release( IDirect3DSwapChain9 *pSwapC
 HRESULT APIENTRY PSUOverlay::Hook_SetTransform( LPDIRECT3DDEVICE9 pDevice, D3DTRANSFORMSTATETYPE State, const D3DMATRIX *pMatrix )
 {
 	FrameTrace::OnSetTransform( State, pMatrix, _ReturnAddress() );
+	D3DMATRIX recentered;
+	if( State == D3DTS_WORLD && pMatrix &&
+		PSUVR::StereoRenderer::RecenterCameraAnchored( *pMatrix, recentered, _ReturnAddress() ) )
+	{
+		return m_pOriginalSetTransform( pDevice, State, &recentered );
+	}
 	return m_pOriginalSetTransform( pDevice, State, pMatrix );
 }
 
