@@ -149,8 +149,8 @@ DetoursHookAll()
 #ifdef _DEBUG
 		sub_4F9F50::Hook();			// Aim shot angles (free aim reticle calibration log)
 		sub_4D50B0::Hook();			// Technique aim (log each technique once)
+		sub_4CB3A0::Hook();			// Bullet direction (log)
 #endif
-		sub_4CB3A0::Hook();			// Bullet direction (muzzle for VR gun pointing; Debug log)
 		sub_814040::Hook();			// File Processing
 
 		HardwareInfo::Hook();		// CPU Affinity Fix

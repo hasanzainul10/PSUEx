@@ -288,7 +288,7 @@ namespace PSUVR
 			}
 			else if( rightCat == 2 )
 			{
-				shoot( 1, false );  // two-handed gun, the active weapon: no R1
+				shoot( PSUCombat::GunHand( s_combat.weaponClass ), false );  // two-handed gun, the active weapon: no R1
 			}
 			else if( rightCat == 0 && MeleeKind( right ) )
 			{
@@ -296,12 +296,16 @@ namespace PSUVR
 			}
 			else if( rightCat == 0 && right == PSUCombat::WeaponKind::Gun2H )
 			{
-				shoot( 1, false );
+				shoot( PSUCombat::GunHand( s_combat.weaponClass ), false );
 			}
 			// Left hand.
 			if( rightCat == 1 || ( rightCat == 0 && ( right == PSUCombat::WeaponKind::Melee2H || right == PSUCombat::WeaponKind::Twin ) ) )
 			{
 				direct( 0 );  // two-handed and twin melee: either hand swings
+			}
+			else if( roles.shoot[ 0 ] )
+			{
+				// The bow: the left hand already fires it.
 			}
 			else if( leftCat == 9 || leftCat == 0xA )
 			{
@@ -488,7 +492,10 @@ namespace PSUVR
 				s_gunUpTime = 0.0f;
 				return;
 			}
-			const bool leftGun = hand == 0;
+			// R1 only for a left-hand weapon; a two-handed gun (also the bow, held left) is active already.
+			const bool twoHanded = s_combat.rightCategory == 2 ||
+				( s_combat.rightCategory == 0 && PSUCombat::ClassifyWeapon( s_combat.weaponClass ) == PSUCombat::WeaponKind::Gun2H );
+			const bool leftGun = hand == 0 && !twoHanded;
 			const bool held = s_triggerDown[ hand ];
 			if( s_gunShot && ( s_gunShotTime -= dt ) <= 0.0f )
 			{
@@ -717,10 +724,11 @@ namespace PSUVR
 				pad.buttons |= Bit( kPadR3 );
 				return;
 			}
-			// The gun that aims: the left hand's, or a two-handed one (right hand).
+			// The gun that aims: the left hand's, or a two-handed one (the hand it is held in).
 			s_aimHand = !s_combatValid ? -1 : PSUCombat::FreeAimCapable( s_combat.leftClass ) ? 0
 				: ( PSUCombat::FreeAimCapable( s_combat.weaponClass ) &&
-					PSUCombat::ClassifyWeapon( s_combat.weaponClass ) == PSUCombat::WeaponKind::Gun2H ? 1 : -1 );
+					PSUCombat::ClassifyWeapon( s_combat.weaponClass ) == PSUCombat::WeaponKind::Gun2H
+						? PSUCombat::GunHand( s_combat.weaponClass ) : -1 );
 			const bool gun = s_aimHand >= 0;
 			const bool inGame = VRCamera::CameraState() == 4;
 			const auto pushed = []( const ControllerState &c ) {

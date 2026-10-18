@@ -11,8 +11,8 @@ namespace PSUCombat
 	// What a hand holds, from the weapon class (+0x1F0 right, +0x1F4 left). The high digit is
 	// 0 = both hands (two-handed or twin), 1 = right hand, 2 = left hand. Seen so far:
 	// 0x02 two-handed sword, 0x04 twin knuckles, 0x06 spear, 0x0C twin daggers, 0x0E twin sabers,
-	// 0x12 saber, 0x14 dagger, 0x1C sniper rifle, 0x1D shotgun, 0x1E bow (two-handed guns despite
-	// the 1), 0x22 handgun, 0x25 machinegun, 0x26 rod, 0x28 staff / TCSM / RCSM (the category
+	// 0x12 saber, 0x14 dagger, 0x1C sniper rifle, 0x1D shotgun, 0x1E bow, 0x21 (two-handed guns despite
+	// the high digit; 0x21 not identified yet), 0x22 handgun, 0x25 machinegun, 0x26 rod, 0x28 staff / TCSM / RCSM (the category
 	// below tells those apart).
 	// Gun1H: left-hand gun (fired with R1 held, which makes it the active weapon). Gun2H:
 	// two-handed gun held in both hands (the active weapon, fired with the attack button).
@@ -34,7 +34,8 @@ namespace PSUCombat
 			case 0x12: return WeaponKind::Melee1H;
 			case 0x1C:
 			case 0x1D:
-			case 0x1E: return WeaponKind::Gun2H;
+			case 0x1E:
+			case 0x21: return WeaponKind::Gun2H;
 			case 0x22: return WeaponKind::Gun1H;
 			case 0x28: return WeaponKind::Auto;
 			default: break;
@@ -48,11 +49,20 @@ namespace PSUCombat
 		}
 	}
 
-	// Guns the game's free aim (R3) works with. The machinegun and the shotgun have none.
+	// Guns the game's free aim (R3) works with. The machinegun and the shotgun have none; 0x21
+	// is untested.
 	inline bool FreeAimCapable( uint32_t weaponClass )
 	{
 		const WeaponKind kind = ClassifyWeapon( weaponClass );
-		return ( kind == WeaponKind::Gun1H || kind == WeaponKind::Gun2H ) && weaponClass != 0x25 && weaponClass != 0x1D;
+		return ( kind == WeaponKind::Gun1H || kind == WeaponKind::Gun2H ) && weaponClass != 0x25 && weaponClass != 0x1D &&
+			weaponClass != 0x21;
+	}
+
+	// The hand a two-handed gun is held (and so aimed and fired) with: the bow sits in the left
+	// hand (its arrows start at the left weapon bone), the others in the right.
+	inline int GunHand( uint32_t weaponClass )
+	{
+		return weaponClass == 0x1E ? 0 : 1;
 	}
 
 	inline const char *WeaponKindName( WeaponKind kind )

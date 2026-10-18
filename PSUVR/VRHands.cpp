@@ -37,13 +37,9 @@ namespace PSUVR
 		const D3DXVECTOR3 kModelForward( 0.0f, 0.0f, 1.0f );
 		DWORD s_headHiddenTick = 0;
 
-		// Free aim gun pointing: each hand's weapon bone (the bone after the hand: 18 / 23) in game
-		// world as last drawn, and the barrel direction in that bone's axes, learned from where
-		// bullets start (the muzzle).
-		D3DXMATRIX s_attachWorld[ 2 ];
-		DWORD s_attachTick[ 2 ]{};
-		D3DXVECTOR3 s_barrelLocal[ 2 ];
-		bool s_haveBarrel[ 2 ]{};
+		// Free aim gun pointing: the weapon bone is the bone after the hand (18 / 23). Free aim
+		// bullets start at a fixed point, not at the muzzle, so the barrel can't be learned from
+		// them; the game's own free aim pose holds the gun along the shot instead.
 
 		// Staff / rod held still while casting: each weapon bone relative to its hand bone, taken
 		// while not attacking, and put back over the casting animation.
@@ -530,38 +526,6 @@ namespace PSUVR
 			s_inWorldQuery = false;
 		}
 
-		void NoteMuzzle( const float start[ 3 ] )
-		{
-			int hand = 0;
-			if( !VRSyntheticPad::GunAiming( hand ) )
-			{
-				hand = 0;  // the left-hand gun
-			}
-			hand &= 1;
-			if( !s_attachTick[ hand ] || GetTickCount() - s_attachTick[ hand ] > 300 )
-			{
-				return;
-			}
-			const D3DXMATRIX &attach = s_attachWorld[ hand ];
-			const D3DXVECTOR3 offset( start[ 0 ] - attach._41, start[ 1 ] - attach._42, start[ 2 ] - attach._43 );
-			if( D3DXVec3Length( &offset ) < 0.05f )
-			{
-				return;
-			}
-			// Into the weapon bone's axes (rows are unit axes, so the inverse is the transpose).
-			D3DXMATRIX axes = Axes( attach ), axesT;
-			D3DXMatrixTranspose( &axesT, &axes );
-			D3DXVECTOR3 local;
-			D3DXVec3TransformNormal( &local, &offset, &axesT );
-			local = Normalized( local, local );
-			s_barrelLocal[ hand ] = s_haveBarrel[ hand ] ? Normalized( s_barrelLocal[ hand ] * 0.7f + local * 0.3f, local ) : local;
-			s_haveBarrel[ hand ] = true;
-#ifdef _DEBUG
-			PSU_LOG( "VRHands: muzzle %.2f units from the %s weapon bone, barrel (local) %.3f %.3f %.3f\n", D3DXVec3Length( &offset ),
-				hand == 0 ? "left" : "right", s_barrelLocal[ hand ].x, s_barrelLocal[ hand ].y, s_barrelLocal[ hand ].z );
-#endif
-		}
-
 		bool HeadHidden()
 		{
 			return s_headHiddenTick != 0 && GetTickCount() - s_headHiddenTick < 300;
@@ -695,6 +659,30 @@ namespace PSUVR
 						VRControllers::Haptic( 0, 0.3f, 0.03f );
 						VRControllers::Haptic( 1, 0.3f, 0.03f );
 					}
+				}
+
+				// Free aim gun pointing, part 1: in the game's own pose (before anything here moves
+				// the arms) the gun points along the shot, so the shot direction in the animated
+				// weapon bone's axes is the barrel. Taken fresh each frame: nothing accumulates.
+				int aimHand = 0;
+				const bool pointGun = vr.m_gunPointsAtAim && haveCombat && w > 0.0f && VRSyntheticPad::GunAiming( aimHand ) &&
+					pads[ aimHand & 1 ]->gripValid;
+				aimHand &= 1;
+				D3DXVECTOR3 shot( 0.0f, 0.0f, 1.0f ), barrelLocal( 1.0f, 0.0f, 0.0f );
+				if( pointGun )
+				{
+					constexpr float kGameAngle = 6.2831853f / 65536.0f;
+					const float yaw = static_cast< int16_t >( combat.facing ) * kGameAngle;
+					const float pitch = -combat.aimPitch * kGameAngle;
+					// Game forward is ( sin, 0, cos ) of the yaw; +0x220 is positive down.
+					shot = D3DXVECTOR3( std::sin( yaw ) * std::cos( pitch ), std::sin( pitch ), std::cos( yaw ) * std::cos( pitch ) );
+					D3DXMATRIX attachWorld, axesT;
+					D3DXMatrixMultiply( &attachWorld, reinterpret_cast< const D3DXMATRIX * >( out + ( kArms[ aimHand ].hand + 1 ) * 16 ),
+						&world );
+					const D3DXMATRIX axes = Axes( attachWorld );
+					D3DXMatrixTranspose( &axesT, &axes );
+					D3DXVec3TransformNormal( &barrelLocal, &shot, &axesT );
+					barrelLocal = Normalized( barrelLocal, D3DXVECTOR3( 1.0f, 0.0f, 0.0f ) );
 				}
 
 				// The game turns the character only when it moves; turn the upper body to where
@@ -926,33 +914,18 @@ namespace PSUVR
 						}
 					}
 				}
-				// Free aim: turn the gun hand about the wrist so the barrel points along the shot
-				// (the player's facing and aim pitch, which bullets fly along; +0x220 is positive down).
-				int aimHand = 0;
-				if( vr.m_gunPointsAtAim && haveCombat && w > 0.0f && VRSyntheticPad::GunAiming( aimHand ) &&
-					pads[ aimHand & 1 ]->gripValid )
+				// Free aim gun pointing, part 2: turn the gun hand about the wrist so that barrel
+				// points along the shot (the player's facing and aim pitch, which bullets fly along).
+				if( pointGun )
 				{
-					const Arm &arm = kArms[ aimHand & 1 ];
-					constexpr float kGameAngle = 6.2831853f / 65536.0f;
-					const float yaw = static_cast< int16_t >( combat.facing ) * kGameAngle;
-					const float pitch = -combat.aimPitch * kGameAngle;
-					// Game forward is ( sin, 0, cos ) of the yaw.
-					const D3DXVECTOR3 shot( std::sin( yaw ) * std::cos( pitch ), std::sin( pitch ), std::cos( yaw ) * std::cos( pitch ) );
+					const Arm &arm = kArms[ aimHand ];
 					D3DXMATRIX handWorld, attachWorld;
 					D3DXMatrixMultiply( &handWorld, reinterpret_cast< const D3DXMATRIX * >( out + arm.hand * 16 ), &world );
 					D3DXMatrixMultiply( &attachWorld, reinterpret_cast< const D3DXMATRIX * >( out + ( arm.hand + 1 ) * 16 ), &world );
 					const D3DXVECTOR3 wrist( handWorld._41, handWorld._42, handWorld._43 );
+					const D3DXMATRIX axes = Axes( attachWorld );
 					D3DXVECTOR3 barrel;
-					if( s_haveBarrel[ aimHand & 1 ] )
-					{
-						const D3DXMATRIX axes = Axes( attachWorld );
-						D3DXVec3TransformNormal( &barrel, &s_barrelLocal[ aimHand & 1 ], &axes );
-					}
-					else
-					{
-						// Until a shot shows where the muzzle is: the wrist -> weapon bone direction.
-						barrel = D3DXVECTOR3( attachWorld._41, attachWorld._42, attachWorld._43 ) - wrist;
-					}
+					D3DXVec3TransformNormal( &barrel, &barrelLocal, &axes );
 					barrel = Normalized( barrel, shot );
 					const D3DXMATRIX turn = RotationAbout( barrel, shot, wrist );
 					D3DXMATRIX modelDelta;
@@ -960,14 +933,6 @@ namespace PSUVR
 					D3DXMatrixMultiply( &modelDelta, &modelDelta, &toModel );
 					ApplyToSubtree( out, records, arm.hand, modelDelta );
 				}
-				// Remember each hand's weapon bone as drawn, for NoteMuzzle.
-				for( int hand = 0; hand < 2; ++hand )
-				{
-					D3DXMatrixMultiply( &s_attachWorld[ hand ], reinterpret_cast< const D3DXMATRIX * >( out + ( kArms[ hand ].hand + 1 ) * 16 ),
-						&world );
-					s_attachTick[ hand ] = GetTickCount();
-				}
-
 				FoldBody( out, records, vr.m_fpBody );
 				Note( tracked ? kSolved : kSkipTracking );
 			}

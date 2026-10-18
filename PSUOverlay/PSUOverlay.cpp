@@ -353,9 +353,22 @@ HRESULT APIENTRY PSUOverlay::Hook_Reset( LPDIRECT3DDEVICE9 pDevice, D3DPRESENT_P
 	return tmpReset;
 }
 
+#ifdef _DEBUG
+// Where a screen-space draw happens, for the VREffect log: 0 eye pass, 1 pass B / UI, 2 other.
+static int EffectDrawWhere()
+{
+	return PSUVR::StereoRenderer::InEyePass() ? 0
+		: ( FrameTrace::CurrentPassAddress() == 0x004FDBC0 || PSUVR::VRHud::Get().InUiDraw() ) ? 1 : 2;
+}
+#endif
+
 HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitive( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, UINT StartVertex, UINT PrimitiveCount )
 {
 	FrameTrace::OnDrawPrimitive( false );
+#ifdef _DEBUG
+	PSUVR::StereoRenderer::NoteEffectDraw( pDevice, EffectDrawWhere(), static_cast< unsigned >( PrimitiveType ), PrimitiveCount,
+		nullptr, 0, _ReturnAddress() );
+#endif
 	if( PSUVR::StereoRenderer::ShouldSkipScreenQuad( pDevice, _ReturnAddress(), PrimitiveCount, false ) )
 	{
 		return D3D_OK;
@@ -377,6 +390,10 @@ HRESULT APIENTRY PSUOverlay::Hook_SetVertexShaderConstantF( LPDIRECT3DDEVICE9 pD
 HRESULT APIENTRY PSUOverlay::Hook_DrawIndexedPrimitive( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, INT BaseVertexIndex, UINT MinIndex, UINT NumVertices, UINT StartIndex, UINT PrimitiveCount )
 {
 	FrameTrace::OnDrawIndexed( _ReturnAddress() );
+#ifdef _DEBUG
+	PSUVR::StereoRenderer::NoteEffectDraw( pDevice, EffectDrawWhere(), static_cast< unsigned >( PrimitiveType ), PrimitiveCount,
+		nullptr, 0, _ReturnAddress() );
+#endif
 	if( PSUVR::StereoRenderer::ShouldSkipScreenQuad( pDevice, _ReturnAddress(), PrimitiveCount, false ) )
 	{
 		return D3D_OK;
@@ -404,6 +421,10 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawIndexedPrimitive( LPDIRECT3DDEVICE9 pDevic
 HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount, const void *pVertexStreamZeroData, UINT VertexStreamZeroStride )
 {
 	FrameTrace::OnDrawPrimitive( true );
+#ifdef _DEBUG
+	PSUVR::StereoRenderer::NoteEffectDraw( pDevice, EffectDrawWhere(), static_cast< unsigned >( PrimitiveType ), PrimitiveCount,
+		pVertexStreamZeroData, VertexStreamZeroStride, _ReturnAddress() );
+#endif
 	if( PSUVR::StereoRenderer::ShouldSkipScreenQuad( pDevice, _ReturnAddress(), PrimitiveCount, true ) )
 	{
 		return D3D_OK;

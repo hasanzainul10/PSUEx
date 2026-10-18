@@ -589,6 +589,144 @@ namespace PSUVR
 		return skip;
 	}
 
+#ifdef _DEBUG
+	namespace
+	{
+		// One kind of screen-space draw: where it is drawn from and with what texture.
+		struct EffectKind
+		{
+			void *ret;
+			unsigned texW, texH;
+			int where;
+			unsigned count;  // draws since the last summary
+		};
+		constexpr unsigned kMaxEffectKinds = 160;
+		EffectKind s_effectKinds[ kMaxEffectKinds ];
+		unsigned s_effectKindCount = 0;
+		unsigned s_effectLogs = 0;
+		constexpr unsigned kMaxEffectLogs = 800;
+		DWORD s_effectSummaryTick = 0;
+		DWORD s_techTick = 0;
+	}
+#endif
+
+	void StereoRenderer::NoteTechnique()
+	{
+#ifdef _DEBUG
+		s_techTick = GetTickCount();
+#endif
+	}
+
+	void StereoRenderer::NoteEffectDraw( IDirect3DDevice9 *device, int where, unsigned primitiveType, unsigned primitiveCount,
+		const void *verts, unsigned stride, void *ret )
+	{
+#ifdef _DEBUG
+		if( !device || s_effectLogs >= kMaxEffectLogs || !Config::Get().vr.m_enabled )
+		{
+			return;
+		}
+		DWORD fvf = 0;
+		IDirect3DVertexShader9 *vs = nullptr;
+		device->GetVertexShader( &vs );
+		if( vs )
+		{
+			vs->Release();
+			return;
+		}
+		if( FAILED( device->GetFVF( &fvf ) ) || ( fvf & D3DFVF_POSITION_MASK ) != D3DFVF_XYZRHW )
+		{
+			return;
+		}
+		unsigned texW = 0, texH = 0;
+		int texRT = -1;
+		IDirect3DBaseTexture9 *texture = nullptr;
+		if( SUCCEEDED( device->GetTexture( 0, &texture ) ) && texture )
+		{
+			IDirect3DTexture9 *tex2d = nullptr;
+			texture->QueryInterface( __uuidof( IDirect3DTexture9 ), reinterpret_cast< void ** >( &tex2d ) );
+			texture->Release();
+			if( tex2d )
+			{
+				D3DSURFACE_DESC desc{};
+				tex2d->GetLevelDesc( 0, &desc );
+				texW = desc.Width;
+				texH = desc.Height;
+				texRT = ( desc.Usage & D3DUSAGE_RENDERTARGET ) ? 1 : 0;
+				tex2d->Release();
+			}
+		}
+		const DWORD now = GetTickCount();
+		const bool tech = s_techTick && now - s_techTick < 2000;
+		EffectKind *kind = nullptr;
+		for( unsigned i = 0; i < s_effectKindCount; ++i )
+		{
+			EffectKind &k = s_effectKinds[ i ];
+			if( k.ret == ret && k.texW == texW && k.texH == texH && k.where == where )
+			{
+				kind = &k;
+				break;
+			}
+		}
+		if( !kind && s_effectKindCount < kMaxEffectKinds )
+		{
+			kind = &s_effectKinds[ s_effectKindCount ];
+			*kind = { ret, texW, texH, where, 0 };
+			const unsigned id = s_effectKindCount++;
+			char box[ 160 ] = "(vertex buffer)";
+			const unsigned vertCount = VertCountForPrimitive( primitiveType, primitiveCount );
+			if( verts && stride >= 16 && vertCount > 0 && vertCount < 4096 )
+			{
+				float minX = 1.0e30f, minY = 1.0e30f, maxX = -1.0e30f, maxY = -1.0e30f;
+				float minZ = 1.0e30f, maxZ = -1.0e30f, minW = 1.0e30f, maxW = -1.0e30f;
+				const auto *bytes = static_cast< const unsigned char * >( verts );
+				for( unsigned i = 0; i < vertCount; ++i )
+				{
+					const float *v = reinterpret_cast< const float * >( bytes + i * stride );
+					minX = ( std::min )( minX, v[ 0 ] ); maxX = ( std::max )( maxX, v[ 0 ] );
+					minY = ( std::min )( minY, v[ 1 ] ); maxY = ( std::max )( maxY, v[ 1 ] );
+					minZ = ( std::min )( minZ, v[ 2 ] ); maxZ = ( std::max )( maxZ, v[ 2 ] );
+					minW = ( std::min )( minW, v[ 3 ] ); maxW = ( std::max )( maxW, v[ 3 ] );
+				}
+				sprintf_s( box, "box (%.0f,%.0f)-(%.0f,%.0f) z %.4f..%.4f rhw %.4f..%.4f", minX, minY, maxX, maxY, minZ, maxZ,
+					minW, maxW );
+			}
+			DWORD blend = 0, src = 0, dst = 0, zEnable = 0;
+			device->GetRenderState( D3DRS_ALPHABLENDENABLE, &blend );
+			device->GetRenderState( D3DRS_SRCBLEND, &src );
+			device->GetRenderState( D3DRS_DESTBLEND, &dst );
+			device->GetRenderState( D3DRS_ZENABLE, &zEnable );
+			static const char *const kWhere[] = { "eye pass", "pass B/UI", "other" };
+			++s_effectLogs;
+			PSU_LOG( "VREffect: new #%u %s%s ret=%p prim=%u x%u fvf=0x%X tex=%ux%u rt=%d blend=%lu %lu/%lu z=%lu %s | camera state %d\n",
+				id, kWhere[ where < 0 || where > 2 ? 2 : where ], tech ? " TECH" : "", ret, primitiveType, primitiveCount, fvf,
+				texW, texH, texRT, blend, src, dst, zEnable, box, VRCamera::CameraState() );
+		}
+		if( kind )
+		{
+			++kind->count;
+		}
+		// Every 10 s: how often each kind was drawn (only kinds drawn in that time).
+		if( now - s_effectSummaryTick >= 10000 )
+		{
+			s_effectSummaryTick = now;
+			char line[ 512 ];
+			int len = sprintf_s( line, "VREffect: last 10 s:" );
+			for( unsigned i = 0; i < s_effectKindCount && len < 440; ++i )
+			{
+				if( s_effectKinds[ i ].count )
+				{
+					len += sprintf_s( line + len, sizeof( line ) - len, " #%u=%u", i, s_effectKinds[ i ].count );
+					s_effectKinds[ i ].count = 0;
+				}
+			}
+			++s_effectLogs;
+			PSU_LOG( "%s\n", line );
+		}
+#else
+		( void )device; ( void )where; ( void )primitiveType; ( void )primitiveCount; ( void )verts; ( void )stride; ( void )ret;
+#endif
+	}
+
 	const void *StereoRenderer::StretchScreenQuadIfNeeded( IDirect3DDevice9 *device, unsigned primitiveType,
 		unsigned primitiveCount, const void *verts, unsigned stride, void *ret )
 	{

@@ -42,6 +42,13 @@ namespace PSUVR
 		// True while remapping Pass B nameplates/bubbles onto eye RTs (skip HUD capture).
 		static bool InNameplateDraw();
 
+		// Debug diagnostics for screen-space (XYZRHW) effect draws ("VREffect:" log). where: 0 eye
+		// pass, 1 pass B / UI, 2 elsewhere. verts may be null (vertex buffer draws). Release: no-op.
+		static void NoteEffectDraw( IDirect3DDevice9 *device, int where, unsigned primitiveType, unsigned primitiveCount,
+			const void *verts, unsigned stride, void *ret );
+		// A technique is being cast: effect draws in the next 2 s are tagged "tech".
+		static void NoteTechnique();
+
 		// Unproject game XYZRHW (Pass B nameplate/bubble) and draw onto both eye RTs.
 		void DrawNameplateToEyes( IDirect3DDevice9 *device, unsigned primitiveType,
 			unsigned primitiveCount, const void *verts, unsigned stride );

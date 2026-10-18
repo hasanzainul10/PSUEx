@@ -12,6 +12,7 @@
 #include "../Misc/Log.h"
 #include "../PSUStructs/PSUCombat.h"
 #include "../PSUStructs/PSUPlayerData.h"
+#include "../PSUVR/StereoRenderer.h"
 #include "../PSUVR/VRCamera.h"
 #include "../PSUVR/VRSyntheticPad.h"
 
@@ -36,6 +37,7 @@ namespace sub_4D50B0
 
 	void __cdecl NoteTech( const void *tech )
 	{
+		PSUVR::StereoRenderer::NoteTechnique();
 		if( s_logs >= kMaxLogs || !tech )
 		{
 			return;
