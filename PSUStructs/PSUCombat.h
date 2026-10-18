@@ -8,9 +8,10 @@
 // 2026-10-15; see docs/ADDRESS_MAP.md "Local player struct fields").
 namespace PSUCombat
 {
-	// What a hand holds, from the weapon class (+0x1F0 right, +0x1F4 left). Seen so far:
-	// 0x04 twin knuckles, 0x06 spear, 0x12 saber, 0x22 handgun. The high digit looks like
-	// 0 = two-handed, 1 = right-hand one-handed, 2 = left-hand one-handed (guns).
+	// What a hand holds, from the weapon class (+0x1F0 right, +0x1F4 left). The high digit is
+	// 0 = both hands (two-handed or twin), 1 = right hand, 2 = left hand. Seen so far:
+	// 0x02 two-handed sword, 0x04 twin knuckles, 0x06 spear, 0x0C twin daggers, 0x0E twin sabers,
+	// 0x12 saber, 0x14 dagger, 0x22 handgun, 0x25 machinegun, 0x28 RCSM.
 	enum class WeaponKind { None, Melee1H, Melee2H, Twin, Gun1H, Unknown };
 
 	inline WeaponKind ClassifyWeapon( uint32_t weaponClass )
@@ -21,7 +22,9 @@ namespace PSUCombat
 		}
 		switch( weaponClass )
 		{
-			case 0x04: return WeaponKind::Twin;
+			case 0x04:
+			case 0x0C:
+			case 0x0E: return WeaponKind::Twin;
 			case 0x06: return WeaponKind::Melee2H;
 			case 0x12: return WeaponKind::Melee1H;
 			case 0x22: return WeaponKind::Gun1H;
@@ -34,6 +37,12 @@ namespace PSUCombat
 			case 2: return WeaponKind::Gun1H;
 			default: return WeaponKind::Unknown;
 		}
+	}
+
+	// Left-hand guns the game's free aim (R3) works with. The machinegun has none.
+	inline bool FreeAimCapable( uint32_t weaponClass )
+	{
+		return ClassifyWeapon( weaponClass ) == WeaponKind::Gun1H && weaponClass != 0x25;
 	}
 
 	inline const char *WeaponKindName( WeaponKind kind )

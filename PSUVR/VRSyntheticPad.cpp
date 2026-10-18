@@ -649,7 +649,7 @@ namespace PSUVR
 				pad.buttons |= Bit( kPadR3 );
 				return;
 			}
-			const bool gun = s_combatValid && PSUCombat::ClassifyWeapon( s_combat.leftClass ) == PSUCombat::WeaponKind::Gun1H;
+			const bool gun = s_combatValid && PSUCombat::FreeAimCapable( s_combat.leftClass );
 			const bool inGame = VRCamera::CameraState() == 4;
 			const auto pushed = []( const ControllerState &c ) {
 				return c.stick[ 0 ] * c.stick[ 0 ] + c.stick[ 1 ] * c.stick[ 1 ] > kStickAimThreshold * kStickAimThreshold;
