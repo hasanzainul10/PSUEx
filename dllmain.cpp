@@ -144,6 +144,8 @@ DetoursHookAll()
 		sub_50B790::Hook();			// Chat Logger
 		sub_74B490::Hook();			// memset Crash
 		sub_74B760::Hook();			// Bone pose build (VR hands)
+		sub_5089C0::Hook();			// Near-camera hide (VR hands in free aim)
+		sub_562070::Hook();			// Model part cull (VR hands in free aim)
 #ifdef _DEBUG
 		sub_4F9F50::Hook();			// Aim shot angles (free aim reticle calibration log)
 		sub_4D50B0::Hook();			// Technique aim (log each technique once)

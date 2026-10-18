@@ -41,6 +41,7 @@ namespace PSUVR
 		Patch s_patches[ kMaxPatches ]{};
 		unsigned s_patchCount = 0;
 		bool s_drawingLocalPlayer = false;
+		bool s_forcingVisible = false;
 		void *s_playerObject = nullptr;
 		bool s_loggedPatch = false;
 		bool s_loggedDiscovery = false;
@@ -101,9 +102,77 @@ namespace PSUVR
 				return;
 			}
 			NotePlayerModel( object );
+			// Free aim (arms following): the layer draw already reaches this node (BeginEyePasses);
+			// the game still hides the gun's model and culls the player against its aim camera.
+			const auto &vr = Config::Get().vr;
+			const bool forceShow = VRCamera::CameraState() == 4 && vr.m_handsFollow;
+			uint8_t *flags = static_cast< uint8_t * >( object );
+			// The models (body, weapons and other attachments) draw only with +0x14 bit 0x10.
+			constexpr unsigned kMaxModels = 32;
+			uint32_t *modelFlags[ kMaxModels ];
+			uint32_t savedModelFlags[ kMaxModels ];
+			unsigned modelCount = 0;
+			if( forceShow && vr.m_freeAimShowModels )
+			{
+				__try
+				{
+					const uint8_t *render = *reinterpret_cast< const uint8_t * const * >( flags + 0x160 );
+					auto add = [ & ]( const void *model )
+					{
+						if( modelCount < kMaxModels && Readable( model, 0x18 ) )
+						{
+							uint32_t *f = reinterpret_cast< uint32_t * >( static_cast< uint8_t * >( const_cast< void * >( model ) ) + 0x14 );
+							modelFlags[ modelCount ] = f;
+							savedModelFlags[ modelCount ] = *f;
+							++modelCount;
+						}
+					};
+					if( Readable( render, 0x4C ) )
+					{
+						add( *reinterpret_cast< void * const * >( render + 0x04 ) );
+						add( *reinterpret_cast< void * const * >( render + 0x20 ) );
+						add( *reinterpret_cast< void * const * >( render + 0x24 ) );
+						// Attachment lists (render +0x30, 7 heads): node +0 model, +8 next.
+						for( unsigned list = 0; list < 7; ++list )
+						{
+							const uint8_t *node = *reinterpret_cast< const uint8_t * const * >( render + 0x30 + list * 4 );
+							for( unsigned n = 0; node && n < 16 && Readable( node, 0x10 ); ++n )
+							{
+								add( *reinterpret_cast< void * const * >( node ) );
+								node = *reinterpret_cast< const uint8_t * const * >( node + 8 );
+							}
+						}
+					}
+					unsigned hidden = 0;
+					for( unsigned i = 0; i < modelCount; ++i )
+					{
+						hidden += ( *modelFlags[ i ] & 0x10 ) ? 0 : 1;
+						*modelFlags[ i ] |= 0x10;
+					}
+					static DWORD s_lastModelLog = 0;
+					if( GetTickCount() - s_lastModelLog >= 2000 )
+					{
+						s_lastModelLog = GetTickCount();
+#ifdef _DEBUG
+						PSU_LOG( "VRPlayerDraw: free aim models %u, %u without the draw bit (body +14=%08lX)\n", modelCount, hidden,
+							modelCount ? static_cast< unsigned long >( savedModelFlags[ 0 ] ) : 0ul );
+#endif
+					}
+				}
+				__except( EXCEPTION_EXECUTE_HANDLER )
+				{
+					modelCount = 0;
+				}
+			}
 			s_drawingLocalPlayer = true;
+			s_forcingVisible = forceShow;
 			original( object );
+			s_forcingVisible = false;
 			s_drawingLocalPlayer = false;
+			for( unsigned i = 0; i < modelCount; ++i )
+			{
+				*modelFlags[ i ] = ( *modelFlags[ i ] & ~0x10u ) | ( savedModelFlags[ i ] & 0x10u );
+			}
 			if( s_divModel )
 			{
 				VRHands::AfterPlayerDraw( const_cast< uint8_t * >( s_divModel ) );
@@ -465,6 +534,16 @@ namespace PSUVR
 			{
 			}
 			s_forcedFlags = nullptr;
+		}
+
+		bool IgnoreNearHide()
+		{
+			return s_forcingVisible && Config::Get().vr.m_freeAimNoNearHide;
+		}
+
+		bool IgnorePartCull()
+		{
+			return s_forcingVisible && Config::Get().vr.m_freeAimNoPartCull;
 		}
 
 		void OnBonePose( float *out, const uint8_t *skeleton )

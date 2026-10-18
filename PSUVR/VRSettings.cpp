@@ -82,6 +82,9 @@ namespace
 	X( m_aimInvertPitch, "aimInvertPitch" ) \
 	X( m_aimDirect, "aimDirect" ) \
 	X( m_reticleOnShot, "reticleOnShot" ) \
+	X( m_freeAimShowModels, "freeAimShowModels" ) \
+	X( m_freeAimNoNearHide, "freeAimNoNearHide" ) \
+	X( m_freeAimNoPartCull, "freeAimNoPartCull" ) \
 	X( m_reticleSize, "reticleSize" ) \
 	X( m_swingSpeed, "swingSpeed" ) \
 	X( m_comboBuffer, "comboBuffer" ) \
