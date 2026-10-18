@@ -18,5 +18,8 @@ namespace PSUVR
 		void AfterPlayerDraw( void *model );
 		// The pose has the head folded away (vr.fpBody "headless"): no neck clip plane needed.
 		bool HeadHidden();
+		// A bullet started at this muzzle (game world): learns the gun's barrel direction in
+		// the hand's weapon bone, so free aim can point the barrel along the shot.
+		void NoteMuzzle( const float start[ 3 ] );
 	}
 }

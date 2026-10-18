@@ -396,6 +396,8 @@ namespace PSUVR
 						"hand like a stick, which trails behind." );
 					ImGui::Checkbox( "Reticle shows where the shot goes", &s.m_reticleOnShot );
 					Help( "On: the reticle sits on the game's actual aim. Off: on the line the gun hand points along." );
+					ImGui::Checkbox( "Gun points at the reticle", &s.m_gunPointsAtAim );
+					Help( "In free aim the gun hand turns at the wrist so the barrel points where the shot goes." );
 					ImGui::TextDisabled( "Hands and gun in free aim (turn one off if free aim gets slow):" );
 					ImGui::Checkbox( "Ignore near-camera hide", &s.m_freeAimNoNearHide );
 					ImGui::Checkbox( "Ignore part culling", &s.m_freeAimNoPartCull );

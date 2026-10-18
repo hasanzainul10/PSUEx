@@ -155,6 +155,8 @@ struct VRSettings
 	bool m_aimDirect = true;
 	// Draw our reticle where the game's aim (and so the shot) points, not along the controller.
 	bool m_reticleOnShot = true;
+	// Free aim: turn the gun hand about the wrist so the barrel points along the shot.
+	bool m_gunPointsAtAim = true;
 	// Free aim hides the player; what is undone to keep the hands and gun in view (arms
 	// following, first person). Each can be turned off to find what costs frame rate.
 	bool m_freeAimNoNearHide = true;     // ignore the near-camera hide (0x005089C0) for the player

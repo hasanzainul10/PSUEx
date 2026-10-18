@@ -2,8 +2,9 @@
 * Bullet direction (TItemBulletBase): sets a new bullet's yaw / pitch (16-bit game angles and
 * radians) from the facing (with spread and a small auto-pitch) or, for firing type 0x1B,
 * the shot aim globals, then the velocity at bullet +0x50; the start (muzzle) is at +0x44.
-* Called by every gun bullet's setup (TItemBulletNormal 0x004E3B90). Debug only: logs each
-* bullet next to the game camera and the controller aim, to calibrate the VR free aim reticle.
+* Called by every gun bullet's setup (TItemBulletNormal 0x004E3B90). The start is the muzzle:
+* VR hands learn the gun's barrel direction from it. Debug: logs each bullet next to the game
+* camera and the controller aim.
 */
 
 #pragma once
@@ -12,6 +13,7 @@
 #include "../Misc/Log.h"
 #include "../PSUStructs/PSUCombat.h"
 #include "../PSUVR/VRCamera.h"
+#include "../PSUVR/VRHands.h"
 #include "../PSUVR/VRSyntheticPad.h"
 
 namespace sub_4CB3A0
@@ -26,6 +28,15 @@ namespace sub_4CB3A0
 	void __stdcall Hook_4CB3A0( void *bullet, int spread, int *pitch, int *yaw, float *pitchRad, float *yawRad, void *extra )
 	{
 		pOriginal( bullet, spread, pitch, yaw, pitchRad, yawRad, extra );
+		__try
+		{
+			// Where the bullet starts is the gun's muzzle: free aim points the barrel with it.
+			PSUVR::VRHands::NoteMuzzle( reinterpret_cast< const float * >( static_cast< const uint8_t * >( bullet ) + 0x44 ) );
+		}
+		__except( EXCEPTION_EXECUTE_HANDLER )
+		{
+		}
+#ifdef _DEBUG
 		if( s_logs >= kMaxLogs )
 		{
 			return;
@@ -54,6 +65,7 @@ namespace sub_4CB3A0
 		__except( EXCEPTION_EXECUTE_HANDLER )
 		{
 		}
+#endif
 	}
 
 	void Hook()
