@@ -148,6 +148,7 @@ DetoursHookAll()
 		sub_562070::Hook();			// Model part cull (VR hands in free aim)
 #ifdef _DEBUG
 		sub_4F9F50::Hook();			// Aim shot angles (free aim reticle calibration log)
+		sub_4D50B0::Hook();			// Technique aim (log each technique once)
 #endif
 		sub_814040::Hook();			// File Processing
 

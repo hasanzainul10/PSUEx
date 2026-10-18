@@ -45,5 +45,6 @@
 #include "PSUDetour/Hook_005089C0_NearCull.hpp"
 #include "PSUDetour/Hook_00562070_PartCull.hpp"
 #include "PSUDetour/Hook_004F9F50_AimShot.hpp"
+#include "PSUDetour/Hook_004D50B0_TechAim.hpp"
 #include "PSUDetour/Hook_0076E330_Audio_PlayADX.hpp"
 #include "PSUDetour/Hook_00814040.hpp"

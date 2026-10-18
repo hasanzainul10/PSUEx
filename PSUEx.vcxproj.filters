@@ -237,6 +237,9 @@
     <ClInclude Include="PSUDetour\Hook_004F9F50_AimShot.hpp">
       <Filter>Header Files\PSUFunction</Filter>
     </ClInclude>
+    <ClInclude Include="PSUDetour\Hook_004D50B0_TechAim.hpp">
+      <Filter>Header Files\PSUFunction</Filter>
+    </ClInclude>
     <ClInclude Include="PSUOverlay\Interface\CameraDisplay.h">
       <Filter>Header Files\PSUOverlay\Interface</Filter>
     </ClInclude>
