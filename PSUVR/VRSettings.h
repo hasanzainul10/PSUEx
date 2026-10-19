@@ -175,6 +175,15 @@ struct VRSettings
 	// to that point, so shots land on the reticle. Replaces reticleOnShot / gunPointsAtAim.
 	bool m_aimLeash = true;
 	float m_aimLeashMeters = 10.0f;
+	// Free aim: the gun hand turned by this much (degrees, in the controller's frame) so the gun
+	// model lines up with the reticle. Per weapon type; set in the headset with both grips + right
+	// stick while aiming.
+	float m_gunAdjustHandgunPitch = 0.0f;
+	float m_gunAdjustHandgunYaw = 0.0f;
+	float m_gunAdjustBowPitch = 0.0f;
+	float m_gunAdjustBowYaw = 0.0f;
+	float m_gunAdjustRiflePitch = 0.0f;
+	float m_gunAdjustRifleYaw = 0.0f;
 	// Staff / rod: the weapon stays in the hand as held before the cast instead of following the
 	// casting animation (arms following, first person). The TCSM keeps its animation.
 	bool m_techWeaponStill = true;

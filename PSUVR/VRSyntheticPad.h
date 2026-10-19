@@ -18,6 +18,8 @@ namespace PSUVR
 		// Free aim mode with the gun raised and the game in free aim: the hand whose ray aims
 		// (0 left, 1 right). Our reticle is drawn there and the game's centre reticle hidden.
 		bool GunAiming( int &hand );
+		// While GunAiming: the gun angle adjustment (degrees) for the weapon being aimed.
+		bool GunAdjust( float &pitchDegrees, float &yawDegrees );
 		// VRAction bits fired by grip chords since the last call.
 		unsigned TakeActions();
 		// Free aim with the controller: the game yaw / pitch (radians) the aim is being steered

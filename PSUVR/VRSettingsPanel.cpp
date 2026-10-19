@@ -427,6 +427,13 @@ namespace PSUVR
 					if( s.m_aimLeash )
 					{
 						ImGui::SliderFloat( "Reticle distance (m)", &s.m_aimLeashMeters, 3.0f, 30.0f, "%.0f" );
+						ImGui::TextDisabled( "Gun angle (in the headset: both grips + right stick while aiming):" );
+						ImGui::SliderFloat( "Handgun up / down", &s.m_gunAdjustHandgunPitch, -60.0f, 60.0f, "%.0f" );
+						ImGui::SliderFloat( "Handgun left / right", &s.m_gunAdjustHandgunYaw, -60.0f, 60.0f, "%.0f" );
+						ImGui::SliderFloat( "Bow up / down", &s.m_gunAdjustBowPitch, -60.0f, 60.0f, "%.0f" );
+						ImGui::SliderFloat( "Bow left / right", &s.m_gunAdjustBowYaw, -60.0f, 60.0f, "%.0f" );
+						ImGui::SliderFloat( "Rifle up / down", &s.m_gunAdjustRiflePitch, -60.0f, 60.0f, "%.0f" );
+						ImGui::SliderFloat( "Rifle left / right", &s.m_gunAdjustRifleYaw, -60.0f, 60.0f, "%.0f" );
 					}
 					ImGui::Checkbox( "Reticle shows where the shot goes", &s.m_reticleOnShot );
 					Help( "On: the reticle sits on the game's actual aim. Off: on the line the gun hand points along." );

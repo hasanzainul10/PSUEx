@@ -89,6 +89,12 @@ namespace
 	X( m_gunPointsAtAim, "gunPointsAtAim" ) \
 	X( m_aimLeash, "aimLeash" ) \
 	X( m_aimLeashMeters, "aimLeashMeters" ) \
+	X( m_gunAdjustHandgunPitch, "gunAdjustHandgunPitch" ) \
+	X( m_gunAdjustHandgunYaw, "gunAdjustHandgunYaw" ) \
+	X( m_gunAdjustBowPitch, "gunAdjustBowPitch" ) \
+	X( m_gunAdjustBowYaw, "gunAdjustBowYaw" ) \
+	X( m_gunAdjustRiflePitch, "gunAdjustRiflePitch" ) \
+	X( m_gunAdjustRifleYaw, "gunAdjustRifleYaw" ) \
 	X( m_techWeaponStill, "techWeaponStill" ) \
 	X( m_freeAimNoNearHide, "freeAimNoNearHide" ) \
 	X( m_freeAimNoPartCull, "freeAimNoPartCull" ) \

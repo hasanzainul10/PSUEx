@@ -845,6 +845,19 @@ namespace PSUVR
 					D3DXMatrixRotationX( &tweak, vr.m_handPitch * kDeg );
 					D3DXMatrixRotationZ( &tweakRoll, ( hand == 0 ? -vr.m_handRoll : vr.m_handRoll ) * kDeg );
 					D3DXMatrixMultiply( &tweak, &tweak, &tweakRoll );
+					// Free aim (leash): the gun hand's own angle adjustment, so the gun model lines up
+					// with the reticle on the controller's line. Yaw about the controller's up (Y).
+					int gunHand = 0;
+					float adjustPitch = 0.0f, adjustYaw = 0.0f;
+					if( vr.m_aimLeash && VRSyntheticPad::GunAiming( gunHand ) && gunHand == hand &&
+						VRSyntheticPad::GunAdjust( adjustPitch, adjustYaw ) )
+					{
+						D3DXMATRIX adjust, adjustYawM;
+						D3DXMatrixRotationX( &adjust, adjustPitch * kDeg );
+						D3DXMatrixRotationY( &adjustYawM, adjustYaw * kDeg );
+						D3DXMatrixMultiply( &adjust, &adjust, &adjustYawM );
+						D3DXMatrixMultiply( &tweak, &tweak, &adjust );
+					}
 					D3DXMatrixMultiply( &k, &k, &tweak );
 					D3DXMatrixMultiply( &desired, &k, &controller );
 					D3DXMatrixTranspose( &handT, &handAxes );

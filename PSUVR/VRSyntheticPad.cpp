@@ -78,6 +78,36 @@ namespace PSUVR
 
 		bool s_aimModeOn = false;         // free aim mode (left stick click)
 		bool s_gunInView = false;         // the gun hand is raised into view
+		bool s_gunAdjusting = false;      // both grips + right stick are turning the gun model
+		bool s_gunAdjustDirty = false;
+
+		// The settings pair for the gun being aimed: bow, other two-handed guns, or handguns.
+		bool GunAdjustFields( float *&pitch, float *&yaw )
+		{
+			auto &vr = Config::Get().vr;
+			if( !s_combatValid )
+			{
+				return false;
+			}
+			const bool twoHanded = s_combat.rightCategory == 2 ||
+				PSUCombat::ClassifyWeapon( s_combat.weaponClass ) == PSUCombat::WeaponKind::Gun2H;
+			if( twoHanded && s_combat.weaponClass == 0x1E )
+			{
+				pitch = &vr.m_gunAdjustBowPitch;
+				yaw = &vr.m_gunAdjustBowYaw;
+			}
+			else if( twoHanded )
+			{
+				pitch = &vr.m_gunAdjustRiflePitch;
+				yaw = &vr.m_gunAdjustRifleYaw;
+			}
+			else
+			{
+				pitch = &vr.m_gunAdjustHandgunPitch;
+				yaw = &vr.m_gunAdjustHandgunYaw;
+			}
+			return true;
+		}
 		bool s_dpadMode = false;          // manual flip of the D-pad mode (left grip + stick click)
 		bool s_ui = false;                // a menu has the input (UiContext)
 
@@ -761,7 +791,9 @@ namespace PSUVR
 			const auto pushed = []( const ControllerState &c ) {
 				return c.stick[ 0 ] * c.stick[ 0 ] + c.stick[ 1 ] * c.stick[ 1 ] > kStickAimThreshold * kStickAimThreshold;
 			};
-			s_stickRest = pushed( VRControllers::State( 0 ) ) || pushed( VRControllers::State( 1 ) ) ? 0.0f : s_stickRest + dt;
+			// Turning the gun model (both grips + right stick) is not moving: free aim stays on.
+			s_stickRest = !s_gunAdjusting && ( pushed( VRControllers::State( 0 ) ) || pushed( VRControllers::State( 1 ) ) ) ? 0.0f
+				: s_stickRest + dt;
 			bool want = false;
 			if( s_aimModeOn && gun && !s_ui )
 			{
@@ -1253,6 +1285,39 @@ namespace PSUVR
 			Combat( dt, modifier, pad );
 			pad.rx = Deadzone( right.stick[ 0 ], 0.15f );
 			pad.ry = Deadzone( right.stick[ 1 ], 0.15f );
+			// Free aim, both grips held: the right stick turns the gun model onto the reticle
+			// (saved when the grips are let go). The stick sends nothing to the game meanwhile.
+			{
+				int aimHand = 0;
+				float *adjustPitch = nullptr, *adjustYaw = nullptr;
+				const bool haveFields = GunAdjustFields( adjustPitch, adjustYaw );
+				const bool aiming = Config::Get().vr.m_aimLeash && GunAiming( aimHand ) && haveFields;
+				// Both grips down (held in any order; in free aim they send nothing else).
+				const bool bothGrips = leftGripDown && rightGripDown;
+				s_gunAdjusting = aiming && bothGrips;
+				if( s_gunAdjusting )
+				{
+					constexpr float kDegreesPerSecond = 25.0f;
+					const auto clamp = []( float v ) { return v < -60.0f ? -60.0f : ( v > 60.0f ? 60.0f : v ); };
+					if( pad.rx != 0.0f || pad.ry != 0.0f )
+					{
+						*adjustYaw = clamp( *adjustYaw - pad.rx * kDegreesPerSecond * dt );
+						*adjustPitch = clamp( *adjustPitch + pad.ry * kDegreesPerSecond * dt );
+						s_gunAdjustDirty = true;
+					}
+					pad.rx = 0.0f;
+					pad.ry = 0.0f;
+				}
+				else if( s_gunAdjustDirty && !bothGrips )
+				{
+					s_gunAdjustDirty = false;
+					Config::Get().SaveToFile();
+					static char s_text[ 96 ];
+					sprintf_s( s_text, "Gun angle saved (up %.0f, left %.0f)", adjustPitch ? *adjustPitch : 0.0f,
+						adjustYaw ? *adjustYaw : 0.0f );
+					VRBindings::ShowToast( s_text );
+				}
+			}
 			FreeAim( pad );
 			AimModeFollow( dt, pad );
 
@@ -1273,6 +1338,18 @@ namespace PSUVR
 		{
 			hand = s_aimHand < 0 ? 0 : s_aimHand;
 			return s_aimModeOn && s_gunInView && VRCamera::CameraState() == 4;
+		}
+
+		bool GunAdjust( float &pitchDegrees, float &yawDegrees )
+		{
+			float *pitch = nullptr, *yaw = nullptr;
+			if( !GunAdjustFields( pitch, yaw ) )
+			{
+				return false;
+			}
+			pitchDegrees = *pitch;
+			yawDegrees = *yaw;
+			return true;
 		}
 
 		bool DirectAim( float &yaw, float &pitch )
