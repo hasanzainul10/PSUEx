@@ -768,6 +768,19 @@ HRESULT APIENTRY PSUOverlay::Hook_SetViewport( LPDIRECT3DDEVICE9 pDevice, CONST 
 	{
 		D3DVIEWPORT9 eyeVp{};
 		PSUVR::StereoRenderer::GetEyeViewport( eyeVp );
+		// Keep the game's depth range: the sky is drawn pushed to the back (MinZ / MaxZ near 1),
+		// and the full 0..1 range would put it at its real distance, in front of far scenery.
+		eyeVp.MinZ = pViewport->MinZ;
+		eyeVp.MaxZ = pViewport->MaxZ;
+#ifdef _DEBUG
+		static unsigned s_depthLogs = 0;
+		if( s_depthLogs < 12 && ( pViewport->MinZ != 0.0f || pViewport->MaxZ != 1.0f ) )
+		{
+			++s_depthLogs;
+			PSU_LOG( "StereoViewport: game depth range %.3f..%.3f kept (layer 0x%X)\n", pViewport->MinZ, pViewport->MaxZ,
+				*reinterpret_cast< const int * >( 0x009946C8 ) );
+		}
+#endif
 		static unsigned s_vpLogs = 0;
 		if( s_vpLogs < 8 &&
 			( pViewport->Width != eyeVp.Width || pViewport->Height != eyeVp.Height ) )
