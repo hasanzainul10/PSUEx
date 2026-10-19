@@ -1415,13 +1415,7 @@ namespace PSUVR
 		{
 			LogLayerRoute( layer, "visor-overlay", verts, vertCount, stride );
 		}
-		// Screen-depth routing reads the vertices' z as a projected depth: only true for screen-space
-		// (XYZRHW) draws. The mission map and its markers are transformed 3D, where z is a world
-		// coordinate (a 0.97 sent map pieces to "skip-own"): they go to the panel.
-		DWORD layerFvf = 0;
-		device->GetFVF( &layerFvf );
-		const bool screenSpace = ( layerFvf & D3DFVF_POSITION_MASK ) == D3DFVF_XYZRHW;
-		if( layer >= 0 && !menuOverlay && screenSpace )
+		if( layer >= 0 && !menuOverlay )
 		{
 			float minX = 0, minY = 0, maxX = 0, maxY = 0;
 			ComputeAabb( verts, vertCount, stride, minX, minY, maxX, maxY );
@@ -1477,7 +1471,7 @@ namespace PSUVR
 			}
 			LogLayerRoute( layer, "visor", verts, vertCount, stride );
 		}
-		if( screenSpace && IsAvatarAnchoredPassB( verts, primitiveType, primitiveCount, stride, m_w, m_h ) )
+		if( IsAvatarAnchoredPassB( verts, primitiveType, primitiveCount, stride, m_w, m_h ) )
 		{
 			LogRoute( ret, "eyes", verts, vertCount, stride );
 			stereo.DrawNameplateToEyes( device, primitiveType, primitiveCount, verts, stride );
