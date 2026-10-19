@@ -8,6 +8,7 @@
 #include "../Misc/Log.h"
 #include "../PSUOverlay/FrameTrace.h"
 #include "../PSUVR/StereoRenderer.h"
+#include "../PSUVR/VRBindings.h"
 #include "../PSUVR/VRHud.h"
 #include <intrin.h>
 
@@ -183,8 +184,73 @@ namespace FrameRender
 		FrameTrace::PassLeave();
 	}
 
+	// Debug layer bisect: Ctrl+Shift+PageUp / PageDown picks one render layer (0x02..0x3F) to
+	// hide, to find which layer draws something (a toast shows the number; past either end = none).
+	static int s_hiddenLayer = -1;
+
+	static void PollLayerBisect()
+	{
+#ifdef _DEBUG
+		static bool s_upDown = false, s_downDown = false;
+		const bool mods = ( GetAsyncKeyState( VK_CONTROL ) & 0x8000 ) && ( GetAsyncKeyState( VK_SHIFT ) & 0x8000 );
+		const bool up = mods && ( GetAsyncKeyState( VK_PRIOR ) & 0x8000 );
+		const bool down = mods && ( GetAsyncKeyState( VK_NEXT ) & 0x8000 );
+		int step = 0;
+		if( up && !s_upDown ) step = 1;
+		if( down && !s_downDown ) step = -1;
+		s_upDown = up;
+		s_downDown = down;
+		if( !step )
+		{
+			return;
+		}
+		if( s_hiddenLayer < 0 )
+		{
+			s_hiddenLayer = step > 0 ? 0x02 : 0x3F;
+		}
+		else
+		{
+			s_hiddenLayer += step;
+			if( s_hiddenLayer < 0x02 || s_hiddenLayer > 0x3F )
+			{
+				s_hiddenLayer = -1;
+			}
+		}
+		static char s_text[ 48 ];
+		if( s_hiddenLayer < 0 )
+		{
+			sprintf_s( s_text, "Layer bisect: nothing hidden" );
+		}
+		else
+		{
+			sprintf_s( s_text, "Layer bisect: hiding layer 0x%02X", s_hiddenLayer );
+		}
+		PSUVR::VRBindings::ShowToast( s_text );
+#endif
+	}
+
+	// The layer's disabled byte (g_DrawLayers entry +6); null when the table isn't there.
+	static uint8_t *LayerDisabledByte( int layer )
+	{
+		uint8_t *const *table = reinterpret_cast< uint8_t *const * >( 0x00B9DB38 );
+		if( layer < 0 || layer >= 64 || !PSUMemory::IsValidPointer( table ) || !*table ||
+			!PSUMemory::IsValidPointer( *table + layer * 8 + 6 ) )
+		{
+			return nullptr;
+		}
+		return *table + layer * 8 + 6;
+	}
+
 	void __cdecl Hook_PassA()
 	{
+		PollLayerBisect();
+		// A pass A layer picked by the bisect: off for this frame's flat and eye passes.
+		uint8_t *hidden = s_hiddenLayer >= 0x02 && s_hiddenLayer <= 0x29 ? LayerDisabledByte( s_hiddenLayer ) : nullptr;
+		const uint8_t hiddenWas = hidden ? *hidden : 0;
+		if( hidden )
+		{
+			*hidden = 1;
+		}
 		const auto &vr = Config::Get().vr;
 		const bool twice = vr.m_enabled && vr.m_debugDoublePass;
 		s_passAInFrame = 1;
@@ -200,6 +266,10 @@ namespace FrameRender
 		if( vr.m_enabled && vr.m_stereo && ( vr.m_stereoMode == 0 || mode == vr.m_stereoMode ) )
 		{
 			PSUVR::StereoRenderer::Get().RenderEyes( PSUOverlay::Device(), pOriginalPassA );
+		}
+		if( hidden )
+		{
+			*hidden = hiddenWas;
 		}
 	}
 
@@ -224,7 +294,10 @@ namespace FrameRender
 		for( int layer = 0x2B; layer <= 0x3F; ++layer )
 		{
 			PSUVR::VRHud::SetPassBLayer( layer );
-			DrawLayer( layer );
+			if( layer != s_hiddenLayer )
+			{
+				DrawLayer( layer );
+			}
 		}
 		PSUVR::VRHud::SetPassBLayer( -1 );
 		FrameTrace::PassLeave();
