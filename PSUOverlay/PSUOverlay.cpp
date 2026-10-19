@@ -695,12 +695,24 @@ HRESULT APIENTRY PSUOverlay::Hook_Swapchain_Release( IDirect3DSwapChain9 *pSwapC
 	return 0;
 }
 
+// The game's SetTransform wrapper (0x00749D40) only forwards (device, state, matrix): when the
+// call comes from it, its own caller (4 dwords up the stack) says which object this is.
+static void *TransformCaller( void *returnAddressSlot )
+{
+	void **slot = static_cast< void ** >( returnAddressSlot );
+	if( reinterpret_cast< uintptr_t >( slot[ 0 ] ) == 0x00749D5C )
+	{
+		return slot[ 4 ];
+	}
+	return slot[ 0 ];
+}
+
 HRESULT APIENTRY PSUOverlay::Hook_SetTransform( LPDIRECT3DDEVICE9 pDevice, D3DTRANSFORMSTATETYPE State, const D3DMATRIX *pMatrix )
 {
 	FrameTrace::OnSetTransform( State, pMatrix, _ReturnAddress() );
 	D3DMATRIX recentered;
 	if( State == D3DTS_WORLD && pMatrix &&
-		PSUVR::StereoRenderer::RecenterCameraAnchored( *pMatrix, recentered, _ReturnAddress() ) )
+		PSUVR::StereoRenderer::RecenterCameraAnchored( *pMatrix, recentered, TransformCaller( _AddressOfReturnAddress() ) ) )
 	{
 		return m_pOriginalSetTransform( pDevice, State, &recentered );
 	}
