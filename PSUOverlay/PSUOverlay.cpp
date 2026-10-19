@@ -367,7 +367,7 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitive( LPDIRECT3DDEVICE9 pDevice, D3DP
 #ifdef _DEBUG
 	PSUVR::StereoRenderer::CountLayerDraw();
 #endif
-	if( PSUVR::StereoRenderer::SkipEyeEffectDraw() )
+	if( PSUVR::StereoRenderer::SkipEyeEffectDraw( _ReturnAddress() ) )
 	{
 		return D3D_OK;
 	}
@@ -403,7 +403,7 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawIndexedPrimitive( LPDIRECT3DDEVICE9 pDevic
 #ifdef _DEBUG
 	PSUVR::StereoRenderer::CountLayerDraw();
 #endif
-	if( PSUVR::StereoRenderer::SkipEyeEffectDraw() )
+	if( PSUVR::StereoRenderer::SkipEyeEffectDraw( _ReturnAddress() ) )
 	{
 		return D3D_OK;
 	}
@@ -442,7 +442,7 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3
 #ifdef _DEBUG
 	PSUVR::StereoRenderer::CountLayerDraw();
 #endif
-	if( PSUVR::StereoRenderer::SkipEyeEffectDraw() )
+	if( PSUVR::StereoRenderer::SkipEyeEffectDraw( _ReturnAddress() ) )
 	{
 		return D3D_OK;
 	}

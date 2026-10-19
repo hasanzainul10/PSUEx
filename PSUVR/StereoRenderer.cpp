@@ -683,7 +683,7 @@ namespace PSUVR
 #endif
 	}
 
-	bool StereoRenderer::SkipEyeEffectDraw()
+	bool StereoRenderer::SkipEyeEffectDraw( void *ret )
 	{
 		if( !s_inEyePass )
 		{
@@ -692,7 +692,18 @@ namespace PSUVR
 		// PSU_DrawLayer keeps the layer it is drawing at 0x009946C8.
 		const int layer = *reinterpret_cast< const int * >( 0x009946C8 );
 		const auto &vr = Config::Get().vr;
-		const bool skip = ( layer == 0x1F && !vr.m_eyeBlur ) || ( layer == 0x20 && !vr.m_eyeGlare );
+		// The glow's additive composites onto the eye (the end of the blur chain).
+		const uintptr_t site = reinterpret_cast< uintptr_t >( ret );
+		const bool glowComposite = site == 0x004A1F23 || site == 0x004A2076;
+		if( glowComposite && !vr.m_eyeBlur )
+		{
+			return true;
+		}
+		if( layer == 0x12 && !vr.m_eyeSky )
+		{
+			return true;
+		}
+		const bool skip = layer == 0x20 && !vr.m_eyeGlare;
 #ifdef _DEBUG
 		if( skip )
 		{

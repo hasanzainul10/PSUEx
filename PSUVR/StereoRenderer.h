@@ -51,7 +51,7 @@ namespace PSUVR
 		// draw site ("Stereo: shader draw").
 		// Eye pass, while the full-screen blur (layer 0x1F) or glare (0x20) draws and it is off for
 		// the headset: skip the draw call (the layer still runs, so its render targets stay set up).
-		static bool SkipEyeEffectDraw();
+		static bool SkipEyeEffectDraw( void *ret );
 		// Debug: count a draw call for the layer diagnostics (sky / blur / glare, flat vs eyes).
 		static void CountLayerDraw();
 		static void NoteVertexConstants( unsigned startRegister, const float *data, unsigned vector4Count, void *ret );

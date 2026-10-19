@@ -324,9 +324,12 @@ namespace PSUVR
 			ImGui::Checkbox( "Place glows and sprite effects in 3D", &s.m_reprojectSprites );
 			ImGui::Checkbox( "Sky infinitely far", &s.m_skyAtEye );
 			Help( "The area's sky (galaxy / clouds) is drawn as if infinitely far away, so its edges never show." );
-			ImGui::Checkbox( "Screen blur in the headset", &s.m_eyeBlur );
-			Help( "The game's full-screen blur / glow. Made from the flat image, so in VR it lands in the wrong "
-				"place (enemy glow showing through your weapon). Off by default." );
+			ImGui::Checkbox( "Sky in the headset", &s.m_eyeSky );
+			Help( "Off hides the area's sky in the headset (the flat window keeps it). Some missions' skies are "
+				"partial boxes made for the flat camera, and in VR their unfinished sides show." );
+			ImGui::Checkbox( "Screen glow in the headset", &s.m_eyeBlur );
+			Help( "The game's full-screen glow. It is added over the whole picture, so in VR an enemy's glow "
+				"shows through your weapon. Off by default." );
 			ImGui::Checkbox( "Screen glare in the headset", &s.m_eyeGlare );
 			Help( "The game's full-screen glare. In VR it shows as floating rectangles. Off by default." );
 			ImGui::Checkbox( "Keep screen tints on my view", &s.m_recenterSky );

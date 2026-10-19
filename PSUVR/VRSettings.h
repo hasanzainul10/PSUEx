@@ -216,11 +216,16 @@ struct VRSettings
 	// The area's sky (render layer 0x12, TLandDisplayerHevenTask) drawn as if the eye were at the
 	// game camera: infinitely far, no edges, never behind you in third person.
 	bool m_skyAtEye = true;
-	// The game's full-screen blur (layer 0x1F, TBlur) and glare (0x20, TGlare) in the headset. They
-	// are made from the flat image, so in VR they land in the wrong place (glow through the weapon,
-	// floating rectangles). Off = only the flat window shows them.
+	// The game's full-screen glow in the headset: the additive composite of the blur chain
+	// (0x004A1F23 / 0x004A2076), which ignores what is in front (enemy glow over the weapon). Off =
+	// only the flat window shows it. (Layer 0x1F TBlur only sets it up.)
 	bool m_eyeBlur = false;
+	// Layer 0x20 (TGlare) draw calls in the headset.
 	bool m_eyeGlare = false;
+	// The area's sky (layer 0x12) in the headset. Some skies are partial backdrop boxes made for the
+	// flat camera's view; in VR their unfinished sides show (galaxy panels, rectangles). Off hides
+	// the sky in the headset only.
+	bool m_eyeSky = true;
 	// When stereo is on, also submit the flat game frame as a world-locked quad (HUD stand-in).
 	// Default off — the panel reads as a dark PiP sliding over the stereo floor.
 	bool m_stereoPanel = false;
