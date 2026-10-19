@@ -49,6 +49,9 @@ namespace PSUVR
 		// Debug: vertex constants the game sets (kept per register), and eye-pass draws that use a
 		// vertex shader (its matrices are in those constants, not the fixed-function view), once per
 		// draw site ("Stereo: shader draw").
+		// Eye pass, while the full-screen blur (layer 0x1F) or glare (0x20) draws and it is off for
+		// the headset: skip the draw call (the layer still runs, so its render targets stay set up).
+		static bool SkipEyeEffectDraw();
 		static void NoteVertexConstants( unsigned startRegister, const float *data, unsigned vector4Count, void *ret );
 		static void NoteShaderDraw( IDirect3DDevice9 *device, unsigned primitiveCount, void *ret );
 		static void NoteNearCameraDraw( IDirect3DDevice9 *device, unsigned primitiveType, unsigned primitiveCount,

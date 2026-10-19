@@ -635,6 +635,18 @@ namespace PSUVR
 	}
 #endif
 
+	bool StereoRenderer::SkipEyeEffectDraw()
+	{
+		if( !s_inEyePass )
+		{
+			return false;
+		}
+		// PSU_DrawLayer keeps the layer it is drawing at 0x009946C8.
+		const int layer = *reinterpret_cast< const int * >( 0x009946C8 );
+		const auto &vr = Config::Get().vr;
+		return ( layer == 0x1F && !vr.m_eyeBlur ) || ( layer == 0x20 && !vr.m_eyeGlare );
+	}
+
 	void StereoRenderer::NoteVertexConstants( unsigned startRegister, const float *data, unsigned vector4Count, void *ret )
 	{
 #ifdef _DEBUG
