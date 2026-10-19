@@ -445,11 +445,13 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3
 		return D3D_OK;
 	}
 	const void *verts = pVertexStreamZeroData;
+	bool reprojectedSprite = false;
 	if( const void *reprojected = PSUVR::StereoRenderer::ReprojectSpriteIfNeeded(
 			pDevice, static_cast< unsigned >( PrimitiveType ), PrimitiveCount,
 			pVertexStreamZeroData, VertexStreamZeroStride, _ReturnAddress() ) )
 	{
 		verts = reprojected;
+		reprojectedSprite = true;
 	}
 	else if( const void *stretched = PSUVR::StereoRenderer::StretchScreenQuadIfNeeded(
 			pDevice, static_cast< unsigned >( PrimitiveType ), PrimitiveCount,
@@ -457,7 +459,25 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3
 	{
 		verts = stretched;
 	}
+	// A world sprite placed for this eye: hidden behind whatever is nearer (the weapon in your
+	// hand), whatever depth test the game left set for its flat screen; it never writes depth.
+	DWORD savedZEnable = 0, savedZFunc = 0, savedZWrite = 0;
+	if( reprojectedSprite )
+	{
+		pDevice->GetRenderState( D3DRS_ZENABLE, &savedZEnable );
+		pDevice->GetRenderState( D3DRS_ZFUNC, &savedZFunc );
+		pDevice->GetRenderState( D3DRS_ZWRITEENABLE, &savedZWrite );
+		pDevice->SetRenderState( D3DRS_ZENABLE, D3DZB_TRUE );
+		pDevice->SetRenderState( D3DRS_ZFUNC, D3DCMP_LESSEQUAL );
+		pDevice->SetRenderState( D3DRS_ZWRITEENABLE, FALSE );
+	}
 	const HRESULT hr = m_pOriginalDrawPrimitiveUP( pDevice, PrimitiveType, PrimitiveCount, verts, VertexStreamZeroStride );
+	if( reprojectedSprite )
+	{
+		pDevice->SetRenderState( D3DRS_ZENABLE, savedZEnable );
+		pDevice->SetRenderState( D3DRS_ZFUNC, savedZFunc );
+		pDevice->SetRenderState( D3DRS_ZWRITEENABLE, savedZWrite );
+	}
 	// Pass B chrome, or DP-UP nested inside 0x793C40 — not every post-frame fullscreen blit.
 	auto &hud = PSUVR::VRHud::Get();
 	if( SUCCEEDED( hr ) && hud.Active() &&
