@@ -130,6 +130,9 @@ struct VRSettings
 	// Arms while attacking: "controller" (your swing) or "animation" (the game's). Photon
 	// Arts always play the game's animation.
 	std::string m_handsAttack = "controller";
+	// The same for Photon Arts and technique slot 2 (grip + swing / trigger): false = the arms stay
+	// on the controllers, true = the game's animation.
+	bool m_handsPhotonArtAnimation = false;
 	// Hand angle calibration (controller -> hand rotation, quaternion x y z w per hand).
 	// Off: estimated from the skeleton and the standard OpenXR grip pose.
 	bool m_handCalibrated = false;

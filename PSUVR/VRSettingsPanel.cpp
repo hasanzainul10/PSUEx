@@ -358,7 +358,10 @@ namespace PSUVR
 					s.m_handsAttack = attackAnimation ? "animation" : "controller";
 				}
 				Help( "Off: your arms stay on the controllers while attacking (your swing is the swing). "
-					"On: the arms hand over to the game's attack animation. Photon Arts always use the game's animation." );
+					"On: the arms hand over to the game's attack animation." );
+				ImGui::Checkbox( "Play the game's Photon Art / technique animation", &s.m_handsPhotonArtAnimation );
+				Help( "The same for grip + swing / trigger (Photon Arts, technique slot 2). Off: your arms stay on "
+					"the controllers." );
 				ImGui::Checkbox( "Staff / rod stays in the hand while casting", &s.m_techWeaponStill );
 				Help( "The staff or rod keeps the hold it had before the cast instead of moving with the casting "
 					"animation. The technique itself is unchanged. The TCSM keeps its animation." );

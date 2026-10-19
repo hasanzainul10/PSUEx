@@ -24,5 +24,8 @@ namespace PSUVR
 
 		// "Show / hide VR settings" was pressed; the overlay consumes it.
 		bool ConsumeSettingsRequest();
+		// Show / hide the chat log window (left Triangle); the overlay consumes it.
+		void RequestChatLog();
+		bool ConsumeChatLogRequest();
 	}
 }

@@ -75,10 +75,10 @@ void PSUOverlay::RenderMenuBar()
 				m_Controls[ WINDOW_CONTROL_ID::WINDOW_LOOT_DISPLAY ]->Toggle();
 			}
 
-			//if( ImGui::MenuItem( "Log Display" ) )
-			//{
-			//	m_Controls[ WINDOW_CONTROL_ID::WINDOW_LOG_DISPLAY ]->Toggle();
-			//}
+			if( ImGui::MenuItem( "Chat Log" ) )
+			{
+				m_Controls[ WINDOW_CONTROL_ID::WINDOW_LOG_DISPLAY ]->Toggle();
+			}
 
 			if( ImGui::MenuItem( "Camera Options" ) )
 			{
@@ -160,7 +160,7 @@ void PSUOverlay::InitializeControls()
 
 	AddControl( WINDOW_CONTROL_ID::WINDOW_CONFIG_DISPLAY, ConfigDisplay::Create() );
 	AddControl( WINDOW_CONTROL_ID::WINDOW_LOOT_DISPLAY, LootDisplay::Create() );
-	//AddControl( WINDOW_CONTROL_ID::WINDOW_LOG_DISPLAY, LogDisplay::Create() );
+	AddControl( WINDOW_CONTROL_ID::WINDOW_LOG_DISPLAY, LogDisplay::Create() );
 	AddControl( WINDOW_CONTROL_ID::WINDOW_CAMERA_DISPLAY, CameraDisplay::Create() );
 	AddControl( WINDOW_CONTROL_ID::WINDOW_VR_DISPLAY, VRDisplay::Create() );
 }

@@ -63,6 +63,7 @@ namespace
 	X( m_simScript, "simScript" ) \
 	X( m_handsFollow, "handsFollow" ) \
 	X( m_handsAttack, "handsAttack" ) \
+	X( m_handsPhotonArtAnimation, "handsPhotonArtAnimation" ) \
 	X( m_handCalibrated, "handCalibrated" ) \
 	X( m_handRotL0, "handRotL0" ) \
 	X( m_handRotL1, "handRotL1" ) \

@@ -24,6 +24,9 @@ namespace PSUVR
 			FreeAimMode,
 			// Both triggers (in the chord): start the hand angle calibration.
 			CalibrateHands,
+			// Field only (X / Y while a menu or the palette has the input): the PSUEx chat log
+			// window, and speech to text (reserved, not made yet).
+			ChatLog, SpeechToText,
 		};
 
 		struct Entry
@@ -40,8 +43,8 @@ namespace PSUVR
 			{ 0, Control::Grip, Output::L1, Output::None },
 			{ 0, Control::Stick, Output::LeftStick, Output::None },
 			{ 0, Control::StickClick, Output::FreeAimMode, Output::L3 },
-			{ 0, Control::Primary, Output::X, Output::ToggleSettings },
-			{ 0, Control::Secondary, Output::Y, Output::TogglePause },
+			{ 0, Control::Primary, Output::SpeechToText, Output::ToggleSettings },
+			{ 0, Control::Secondary, Output::ChatLog, Output::TogglePause },
 			{ 1, Control::Trigger, Output::R2, Output::CalibrateHands },
 			{ 1, Control::Grip, Output::R1, Output::None },
 			{ 1, Control::Stick, Output::RightStick, Output::None },
@@ -97,6 +100,8 @@ namespace PSUVR
 				case Output::TogglePause: return "Pause VR";
 				case Output::FreeAimMode: return "Free aim mode on / off";
 				case Output::CalibrateHands: return "Calibrate hands (both triggers)";
+				case Output::ChatLog: return "Chat log (Y in menus)";
+				case Output::SpeechToText: return "Speech to text, soon (X in menus)";
 				default: return "";
 			}
 		}

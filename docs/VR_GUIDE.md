@@ -127,8 +127,8 @@ Turn on **Play with motion controllers** in the VR settings. The controllers act
 |---|---|---|
 | Stick | Move | Turn |
 | Stick click | Free aim mode on / off | START (menu) |
-| Square / Cross (X / A) | X | B (confirm) |
-| Triangle / Circle (Y / B) | Y | A (cancel) |
+| Square / Cross (X / A) | X in menus; speech to text (not made yet) in the field | B (confirm) |
+| Triangle / Circle (Y / B) | Y in menus; chat log window in the field | A (cancel) |
 | Grip | L1 | R1 |
 | Trigger | L2, or that hand's weapon (see below) | R2, or that hand's weapon |
 
@@ -145,7 +145,8 @@ Turn on **Play with motion controllers** in the VR settings. The controllers act
 **Your arms** (first person) reach for the controllers. Settings in **Motion controllers**:
 
 - *Arms follow the controllers*: on / off.
-- *Play the game's attack animation*: off = your swing is the swing; on = attacks hand over to the game's animation. Photon Arts always use the game's animation.
+- *Play the game's attack animation*: off = your swing is the swing; on = attacks hand over to the game's animation.
+- *Play the game's Photon Art / technique animation*: the same for grip + swing / trigger (off by default: arms stay on the controllers).
 - **Hand calibration:** the hand angle is estimated automatically. If it looks off, hold both grips + both triggers, then within 5 seconds hold your arms straight forward, fists around the controllers, palms facing each other, and keep still until the long buzz. It's saved. *Hand pitch / roll* fine-tune it; *Back to automatic* undoes it.
 - **Own body → Hands only** (First person settings): only the hands and weapons, right on the controllers, so the camera never clips your shoulders.
 

@@ -1,35 +1,40 @@
 #pragma once
 
-#include <mutex>
+#include <cstdint>
+#include <string>
+#include <vector>
 
 #include "IFWinCtrl.h"
-#include "../ImageMng.h"
 
+// Chat log window: follows the game's own chat log file (LOG\ChatLog_YYYYMMDD.txt, written
+// when [system] CHATLOG = 1). Shown / hidden from the menu bar or the VR left Triangle.
 class LogDisplay : public IFWinCtrl
 {
 private:
-	enum class MESSAGE_TYPE {
-		PUBLIC_CHAT,
-		PARTY_CHAT,
-	};
-
-	struct s_log_message {
-		MESSAGE_TYPE type;
+	struct Entry
+	{
+		std::string time;
+		std::string channel;  // Public, Party, ...
 		std::string name;
-		std::string msg;
+		std::string message;
 	};
 
-	std::vector< s_log_message > m_messages;
-	std::mutex m_mtx;
+	std::vector< Entry > m_entries;
+	std::wstring m_file;        // the chat log being followed
+	uint64_t m_offset = 0;      // bytes of it already read
+	std::string m_pending;      // a partly written entry
+	unsigned long m_lastPoll = 0;
+	bool m_scrollToEnd = false;
 
-	std::string WCharToUTF8( const std::wstring &wstr );
+	void Poll();
+	void Parse( const std::string &text );
 
 public:
 	LogDisplay( const LogDisplay & ) = delete;
 	LogDisplay &operator=( const LogDisplay & ) = delete;
 
 	LogDisplay();
-	~LogDisplay();
+	~LogDisplay() = default;
 
 	static std::shared_ptr< LogDisplay > Create()
 	{
@@ -37,7 +42,4 @@ public:
 	}
 
 	void Render() override;
-
-public:
-	void AddChatMessage( const wchar_t *name, const wchar_t *msg, bool party );
 };

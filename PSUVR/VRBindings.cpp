@@ -17,6 +17,7 @@ namespace PSUVR
 		const char *s_toast = nullptr;
 		DWORD s_toastTick = 0;
 		bool s_settingsRequested = false;
+		bool s_chatLogRequested = false;
 
 		constexpr DWORD kToastMs = 1500;
 		constexpr DWORD kToastFadeMs = 400;
@@ -120,6 +121,18 @@ namespace PSUVR
 			const DWORD fadeStart = kToastMs - kToastFadeMs;
 			alpha = age < fadeStart ? 1.0f : 1.0f - static_cast< float >( age - fadeStart ) / kToastFadeMs;
 			return s_toast;
+		}
+
+		void RequestChatLog()
+		{
+			s_chatLogRequested = true;
+		}
+
+		bool ConsumeChatLogRequest()
+		{
+			const bool requested = s_chatLogRequested;
+			s_chatLogRequested = false;
+			return requested;
 		}
 
 		bool ConsumeSettingsRequest()

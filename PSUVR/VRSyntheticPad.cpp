@@ -1179,6 +1179,32 @@ namespace PSUVR
 				{
 					output = Output::R1;
 				}
+				// Square / Triangle: X / Y while a menu or the palette has the input; in the field the
+				// chat log and speech to text.
+				if( output == Output::ChatLog || output == Output::SpeechToText )
+				{
+					const bool menu = s_ui || ( s_combatValid && s_combat.paletteOpen );
+					if( menu )
+					{
+						output = output == Output::ChatLog ? Output::Y : Output::X;
+					}
+					else
+					{
+						if( VRControllers::Pressed( entry.hand ) & ControlBit( entry.control ) )
+						{
+							if( output == Output::ChatLog )
+							{
+								VRBindings::RequestChatLog();
+							}
+							else
+							{
+								VRBindings::ShowToast( "Speech to text: not made yet" );
+							}
+							Buzz( entry.hand );
+						}
+						continue;
+					}
+				}
 				const int button = PadButtonFor( output );
 				if( button >= 0 )
 				{

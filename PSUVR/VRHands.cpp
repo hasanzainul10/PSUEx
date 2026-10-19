@@ -627,8 +627,8 @@ namespace PSUVR
 				PSUCombat::State combat{};
 				const bool haveCombat = PSUCombat::Read( combat );
 				const bool attacking = haveCombat && ( combat.comboStep > 0 || PSUCombat::Swinging( combat ) );
-				const bool animation = haveCombat && ( combat.photonArt ||
-					( attacking && Config::Get().vr.m_handsAttack == "animation" ) );
+				const bool animation = haveCombat && ( combat.photonArt ? Config::Get().vr.m_handsPhotonArtAnimation
+					: ( attacking && Config::Get().vr.m_handsAttack == "animation" ) );
 				const float goal = animation ? 0.0f : 1.0f;
 				const float step = dt / kBlendSeconds;
 				s_weight += goal > s_weight ? ( goal - s_weight < step ? goal - s_weight : step )
