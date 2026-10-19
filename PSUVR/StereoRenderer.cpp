@@ -773,9 +773,12 @@ namespace PSUVR
 		// PSU_DrawLayer keeps the layer it is drawing at 0x009946C8.
 		const int layer = *reinterpret_cast< const int * >( 0x009946C8 );
 		const auto &vr = Config::Get().vr;
-		( void )ret;
+		// The glare's full-screen blend over the eye (0x004B6331): the glare layer (0x20) fills that
+		// image from the flat picture, so in VR its glows float off the enemies and show through the
+		// weapon. The layer itself keeps running (hiding it left the image stale: a frozen eye).
+		const bool glareBlend = reinterpret_cast< uintptr_t >( ret ) == 0x004B6331;
 		const bool skip = ( layer == 0x12 && !vr.m_eyeSky ) || ( layer == 0x1F && !vr.m_eyeBlur ) ||
-			( layer == 0x20 && !vr.m_eyeGlare );
+			( layer == 0x20 && !vr.m_eyeGlare ) || ( glareBlend && !vr.m_eyeGlare );
 #ifdef _DEBUG
 		if( skip )
 		{
