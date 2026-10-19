@@ -763,14 +763,26 @@ namespace PSUVR
 		if( dx * dx + dy * dy + dz * dz > kAnchoredUnits * kAnchoredUnits )
 		{
 #ifdef _DEBUG
-			// Diagnostics: big models near the camera that aren't exactly at it (a sky placed at
-			// the camera's x / z only would show here).
-			static unsigned s_nearLogs = 0;
-			const float scale = std::sqrt( world._11 * world._11 + world._12 * world._12 + world._13 * world._13 );
-			if( s_nearLogs < 30 && scale > 20.0f && dx * dx + dz * dz < 2500.0f )
+			// Diagnostics: models within 5 units (50 cm) of the camera, once per draw site, with
+			// where they sit in camera space (overlays placed just in front of the camera).
+			static void *s_nearSites[ 64 ]{};
+			static unsigned s_nearCount = 0;
+			if( dx * dx + dy * dy + dz * dz < 25.0f && s_nearCount < 64 )
 			{
-				++s_nearLogs;
-				PSU_LOG( "Stereo: big model near the camera (scale %.1f, offset %.2f %.2f %.2f) ret=%p\n", scale, dx, dy, dz, ret );
+				bool seen = false;
+				for( unsigned i = 0; i < s_nearCount; ++i )
+				{
+					seen = seen || s_nearSites[ i ] == ret;
+				}
+				if( !seen )
+				{
+					s_nearSites[ s_nearCount++ ] = ret;
+					D3DMATRIX inCamera{};
+					MulMatrix( world, self.m_gameView, inCamera );
+					PSU_LOG( "Stereo: model near the camera ret=%p, in camera [%.2f %.2f %.2f | %.2f %.2f %.2f | %.2f %.2f %.2f | %.2f %.2f %.2f] | camera state %d\n",
+						ret, inCamera._11, inCamera._12, inCamera._13, inCamera._21, inCamera._22, inCamera._23, inCamera._31,
+						inCamera._32, inCamera._33, inCamera._41, inCamera._42, inCamera._43, VRCamera::CameraState() );
+				}
 			}
 #endif
 			return false;
@@ -788,10 +800,16 @@ namespace PSUVR
 		}
 		MulMatrix( widened, self.m_invEyeView[ eye ], out );
 #ifdef _DEBUG
-		static unsigned s_logs = 0;
-		if( s_logs < 20 )
+		static void *s_lockedSites[ 32 ]{};
+		static unsigned s_lockedCount = 0;
+		bool lockedSeen = s_lockedCount >= 32;
+		for( unsigned i = 0; i < s_lockedCount; ++i )
 		{
-			++s_logs;
+			lockedSeen = lockedSeen || s_lockedSites[ i ] == ret;
+		}
+		if( !lockedSeen )
+		{
+			s_lockedSites[ s_lockedCount++ ] = ret;
 			const float scale = std::sqrt( world._11 * world._11 + world._12 * world._12 + world._13 * world._13 );
 			PSU_LOG( "Stereo: camera-locked model (scale %.1f) kept on eye %d, ret=%p | in camera [%.2f %.2f %.2f | %.2f %.2f %.2f | %.2f %.2f %.2f | %.2f %.2f %.2f]\n",
 				scale, eye, ret, inCamera._11, inCamera._12, inCamera._13, inCamera._21, inCamera._22, inCamera._23,

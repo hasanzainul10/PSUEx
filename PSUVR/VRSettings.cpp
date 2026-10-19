@@ -86,6 +86,8 @@ namespace
 	X( m_aimDirect, "aimDirect" ) \
 	X( m_reticleOnShot, "reticleOnShot" ) \
 	X( m_gunPointsAtAim, "gunPointsAtAim" ) \
+	X( m_aimLeash, "aimLeash" ) \
+	X( m_aimLeashMeters, "aimLeashMeters" ) \
 	X( m_techWeaponStill, "techWeaponStill" ) \
 	X( m_freeAimNoNearHide, "freeAimNoNearHide" ) \
 	X( m_freeAimNoPartCull, "freeAimNoPartCull" ) \

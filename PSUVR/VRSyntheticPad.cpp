@@ -624,6 +624,32 @@ namespace PSUVR
 				wantYaw = WrapRadians( s_aimCamYaw0 + WrapRadians( handYaw - s_aimHandYaw0 ) );
 				wantPitch = s_aimCamPitch0 + ( handPitch - s_aimHandPitch0 );
 			}
+			// Leash: aim from where the game fires (above the player) to the point on the hand's line
+			// where the reticle is, so the shot lands on the reticle.
+			if( Config::Get().vr.m_aimLeash )
+			{
+				const ControllerState &c = VRControllers::State( hand );
+				const float x = c.aimOrientation[ 0 ], y = c.aimOrientation[ 1 ], z = c.aimOrientation[ 2 ], w = c.aimOrientation[ 3 ];
+				const float dirTracking[ 3 ] = { -( 2.0f * ( x * z + w * y ) ), -( 2.0f * ( y * z - w * x ) ),
+					-( 1.0f - 2.0f * ( x * x + y * y ) ) };
+				const float meters = Config::Get().vr.m_aimLeashMeters > 1.0f ? Config::Get().vr.m_aimLeashMeters : 1.0f;
+				const float target[ 3 ] = { c.aimPosition[ 0 ] + dirTracking[ 0 ] * meters, c.aimPosition[ 1 ] + dirTracking[ 1 ] * meters,
+					c.aimPosition[ 2 ] + dirTracking[ 2 ] * meters };
+				float targetWorld[ 3 ], start[ 3 ];
+				if( VRCamera::TrackingToWorld( target, targetWorld ) && VRControllers::ShotStartWorld( start ) )
+				{
+					const float vx = targetWorld[ 0 ] - start[ 0 ];
+					const float vy = targetWorld[ 1 ] - start[ 1 ];
+					const float vz = targetWorld[ 2 ] - start[ 2 ];
+					const float flat = std::sqrt( vx * vx + vz * vz );
+					if( flat > 1.0e-3f )
+					{
+						// Game forward is ( sin, 0, cos ) of the yaw.
+						wantYaw = std::atan2( vx, vz );
+						wantPitch = std::atan2( vy, flat );
+					}
+				}
+			}
 			s_lastWantYaw = wantYaw;
 			s_lastWantPitch = wantPitch;
 			// First person: the camera hook writes these into the game's aim; no stick needed.

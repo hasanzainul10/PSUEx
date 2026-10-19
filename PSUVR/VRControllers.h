@@ -15,6 +15,9 @@ namespace PSUVR
 		// A bullet started here (game world). In free aim the game fires from a fixed point by the
 		// character, not from the gun: the reticle is put on that line.
 		void NoteShotStart( const float start[ 3 ] );
+		// Where free aim shots start (game world): the player plus the offset seen on the last
+		// free aim shot (about 1.07 m straight up until then).
+		bool ShotStartWorld( float world[ 3 ] );
 		// Once per frame after the runtime's input update: latch state and button edges.
 		void Update( IVRRuntime *runtime );
 

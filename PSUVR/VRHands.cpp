@@ -665,7 +665,7 @@ namespace PSUVR
 				// the arms) the gun points along the shot, so the shot direction in the animated
 				// weapon bone's axes is the barrel. Taken fresh each frame: nothing accumulates.
 				int aimHand = 0;
-				const bool pointGun = vr.m_gunPointsAtAim && haveCombat && w > 0.0f && VRSyntheticPad::GunAiming( aimHand ) &&
+				const bool pointGun = vr.m_gunPointsAtAim && !vr.m_aimLeash && haveCombat && w > 0.0f && VRSyntheticPad::GunAiming( aimHand ) &&
 					pads[ aimHand & 1 ]->gripValid;
 				aimHand &= 1;
 				D3DXVECTOR3 shot( 0.0f, 0.0f, 1.0f ), barrelLocal( 1.0f, 0.0f, 0.0f );

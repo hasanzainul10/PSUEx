@@ -191,8 +191,10 @@ namespace PSUVR
 		}
 
 		// Free aim shot start relative to the player (game world units), from the last free aim bullet.
-		float s_shotOffset[ 3 ]{};
-		bool s_haveShotOffset = false;
+		// Default from the 2026-10-19 log: player + ( -0.02 10.65 -0.03 ).
+		float s_shotOffset[ 3 ]{ 0.0f, 10.65f, 0.0f };
+		bool s_haveShotOffset = true;
+		bool s_learnedShotOffset = false;
 
 		// A point `meters` along the shot line in tracking space: the game's aim (facing +0x124, pitch
 		// -+0x220) from the free aim shot start. False before the first free aim shot.
@@ -230,6 +232,20 @@ namespace PSUVR
 
 	namespace VRControllers
 	{
+		bool ShotStartWorld( float world[ 3 ] )
+		{
+			PSUCombat::State player{};
+			if( !s_haveShotOffset || !PSUCombat::Read( player ) )
+			{
+				return false;
+			}
+			for( int i = 0; i < 3; ++i )
+			{
+				world[ i ] = player.position[ i ] + s_shotOffset[ i ];
+			}
+			return true;
+		}
+
 		void NoteShotStart( const float start[ 3 ] )
 		{
 			PSUCombat::State player{};
@@ -247,7 +263,8 @@ namespace PSUVR
 			{
 				return;
 			}
-			const bool first = !s_haveShotOffset;
+			const bool first = !s_learnedShotOffset;
+			s_learnedShotOffset = true;
 			for( int i = 0; i < 3; ++i )
 			{
 				s_shotOffset[ i ] = offset[ i ];
@@ -395,7 +412,14 @@ namespace PSUVR
 					// On the real shot line: from where free aim shots start (by the character, not
 					// the hand), along the aim.
 					float shotPoint[ 3 ];
-					if( Config::Get().vr.m_reticleOnShot && ShotLinePoint( kReticleDistance, shotPoint ) )
+					if( Config::Get().vr.m_aimLeash )
+					{
+						// Leash: on the hand's line; the shots are aimed at this point.
+						const float meters = Config::Get().vr.m_aimLeashMeters > 1.0f ? Config::Get().vr.m_aimLeashMeters : 1.0f;
+						const V3 handDir = Rotate( c.aimOrientation, { 0.0f, 0.0f, -1.0f } );
+						point = { origin.x + handDir.x * meters, origin.y + handDir.y * meters, origin.z + handDir.z * meters };
+					}
+					else if( Config::Get().vr.m_reticleOnShot && ShotLinePoint( kReticleDistance, shotPoint ) )
 					{
 						point = { shotPoint[ 0 ], shotPoint[ 1 ], shotPoint[ 2 ] };
 					}

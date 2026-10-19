@@ -417,6 +417,14 @@ namespace PSUVR
 					ImGui::Checkbox( "Set the aim directly (first person)", &s.m_aimDirect );
 					Help( "The game's aim follows the gun hand exactly, with no lag. Off: it is steered toward the "
 						"hand like a stick, which trails behind." );
+					ImGui::Checkbox( "Shots land on the reticle (leash)", &s.m_aimLeash );
+					Help( "The reticle sits on the line your gun hand points along, and every shot is aimed at it, "
+						"so what you point at is what you hit (first person). The distance is where shots and "
+						"reticle meet exactly; nearer or farther is a little off." );
+					if( s.m_aimLeash )
+					{
+						ImGui::SliderFloat( "Reticle distance (m)", &s.m_aimLeashMeters, 3.0f, 30.0f, "%.0f" );
+					}
 					ImGui::Checkbox( "Reticle shows where the shot goes", &s.m_reticleOnShot );
 					Help( "On: the reticle sits on the game's actual aim. Off: on the line the gun hand points along." );
 					ImGui::Checkbox( "Gun points at the reticle", &s.m_gunPointsAtAim );

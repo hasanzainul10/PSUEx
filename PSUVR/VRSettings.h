@@ -167,6 +167,11 @@ struct VRSettings
 	bool m_reticleOnShot = true;
 	// Free aim: turn the gun hand about the wrist so the barrel points along the shot.
 	bool m_gunPointsAtAim = false;  // off: the game's pose doesn't line up reliably (bow)
+	// Free aim "leash" (first person, direct aim): the reticle sits on the gun hand's aim line,
+	// aimLeashMeters out, and every shot is aimed from where the game fires (above the player)
+	// to that point, so shots land on the reticle. Replaces reticleOnShot / gunPointsAtAim.
+	bool m_aimLeash = true;
+	float m_aimLeashMeters = 10.0f;
 	// Staff / rod: the weapon stays in the hand as held before the cast instead of following the
 	// casting animation (arms following, first person). The TCSM keeps its animation.
 	bool m_techWeaponStill = true;
