@@ -635,6 +635,54 @@ namespace PSUVR
 	}
 #endif
 
+#ifdef _DEBUG
+	namespace
+	{
+		// [0] flat, [1] eyes; per layer slot: 0 = 0x12, 1 = 0x1F, 2 = 0x20.
+		unsigned s_layerDraws[ 2 ][ 3 ]{};
+		unsigned s_layerSkips[ 3 ]{};
+		unsigned s_skyWorlds[ 2 ]{};
+		unsigned s_skyMoved = 0;
+		DWORD s_layerLogTick = 0;
+
+		int LayerSlot( int layer )
+		{
+			return layer == 0x12 ? 0 : ( layer == 0x1F ? 1 : ( layer == 0x20 ? 2 : -1 ) );
+		}
+
+		void MaybeLogLayers()
+		{
+			const DWORD now = GetTickCount();
+			if( now - s_layerLogTick < 5000 )
+			{
+				return;
+			}
+			s_layerLogTick = now;
+			PSU_LOG( "Layers 5 s: flat draws sky %u blur %u glare %u | eye draws sky %u blur %u glare %u | skipped blur %u glare %u | "
+				"sky world sets flat %u eyes %u moved %u | current layer 0x%X\n",
+				s_layerDraws[ 0 ][ 0 ], s_layerDraws[ 0 ][ 1 ], s_layerDraws[ 0 ][ 2 ], s_layerDraws[ 1 ][ 0 ], s_layerDraws[ 1 ][ 1 ],
+				s_layerDraws[ 1 ][ 2 ], s_layerSkips[ 1 ], s_layerSkips[ 2 ], s_skyWorlds[ 0 ], s_skyWorlds[ 1 ], s_skyMoved,
+				*reinterpret_cast< const int * >( 0x009946C8 ) );
+			std::memset( s_layerDraws, 0, sizeof( s_layerDraws ) );
+			std::memset( s_layerSkips, 0, sizeof( s_layerSkips ) );
+			std::memset( s_skyWorlds, 0, sizeof( s_skyWorlds ) );
+			s_skyMoved = 0;
+		}
+	}
+#endif
+
+	void StereoRenderer::CountLayerDraw()
+	{
+#ifdef _DEBUG
+		const int slot = LayerSlot( *reinterpret_cast< const int * >( 0x009946C8 ) );
+		if( slot >= 0 )
+		{
+			++s_layerDraws[ s_inEyePass ? 1 : 0 ][ slot ];
+		}
+		MaybeLogLayers();
+#endif
+	}
+
 	bool StereoRenderer::SkipEyeEffectDraw()
 	{
 		if( !s_inEyePass )
@@ -644,7 +692,14 @@ namespace PSUVR
 		// PSU_DrawLayer keeps the layer it is drawing at 0x009946C8.
 		const int layer = *reinterpret_cast< const int * >( 0x009946C8 );
 		const auto &vr = Config::Get().vr;
-		return ( layer == 0x1F && !vr.m_eyeBlur ) || ( layer == 0x20 && !vr.m_eyeGlare );
+		const bool skip = ( layer == 0x1F && !vr.m_eyeBlur ) || ( layer == 0x20 && !vr.m_eyeGlare );
+#ifdef _DEBUG
+		if( skip )
+		{
+			++s_layerSkips[ layer == 0x1F ? 1 : 2 ];
+		}
+#endif
+		return skip;
 	}
 
 	void StereoRenderer::NoteVertexConstants( unsigned startRegister, const float *data, unsigned vector4Count, void *ret )
@@ -921,6 +976,12 @@ namespace PSUVR
 
 	bool StereoRenderer::RecenterCameraAnchored( const D3DMATRIX &world, D3DMATRIX &out, void *ret )
 	{
+#ifdef _DEBUG
+		if( *reinterpret_cast< const int * >( 0x009946C8 ) == 0x12 )
+		{
+			++s_skyWorlds[ s_inEyePass ? 1 : 0 ];
+		}
+#endif
 		if( !s_inEyePass )
 		{
 			return false;
@@ -941,6 +1002,9 @@ namespace PSUVR
 			out._41 += self.m_invEyeView[ eye ]._41;
 			out._42 += self.m_invEyeView[ eye ]._42;
 			out._43 += self.m_invEyeView[ eye ]._43;
+#ifdef _DEBUG
+			++s_skyMoved;
+#endif
 			return true;
 		}
 		if( !Config::Get().vr.m_recenterSky )

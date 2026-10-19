@@ -364,6 +364,9 @@ static int EffectDrawWhere()
 
 HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitive( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, UINT StartVertex, UINT PrimitiveCount )
 {
+#ifdef _DEBUG
+	PSUVR::StereoRenderer::CountLayerDraw();
+#endif
 	if( PSUVR::StereoRenderer::SkipEyeEffectDraw() )
 	{
 		return D3D_OK;
@@ -397,6 +400,9 @@ HRESULT APIENTRY PSUOverlay::Hook_SetVertexShaderConstantF( LPDIRECT3DDEVICE9 pD
 
 HRESULT APIENTRY PSUOverlay::Hook_DrawIndexedPrimitive( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, INT BaseVertexIndex, UINT MinIndex, UINT NumVertices, UINT StartIndex, UINT PrimitiveCount )
 {
+#ifdef _DEBUG
+	PSUVR::StereoRenderer::CountLayerDraw();
+#endif
 	if( PSUVR::StereoRenderer::SkipEyeEffectDraw() )
 	{
 		return D3D_OK;
@@ -433,6 +439,9 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawIndexedPrimitive( LPDIRECT3DDEVICE9 pDevic
 
 HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount, const void *pVertexStreamZeroData, UINT VertexStreamZeroStride )
 {
+#ifdef _DEBUG
+	PSUVR::StereoRenderer::CountLayerDraw();
+#endif
 	if( PSUVR::StereoRenderer::SkipEyeEffectDraw() )
 	{
 		return D3D_OK;
