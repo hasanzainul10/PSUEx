@@ -626,6 +626,84 @@ namespace PSUVR
 	}
 #endif
 
+#ifdef _DEBUG
+	namespace
+	{
+		constexpr unsigned kTrackedConstants = 32;
+		float s_vsConst[ kTrackedConstants ][ 4 ]{};
+		void *s_vsConstRet[ kTrackedConstants ]{};
+	}
+#endif
+
+	void StereoRenderer::NoteVertexConstants( unsigned startRegister, const float *data, unsigned vector4Count, void *ret )
+	{
+#ifdef _DEBUG
+		if( !data )
+		{
+			return;
+		}
+		for( unsigned i = 0; i < vector4Count && startRegister + i < kTrackedConstants; ++i )
+		{
+			std::memcpy( s_vsConst[ startRegister + i ], data + i * 4, sizeof( float ) * 4 );
+			s_vsConstRet[ startRegister + i ] = ret;
+		}
+#else
+		( void )startRegister; ( void )data; ( void )vector4Count; ( void )ret;
+#endif
+	}
+
+	void StereoRenderer::NoteShaderDraw( IDirect3DDevice9 *device, unsigned primitiveCount, void *ret )
+	{
+#ifdef _DEBUG
+		static void *s_sites[ 48 ]{};
+		static unsigned s_count = 0;
+		if( !s_inEyePass || !device || s_count >= 48 )
+		{
+			return;
+		}
+		IDirect3DVertexShader9 *vs = nullptr;
+		device->GetVertexShader( &vs );
+		if( !vs )
+		{
+			return;
+		}
+		vs->Release();
+		for( unsigned i = 0; i < s_count; ++i )
+		{
+			if( s_sites[ i ] == ret )
+			{
+				return;
+			}
+		}
+		s_sites[ s_count++ ] = ret;
+		unsigned texW = 0, texH = 0;
+		IDirect3DBaseTexture9 *texture = nullptr;
+		if( SUCCEEDED( device->GetTexture( 0, &texture ) ) && texture )
+		{
+			IDirect3DTexture9 *tex2d = nullptr;
+			texture->QueryInterface( __uuidof( IDirect3DTexture9 ), reinterpret_cast< void ** >( &tex2d ) );
+			texture->Release();
+			if( tex2d )
+			{
+				D3DSURFACE_DESC desc{};
+				tex2d->GetLevelDesc( 0, &desc );
+				texW = desc.Width;
+				texH = desc.Height;
+				tex2d->Release();
+			}
+		}
+		PSU_LOG( "Stereo: shader draw ret=%p vs=%p prims=%u tex=%ux%u | camera state %d\n", ret, static_cast< void * >( vs ),
+			primitiveCount, texW, texH, VRCamera::CameraState() );
+		for( unsigned r = 0; r < 12; ++r )
+		{
+			const float *c = s_vsConst[ r ];
+			PSU_LOG( "  c%u = %.4f %.4f %.4f %.4f (set by %p)\n", r, c[ 0 ], c[ 1 ], c[ 2 ], c[ 3 ], s_vsConstRet[ r ] );
+		}
+#else
+		( void )device; ( void )primitiveCount; ( void )ret;
+#endif
+	}
+
 	void StereoRenderer::NoteNearCameraDraw( IDirect3DDevice9 *device, unsigned primitiveType, unsigned primitiveCount,
 		const void *verts, unsigned stride, void *ret )
 	{
