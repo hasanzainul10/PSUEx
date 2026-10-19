@@ -213,6 +213,14 @@ struct VRSettings
 	// stay locked to each eye, enlarged for the headset's wider view, instead of standing in the
 	// world where the flat camera is.
 	bool m_recenterSky = true;
+	// The area's sky (render layer 0x12, TLandDisplayerHevenTask) drawn as if the eye were at the
+	// game camera: infinitely far, no edges, never behind you in third person.
+	bool m_skyAtEye = true;
+	// The game's full-screen blur (layer 0x1F, TBlur) and glare (0x20, TGlare) in the headset. They
+	// are made from the flat image, so in VR they land in the wrong place (glow through the weapon,
+	// floating rectangles). Off = only the flat window shows them.
+	bool m_eyeBlur = false;
+	bool m_eyeGlare = false;
 	// When stereo is on, also submit the flat game frame as a world-locked quad (HUD stand-in).
 	// Default off — the panel reads as a dark PiP sliding over the stereo floor.
 	bool m_stereoPanel = false;

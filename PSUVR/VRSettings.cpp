@@ -107,6 +107,9 @@ namespace
 	X( m_stereoSkipScreenQuads, "stereoSkipScreenQuads" ) \
 	X( m_reprojectSprites, "reprojectSprites" ) \
 	X( m_recenterSky, "recenterSky" ) \
+	X( m_skyAtEye, "skyAtEye" ) \
+	X( m_eyeBlur, "eyeBlur" ) \
+	X( m_eyeGlare, "eyeGlare" ) \
 	X( m_stereoPanel, "stereoPanel" ) \
 	X( m_debugEyeShift, "debugEyeShift" ) \
 	X( m_debugDoublePass, "debugDoublePass" )

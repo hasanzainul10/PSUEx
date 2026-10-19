@@ -322,6 +322,13 @@ namespace PSUVR
 		{
 			ImGui::Checkbox( "Vignette while moving / smooth turning", &s.m_comfortVignette );
 			ImGui::Checkbox( "Place glows and sprite effects in 3D", &s.m_reprojectSprites );
+			ImGui::Checkbox( "Sky infinitely far", &s.m_skyAtEye );
+			Help( "The area's sky (galaxy / clouds) is drawn as if infinitely far away, so its edges never show." );
+			ImGui::Checkbox( "Screen blur in the headset", &s.m_eyeBlur );
+			Help( "The game's full-screen blur / glow. Made from the flat image, so in VR it lands in the wrong "
+				"place (enemy glow showing through your weapon). Off by default." );
+			ImGui::Checkbox( "Screen glare in the headset", &s.m_eyeGlare );
+			Help( "The game's full-screen glare. In VR it shows as floating rectangles. Off by default." );
 			ImGui::Checkbox( "Keep screen tints on my view", &s.m_recenterSky );
 			Help( "Some missions tint the screen with a sheet in front of the game's camera. It is kept in front "
 				"of your eyes instead of showing up as a see-through plane in the room." );

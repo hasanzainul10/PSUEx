@@ -331,7 +331,17 @@ namespace FrameRender
 		const unsigned mode = PSUMemory::ReadAbsoluteMemory< unsigned >( 0x00B90EA8 );
 		if( vr.m_enabled && vr.m_stereo && ( vr.m_stereoMode == 0 || mode == vr.m_stereoMode ) )
 		{
+			// The full-screen blur (0x1F) and glare (0x20) are made from the flat image: off in
+			// the eyes unless asked for.
+			uint8_t *blur = vr.m_eyeBlur ? nullptr : LayerDisabledByte( 0x1F );
+			uint8_t *glare = vr.m_eyeGlare ? nullptr : LayerDisabledByte( 0x20 );
+			const uint8_t blurWas = blur ? *blur : 0;
+			const uint8_t glareWas = glare ? *glare : 0;
+			if( blur ) *blur = 1;
+			if( glare ) *glare = 1;
 			PSUVR::StereoRenderer::Get().RenderEyes( PSUOverlay::Device(), pOriginalPassA );
+			if( blur ) *blur = blurWas;
+			if( glare ) *glare = glareWas;
 		}
 		if( hidden )
 		{

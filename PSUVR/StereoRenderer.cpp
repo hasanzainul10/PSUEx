@@ -909,13 +909,29 @@ namespace PSUVR
 
 	bool StereoRenderer::RecenterCameraAnchored( const D3DMATRIX &world, D3DMATRIX &out, void *ret )
 	{
-		if( !s_inEyePass || !Config::Get().vr.m_recenterSky )
+		if( !s_inEyePass )
 		{
 			return false;
 		}
 		StereoRenderer &self = Get();
 		const int eye = s_passEyeIndex & 1;
 		if( !self.m_haveInvGameView || !self.m_haveEyePosition[ eye ] )
+		{
+			return false;
+		}
+		// The sky layer (PSU_DrawLayer keeps the layer being drawn at 0x009946C8): world matrices are
+		// in game camera space, so moving the model by the eye's offset from the camera means the eye
+		// sees it from the camera's spot with its own rotation (a skybox: infinitely far).
+		constexpr int kSkyLayer = 0x12;
+		if( Config::Get().vr.m_skyAtEye && *reinterpret_cast< const int * >( 0x009946C8 ) == kSkyLayer )
+		{
+			out = world;
+			out._41 += self.m_invEyeView[ eye ]._41;
+			out._42 += self.m_invEyeView[ eye ]._42;
+			out._43 += self.m_invEyeView[ eye ]._43;
+			return true;
+		}
+		if( !Config::Get().vr.m_recenterSky )
 		{
 			return false;
 		}
