@@ -626,6 +626,92 @@ namespace PSUVR
 	}
 #endif
 
+	void StereoRenderer::NoteNearCameraDraw( IDirect3DDevice9 *device, unsigned primitiveType, unsigned primitiveCount,
+		const void *verts, unsigned stride, void *ret )
+	{
+#ifdef _DEBUG
+		static void *s_sites[ 64 ]{};
+		static unsigned s_count = 0;
+		if( !s_inEyePass || !device || !verts || stride < 12 || s_count >= 64 )
+		{
+			return;
+		}
+		StereoRenderer &self = Get();
+		if( !self.m_haveInvGameView )
+		{
+			return;
+		}
+		for( unsigned i = 0; i < s_count; ++i )
+		{
+			if( s_sites[ i ] == ret )
+			{
+				return;
+			}
+		}
+		DWORD fvf = 0;
+		if( FAILED( device->GetFVF( &fvf ) ) || ( fvf & D3DFVF_POSITION_MASK ) == D3DFVF_XYZRHW || fvf == 0 )
+		{
+			return;
+		}
+		const unsigned vertCount = VertCountForPrimitive( primitiveType, primitiveCount );
+		if( vertCount < 3 || vertCount > 20000 )
+		{
+			return;
+		}
+		D3DMATRIX world{}, toCamera{};
+		device->GetTransform( D3DTS_WORLD, &world );
+		MulMatrix( world, self.m_gameView, toCamera );
+		float mn[ 3 ] = { 1.0e30f, 1.0e30f, 1.0e30f }, mx[ 3 ] = { -1.0e30f, -1.0e30f, -1.0e30f };
+		float nearest = 1.0e30f;
+		const auto *bytes = static_cast< const unsigned char * >( verts );
+		for( unsigned i = 0; i < vertCount; ++i )
+		{
+			const float *v = reinterpret_cast< const float * >( bytes + i * stride );
+			const float in[ 4 ] = { v[ 0 ], v[ 1 ], v[ 2 ], 1.0f };
+			float c[ 4 ]{};
+			MulVec4Mat( in, toCamera, c );
+			for( int k = 0; k < 3; ++k )
+			{
+				mn[ k ] = ( std::min )( mn[ k ], c[ k ] );
+				mx[ k ] = ( std::max )( mx[ k ], c[ k ] );
+			}
+			nearest = ( std::min )( nearest, std::sqrt( c[ 0 ] * c[ 0 ] + c[ 1 ] * c[ 1 ] + c[ 2 ] * c[ 2 ] ) );
+		}
+		// Within 2 m (20 units) of the camera, or a box around it on every axis.
+		const bool around = mn[ 0 ] < 0.0f && mx[ 0 ] > 0.0f && mn[ 1 ] < 0.0f && mx[ 1 ] > 0.0f && mn[ 2 ] < 0.0f && mx[ 2 ] > 0.0f;
+		if( nearest > 20.0f && !around )
+		{
+			return;
+		}
+		s_sites[ s_count++ ] = ret;
+		unsigned texW = 0, texH = 0;
+		IDirect3DBaseTexture9 *texture = nullptr;
+		if( SUCCEEDED( device->GetTexture( 0, &texture ) ) && texture )
+		{
+			IDirect3DTexture9 *tex2d = nullptr;
+			texture->QueryInterface( __uuidof( IDirect3DTexture9 ), reinterpret_cast< void ** >( &tex2d ) );
+			texture->Release();
+			if( tex2d )
+			{
+				D3DSURFACE_DESC desc{};
+				tex2d->GetLevelDesc( 0, &desc );
+				texW = desc.Width;
+				texH = desc.Height;
+				tex2d->Release();
+			}
+		}
+		DWORD blend = 0, zEnable = 0, zWrite = 0;
+		device->GetRenderState( D3DRS_ALPHABLENDENABLE, &blend );
+		device->GetRenderState( D3DRS_ZENABLE, &zEnable );
+		device->GetRenderState( D3DRS_ZWRITEENABLE, &zWrite );
+		PSU_LOG( "Stereo: 3D near camera ret=%p verts=%u fvf=0x%X tex=%ux%u blend=%lu z=%lu/%lu nearest %.1f%s | camera box (%.1f %.1f %.1f)-(%.1f %.1f %.1f) | world t (%.1f %.1f %.1f) | camera state %d\n",
+			ret, vertCount, fvf, texW, texH, blend, zEnable, zWrite, nearest, around ? " AROUND" : "", mn[ 0 ], mn[ 1 ], mn[ 2 ], mx[ 0 ],
+			mx[ 1 ], mx[ 2 ], world._41, world._42, world._43, VRCamera::CameraState() );
+#else
+		( void )device; ( void )primitiveType; ( void )primitiveCount; ( void )verts; ( void )stride; ( void )ret;
+#endif
+	}
+
 	void StereoRenderer::NoteTechnique()
 	{
 #ifdef _DEBUG
@@ -763,11 +849,11 @@ namespace PSUVR
 		if( dx * dx + dy * dy + dz * dz > kAnchoredUnits * kAnchoredUnits )
 		{
 #ifdef _DEBUG
-			// Diagnostics: models within 5 units (50 cm) of the camera, once per draw site, with
+			// Diagnostics: models within 20 units (2 m) of the camera, once per draw site, with
 			// where they sit in camera space (overlays placed just in front of the camera).
 			static void *s_nearSites[ 64 ]{};
 			static unsigned s_nearCount = 0;
-			if( dx * dx + dy * dy + dz * dz < 25.0f && s_nearCount < 64 )
+			if( dx * dx + dy * dy + dz * dz < 400.0f && s_nearCount < 64 )
 			{
 				bool seen = false;
 				for( unsigned i = 0; i < s_nearCount; ++i )

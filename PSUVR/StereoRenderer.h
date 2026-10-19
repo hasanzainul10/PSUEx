@@ -44,6 +44,10 @@ namespace PSUVR
 
 		// Debug diagnostics for screen-space (XYZRHW) effect draws ("VREffect:" log). where: 0 eye
 		// pass, 1 pass B / UI, 2 elsewhere. verts may be null (vertex buffer draws). Release: no-op.
+		// Debug: 3D vertex-pointer draws in an eye pass that reach within 2 m of the game camera or
+		// surround it (camera-attached sheets / boxes), once per draw site ("Stereo: 3D near camera").
+		static void NoteNearCameraDraw( IDirect3DDevice9 *device, unsigned primitiveType, unsigned primitiveCount,
+			const void *verts, unsigned stride, void *ret );
 		static void NoteEffectDraw( IDirect3DDevice9 *device, int where, unsigned primitiveType, unsigned primitiveCount,
 			const void *verts, unsigned stride, void *ret );
 		// A technique is being cast: effect draws in the next 2 s are tagged "tech".

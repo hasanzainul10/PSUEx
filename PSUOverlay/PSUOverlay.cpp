@@ -424,6 +424,8 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3
 #ifdef _DEBUG
 	PSUVR::StereoRenderer::NoteEffectDraw( pDevice, EffectDrawWhere(), static_cast< unsigned >( PrimitiveType ), PrimitiveCount,
 		pVertexStreamZeroData, VertexStreamZeroStride, _ReturnAddress() );
+	PSUVR::StereoRenderer::NoteNearCameraDraw( pDevice, static_cast< unsigned >( PrimitiveType ), PrimitiveCount,
+		pVertexStreamZeroData, VertexStreamZeroStride, _ReturnAddress() );
 #endif
 	if( PSUVR::StereoRenderer::ShouldSkipScreenQuad( pDevice, _ReturnAddress(), PrimitiveCount, true ) )
 	{
