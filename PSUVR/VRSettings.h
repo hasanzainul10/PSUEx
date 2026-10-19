@@ -216,10 +216,10 @@ struct VRSettings
 	// The area's sky (render layer 0x12, TLandDisplayerHevenTask) drawn as if the eye were at the
 	// game camera: infinitely far, no edges, never behind you in third person.
 	bool m_skyAtEye = true;
-	// The game's full-screen glow (layer 0x1F, TBlur) and glare (0x20, TGlare) while VR runs. They
+	// The game's full-screen glow (layer 0x1F, TBlur) and glare (0x20, TGlare) in the headset. They
 	// are made from the flat image and laid over everything (enemy glow over the weapon, floating
-	// rectangles). Off switches the layer off for the whole frame, as the layer bisect did (turning
-	// it off in the eyes only crashed: the flat pass had set it up).
+	// rectangles). Off skips their draws in the eyes; the layers still run (switching a layer off
+	// crashed: its object never set itself up), and the flat window keeps them.
 	bool m_eyeBlur = false;
 	bool m_eyeGlare = false;
 	// The area's sky (layer 0x12) in the headset. Some skies are partial backdrop boxes made for the

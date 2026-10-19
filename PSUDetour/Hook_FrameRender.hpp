@@ -317,16 +317,6 @@ namespace FrameRender
 		{
 			*hidden = 1;
 		}
-		// While VR draws: the full-screen glow (0x1F) and glare (0x20) off for the whole frame, flat and
-		// eyes alike (turning them off in the eyes only left their render targets unset: crash).
-		const auto &vrSettings = Config::Get().vr;
-		const bool vrFrame = vrSettings.m_enabled && vrSettings.m_stereo && !vrSettings.m_paused;
-		uint8_t *glow = vrFrame && !vrSettings.m_eyeBlur ? LayerDisabledByte( 0x1F ) : nullptr;
-		uint8_t *glare = vrFrame && !vrSettings.m_eyeGlare ? LayerDisabledByte( 0x20 ) : nullptr;
-		const uint8_t glowWas = glow ? *glow : 0;
-		const uint8_t glareWas = glare ? *glare : 0;
-		if( glow ) *glow = 1;
-		if( glare ) *glare = 1;
 		const auto &vr = Config::Get().vr;
 		const bool twice = vr.m_enabled && vr.m_debugDoublePass;
 		s_passAInFrame = 1;
@@ -343,8 +333,6 @@ namespace FrameRender
 		{
 			PSUVR::StereoRenderer::Get().RenderEyes( PSUOverlay::Device(), pOriginalPassA );
 		}
-		if( glow ) *glow = glowWas;
-		if( glare ) *glare = glareWas;
 		if( hidden )
 		{
 			*hidden = hiddenWas;

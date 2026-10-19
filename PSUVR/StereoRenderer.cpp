@@ -693,7 +693,8 @@ namespace PSUVR
 		const int layer = *reinterpret_cast< const int * >( 0x009946C8 );
 		const auto &vr = Config::Get().vr;
 		( void )ret;
-		const bool skip = layer == 0x12 && !vr.m_eyeSky;
+		const bool skip = ( layer == 0x12 && !vr.m_eyeSky ) || ( layer == 0x1F && !vr.m_eyeBlur ) ||
+			( layer == 0x20 && !vr.m_eyeGlare );
 #ifdef _DEBUG
 		if( skip )
 		{

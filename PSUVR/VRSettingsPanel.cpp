@@ -329,10 +329,10 @@ namespace PSUVR
 				"partial boxes made for the flat camera, and in VR their unfinished sides show." );
 			ImGui::Checkbox( "Screen glow (VR)", &s.m_eyeBlur );
 			Help( "The game's full-screen glow. It is laid over the whole picture, so in VR an enemy's glow "
-				"shows through your weapon. Off by default (also off in the flat window while VR runs)." );
+				"shows through your weapon. Off by default (the flat window keeps it)." );
 			ImGui::Checkbox( "Screen glare (VR)", &s.m_eyeGlare );
-			Help( "The game's full-screen glare. In VR it shows as floating rectangles. Off by default (also off "
-				"in the flat window while VR runs)." );
+			Help( "The game's full-screen glare. In VR it shows as floating rectangles and a glow over your "
+				"weapon. Off by default (the flat window keeps it)." );
 			ImGui::Checkbox( "Keep screen tints on my view", &s.m_recenterSky );
 			Help( "Some missions tint the screen with a sheet in front of the game's camera. It is kept in front "
 				"of your eyes instead of showing up as a see-through plane in the room." );

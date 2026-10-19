@@ -317,6 +317,11 @@ HRESULT APIENTRY PSUOverlay::Hook_CreateDevice( IDirect3D9 *pD3D, UINT Adapter, 
 			{
 				PSU_LOG( "Failed to hook DrawPrimitiveUP!\n" );
 			}
+			// The glare / glow layers draw with DrawIndexedPrimitiveUP: skipped in the eyes when off.
+			if( DetourAttach( &( PVOID & )m_pOriginalDrawIndexedPrimitiveUP, Hook_DrawIndexedPrimitiveUP ) != NO_ERROR )
+			{
+				PSU_LOG( "Failed to hook DrawIndexedPrimitiveUP!\n" );
+			}
 			if( DetourAttach( &( PVOID & )m_pOriginalSetVertexShaderConstantF, Hook_SetVertexShaderConstantF ) != NO_ERROR )
 			{
 				PSU_LOG( "Failed to hook SetVertexShaderConstantF!\n" );
@@ -513,27 +518,17 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3
 
 HRESULT APIENTRY PSUOverlay::Hook_DrawIndexedPrimitiveUP( LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE Type, UINT MinVertexIndex, UINT NumVertices, UINT PrimitiveCount, const void *pIndexData, D3DFORMAT IndexDataFormat, const void *pVertexStreamZeroData, UINT VertexStreamZeroStride )
 {
-	const HRESULT hr = m_pOriginalDrawIndexedPrimitiveUP(
-		pDevice,
-		Type,
-		MinVertexIndex,
-		NumVertices,
-		PrimitiveCount,
-		pIndexData,
-		IndexDataFormat,
-		pVertexStreamZeroData,
-		VertexStreamZeroStride
-	);
-	auto &hudDipUp = PSUVR::VRHud::Get();
-	if( SUCCEEDED( hr ) && hudDipUp.Active() &&
-		( FrameTrace::CurrentPassAddress() == 0x004FDBC0 || hudDipUp.InUiDraw() ) )
+#ifdef _DEBUG
+	PSUVR::StereoRenderer::CountLayerDraw();
+#endif
+	if( PSUVR::StereoRenderer::SkipEyeEffectDraw( _ReturnAddress() ) )
 	{
-		hudDipUp.CaptureXyzrhwIndexedUp( pDevice,
-			static_cast< unsigned >( Type ), MinVertexIndex, NumVertices, PrimitiveCount,
-			pIndexData, static_cast< unsigned >( IndexDataFormat ),
-			pVertexStreamZeroData, VertexStreamZeroStride, _ReturnAddress() );
+		return D3D_OK;
 	}
-	return hr;
+	// (No HUD capture here: this hook only became attached for the glare / glow, and the HUD
+	// worked without it.)
+	return m_pOriginalDrawIndexedPrimitiveUP( pDevice, Type, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData,
+		IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride );
 }
 
 void PrintMatrix( const Matrix4x4 &matrix, const char *name )
