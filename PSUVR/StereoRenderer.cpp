@@ -692,22 +692,12 @@ namespace PSUVR
 		// PSU_DrawLayer keeps the layer it is drawing at 0x009946C8.
 		const int layer = *reinterpret_cast< const int * >( 0x009946C8 );
 		const auto &vr = Config::Get().vr;
-		// The glow's additive composites onto the eye (the end of the blur chain).
-		const uintptr_t site = reinterpret_cast< uintptr_t >( ret );
-		const bool glowComposite = site == 0x004A1F23 || site == 0x004A2076;
-		if( glowComposite && !vr.m_eyeBlur )
-		{
-			return true;
-		}
-		if( layer == 0x12 && !vr.m_eyeSky )
-		{
-			return true;
-		}
-		const bool skip = layer == 0x20 && !vr.m_eyeGlare;
+		( void )ret;
+		const bool skip = layer == 0x12 && !vr.m_eyeSky;
 #ifdef _DEBUG
 		if( skip )
 		{
-			++s_layerSkips[ layer == 0x1F ? 1 : 2 ];
+			++s_layerSkips[ 0 ];
 		}
 #endif
 		return skip;
