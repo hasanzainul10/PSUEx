@@ -9,6 +9,7 @@
 #include "../PSUOverlay/FrameTrace.h"
 #include "../PSUVR/StereoRenderer.h"
 #include "../PSUVR/VRBindings.h"
+#include "../PSUVR/VRCamera.h"
 #include "../PSUVR/VRHud.h"
 #include <intrin.h>
 
@@ -241,9 +242,74 @@ namespace FrameRender
 		return *table + layer * 8 + 6;
 	}
 
+	// RTTI class name of an object (vtable[-1] = complete object locator), or "?".
+	static const char *ObjectClassName( const void *object )
+	{
+		__try
+		{
+			const uint8_t *const *vt = *static_cast< const uint8_t *const *const * >( object );
+			const uint8_t *col = reinterpret_cast< const uint8_t *const * >( vt )[ -1 ];
+			const uint8_t *typeDescriptor = *reinterpret_cast< const uint8_t *const * >( col + 0x0C );
+			return reinterpret_cast< const char * >( typeDescriptor + 8 );
+		}
+		__except( EXCEPTION_EXECUTE_HANDLER )
+		{
+			return "?";
+		}
+	}
+
+	// Debug: Ctrl+Shift+Home logs every render layer's nodes (draw callback, object, its class).
+	static void PollLayerDump()
+	{
+#ifdef _DEBUG
+		static bool s_homeDown = false;
+		const bool mods = ( GetAsyncKeyState( VK_CONTROL ) & 0x8000 ) && ( GetAsyncKeyState( VK_SHIFT ) & 0x8000 );
+		const bool home = mods && ( GetAsyncKeyState( VK_HOME ) & 0x8000 );
+		const bool pressed = home && !s_homeDown;
+		s_homeDown = home;
+		if( !pressed )
+		{
+			return;
+		}
+		uint8_t *const *table = reinterpret_cast< uint8_t *const * >( 0x00B9DB38 );
+		if( !PSUMemory::IsValidPointer( table ) || !*table )
+		{
+			return;
+		}
+		PSU_LOG( "LayerDump: begin (camera state %d)\n", PSUVR::VRCamera::CameraState() );
+		for( int layer = 0x02; layer <= 0x3F; ++layer )
+		{
+			__try
+			{
+				const uint8_t *entry = *table + layer * 8;
+				const uint8_t *node = *reinterpret_cast< const uint8_t *const * >( entry );
+				int count = 0;
+				while( node && count < 60 && PSUMemory::IsValidPointer( node + 0x14 ) )
+				{
+					const void *object = *reinterpret_cast< const void *const * >( node + 0x0C );
+					const void *callback = *reinterpret_cast< const void *const * >( node + 0x10 );
+					const uint16_t flags = object && PSUMemory::IsValidPointer( static_cast< const uint8_t * >( object ) + 8 )
+						? *reinterpret_cast< const uint16_t * >( static_cast< const uint8_t * >( object ) + 8 ) : 0;
+					PSU_LOG( "LayerDump: layer 0x%02X%s node %p cb=%p obj=%p flags=%04X class=%s\n", layer, entry[ 6 ] ? " (off)" : "",
+						node, callback, object, flags, object ? ObjectClassName( object ) : "-" );
+					node = *reinterpret_cast< const uint8_t *const * >( node + 0x08 );
+					++count;
+				}
+			}
+			__except( EXCEPTION_EXECUTE_HANDLER )
+			{
+				PSU_LOG( "LayerDump: layer 0x%02X unreadable\n", layer );
+			}
+		}
+		PSU_LOG( "LayerDump: end\n" );
+		PSUVR::VRBindings::ShowToast( "Layers written to the log" );
+#endif
+	}
+
 	void __cdecl Hook_PassA()
 	{
 		PollLayerBisect();
+		PollLayerDump();
 		// A pass A layer picked by the bisect: off for this frame's flat and eye passes.
 		uint8_t *hidden = s_hiddenLayer >= 0x02 && s_hiddenLayer <= 0x29 ? LayerDisabledByte( s_hiddenLayer ) : nullptr;
 		const uint8_t hiddenWas = hidden ? *hidden : 0;
