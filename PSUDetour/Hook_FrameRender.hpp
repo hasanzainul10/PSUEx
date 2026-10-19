@@ -192,10 +192,19 @@ namespace FrameRender
 	static void PollLayerBisect()
 	{
 #ifdef _DEBUG
-		static bool s_upDown = false, s_downDown = false;
+		static bool s_upDown = false, s_downDown = false, s_insDown = false, s_delDown = false;
 		const bool mods = ( GetAsyncKeyState( VK_CONTROL ) & 0x8000 ) && ( GetAsyncKeyState( VK_SHIFT ) & 0x8000 );
 		const bool up = mods && ( GetAsyncKeyState( VK_PRIOR ) & 0x8000 );
 		const bool down = mods && ( GetAsyncKeyState( VK_NEXT ) & 0x8000 );
+		// Ctrl+Shift+Insert / Delete: the screen-space draw site bisect (eyes only).
+		const bool ins = mods && ( GetAsyncKeyState( VK_INSERT ) & 0x8000 );
+		const bool del = mods && ( GetAsyncKeyState( VK_DELETE ) & 0x8000 );
+		if( ( ins && !s_insDown ) || ( del && !s_delDown ) )
+		{
+			PSUVR::VRBindings::ShowToast( PSUVR::StereoRenderer::StepSiteBisect( ins && !s_insDown ? 1 : -1 ) );
+		}
+		s_insDown = ins;
+		s_delDown = del;
 		int step = 0;
 		if( up && !s_upDown ) step = 1;
 		if( down && !s_downDown ) step = -1;

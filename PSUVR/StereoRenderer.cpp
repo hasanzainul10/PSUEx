@@ -671,9 +671,36 @@ namespace PSUVR
 	}
 #endif
 
-	void StereoRenderer::CountLayerDraw()
+#ifdef _DEBUG
+	namespace
+	{
+		// Every draw site seen in an eye pass, with the layer it was first seen on (site bisect).
+		struct EyeSite
+		{
+			void *ret;
+			int layer;
+		};
+		constexpr int kMaxEyeSites = 256;
+		EyeSite s_eyeSites[ kMaxEyeSites ];
+		int s_eyeSiteCount = 0;
+	}
+#endif
+
+	void StereoRenderer::CountLayerDraw( void *ret )
 	{
 #ifdef _DEBUG
+		if( s_inEyePass && s_eyeSiteCount < kMaxEyeSites )
+		{
+			bool seen = false;
+			for( int i = 0; i < s_eyeSiteCount && !seen; ++i )
+			{
+				seen = s_eyeSites[ i ].ret == ret;
+			}
+			if( !seen )
+			{
+				s_eyeSites[ s_eyeSiteCount++ ] = { ret, *reinterpret_cast< const int * >( 0x009946C8 ) };
+			}
+		}
 		const int slot = LayerSlot( *reinterpret_cast< const int * >( 0x009946C8 ) );
 		if( slot >= 0 )
 		{
@@ -683,12 +710,66 @@ namespace PSUVR
 #endif
 	}
 
+#ifdef _DEBUG
+	namespace
+	{
+		void *s_bisectSite = nullptr;
+		int s_bisectIndex = -1;
+	}
+#endif
+
+	const char *StereoRenderer::StepSiteBisect( int direction )
+	{
+#ifdef _DEBUG
+		// Every draw site seen in the eye passes so far.
+		const int count = s_eyeSiteCount;
+		static char s_text[ 80 ];
+		if( count == 0 )
+		{
+			s_bisectIndex = -1;
+			s_bisectSite = nullptr;
+			sprintf_s( s_text, "Site bisect: no eye draw sites seen yet" );
+			return s_text;
+		}
+		s_bisectIndex += direction;
+		if( s_bisectIndex < -1 )
+		{
+			s_bisectIndex = count - 1;
+		}
+		if( s_bisectIndex >= count )
+		{
+			s_bisectIndex = -1;
+		}
+		s_bisectSite = s_bisectIndex >= 0 ? s_eyeSites[ s_bisectIndex ].ret : nullptr;
+		if( s_bisectSite )
+		{
+			sprintf_s( s_text, "Site bisect %d/%d: hiding %p (layer 0x%X)", s_bisectIndex + 1, count, s_bisectSite,
+				s_eyeSites[ s_bisectIndex ].layer );
+		}
+		else
+		{
+			sprintf_s( s_text, "Site bisect: nothing hidden" );
+		}
+		PSU_LOG( "%s\n", s_text );
+		return s_text;
+#else
+		( void )direction;
+		return "";
+#endif
+	}
+
 	bool StereoRenderer::SkipEyeEffectDraw( void *ret )
 	{
 		if( !s_inEyePass )
 		{
 			return false;
 		}
+#ifdef _DEBUG
+		if( s_bisectSite && ret == s_bisectSite )
+		{
+			return true;
+		}
+#endif
 		// PSU_DrawLayer keeps the layer it is drawing at 0x009946C8.
 		const int layer = *reinterpret_cast< const int * >( 0x009946C8 );
 		const auto &vr = Config::Get().vr;

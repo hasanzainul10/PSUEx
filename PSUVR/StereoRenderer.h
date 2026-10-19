@@ -52,8 +52,11 @@ namespace PSUVR
 		// Eye pass, while the full-screen blur (layer 0x1F) or glare (0x20) draws and it is off for
 		// the headset: skip the draw call (the layer still runs, so its render targets stay set up).
 		static bool SkipEyeEffectDraw( void *ret );
+		// Debug site bisect: step through the screen-space draw sites seen in the eyes, skipping the
+		// selected one in the eyes (returns the toast text).
+		static const char *StepSiteBisect( int direction );
 		// Debug: count a draw call for the layer diagnostics (sky / blur / glare, flat vs eyes).
-		static void CountLayerDraw();
+		static void CountLayerDraw( void *ret );
 		static void NoteVertexConstants( unsigned startRegister, const float *data, unsigned vector4Count, void *ret );
 		static void NoteShaderDraw( IDirect3DDevice9 *device, unsigned primitiveCount, void *ret );
 		static void NoteNearCameraDraw( IDirect3DDevice9 *device, unsigned primitiveType, unsigned primitiveCount,
