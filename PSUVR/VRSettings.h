@@ -48,8 +48,8 @@ struct VRSettings
 	bool m_d3d9exOnly = false;
 	bool m_solidColorPrototype = false; // true = teal clear; false = virtual-screen blit
 	std::string m_runtime = "openxr";
-	std::string m_cameraMode = "thirdPerson";
-	std::string m_inputMode = "gamepad";
+	std::string m_cameraMode = "firstPerson";
+	std::string m_inputMode = "motion";
 	// Read by the dinput8 proxy at startup: keep the gamepad (and optionally the keyboard)
 	// working while the game window isn't focused. Gamepad defaults on with VR.
 	bool m_backgroundInput = true;
@@ -95,7 +95,7 @@ struct VRSettings
 	std::string m_fpMoveDirection = "head";
 	// Own character in first person: "headless" (cut above the neck), "hands" (forearms and
 	// hands only, while the arms follow the controllers), "hidden", "full".
-	std::string m_fpBody = "headless";
+	std::string m_fpBody = "hands";
 	// How far below the eyes the headless cut sits (meters).
 	float m_fpNeckDrop = 0.22f;
 	// How far the head may lean / crouch away from the body before the body follows (meters).
@@ -107,7 +107,7 @@ struct VRSettings
 	float m_roomWalkStart = 0.25f;
 	// Third person: camera distance behind and height above the head (meters), right-stick
 	// zoom speed (m/s) and range, and the Back + right stick orbit / height steps.
-	float m_tpDistance = 4.0f;
+	float m_tpDistance = 8.76f;
 	float m_tpHeight = 1.0f;
 	float m_tpZoomSpeed = 3.0f;
 	float m_tpMinDistance = 1.5f;
@@ -142,10 +142,11 @@ struct VRSettings
 	// on the controllers, true = the game's animation.
 	bool m_handsPhotonArtAnimation = false;
 	// Hand angle calibration (controller -> hand rotation, quaternion x y z w per hand).
-	// Off: estimated from the skeleton and the standard OpenXR grip pose.
-	bool m_handCalibrated = false;
-	float m_handRotL0 = 0.0f, m_handRotL1 = 0.0f, m_handRotL2 = 0.0f, m_handRotL3 = 1.0f;
-	float m_handRotR0 = 0.0f, m_handRotR1 = 0.0f, m_handRotR2 = 0.0f, m_handRotR3 = 1.0f;
+	// Off: estimated from the skeleton and the standard OpenXR grip pose. Defaults: a PSVR2
+	// Sense calibration.
+	bool m_handCalibrated = true;
+	float m_handRotL0 = 0.6261195f, m_handRotL1 = -0.6223192f, m_handRotL2 = -0.3737006f, m_handRotL3 = 0.2846774f;
+	float m_handRotR0 = -0.5841057f, m_handRotR1 = 0.6521613f, m_handRotR2 = -0.2755048f, m_handRotR3 = 0.3969927f;
 	// Fine tune on top of the hand angle, degrees (roll mirrors between the hands).
 	float m_handPitch = 0.0f;
 	float m_handRoll = 0.0f;
@@ -175,23 +176,23 @@ struct VRSettings
 	// facing +0x124 and aim pitch +0x220) instead of steering it with the right stick.
 	bool m_aimDirect = true;
 	// Draw our reticle where the game's aim (and so the shot) points, not along the controller.
-	bool m_reticleOnShot = true;
+	bool m_reticleOnShot = false;
 	// Free aim: turn the gun hand about the wrist so the barrel points along the shot.
 	bool m_gunPointsAtAim = false;  // off: the game's pose doesn't line up reliably (bow)
 	// Free aim "leash" (first person, direct aim): the reticle sits on the gun hand's aim line,
 	// aimLeashMeters out, and every shot is aimed from where the game fires (above the player)
 	// to that point, so shots land on the reticle. Replaces reticleOnShot / gunPointsAtAim.
 	bool m_aimLeash = true;
-	float m_aimLeashMeters = 10.0f;
+	float m_aimLeashMeters = 20.0f;
 	// Free aim: the gun hand turned by this much (degrees, in the controller's frame) so the gun
 	// model lines up with the reticle. Per weapon type; set in the headset with both grips + right
 	// stick while aiming.
-	float m_gunAdjustHandgunPitch = 0.0f;
-	float m_gunAdjustHandgunYaw = 0.0f;
-	float m_gunAdjustBowPitch = 0.0f;
-	float m_gunAdjustBowYaw = 0.0f;
-	float m_gunAdjustRiflePitch = 0.0f;
-	float m_gunAdjustRifleYaw = 0.0f;
+	float m_gunAdjustHandgunPitch = 38.14338f;
+	float m_gunAdjustHandgunYaw = -8.952070f;
+	float m_gunAdjustBowPitch = 51.93464f;
+	float m_gunAdjustBowYaw = -10.309003f;
+	float m_gunAdjustRiflePitch = 26.22663f;
+	float m_gunAdjustRifleYaw = 18.22735f;
 	// Staff / rod: the weapon stays in the hand as held before the cast instead of following the
 	// casting animation (arms following, first person). The TCSM keeps its animation.
 	bool m_techWeaponStill = true;
@@ -228,7 +229,7 @@ struct VRSettings
 	// are made from the flat image and laid over everything (enemy glow over the weapon, floating
 	// rectangles). Off skips their draws in the eyes; the layers still run (switching a layer off
 	// crashed: its object never set itself up), and the flat window keeps them.
-	bool m_eyeBlur = false;
+	bool m_eyeBlur = true;
 	bool m_eyeGlare = false;
 	// The area's sky (layer 0x12) in the headset. Some skies are partial backdrop boxes made for the
 	// flat camera's view; in VR their unfinished sides show (galaxy panels, rectangles). Off hides
