@@ -281,6 +281,8 @@ namespace PSUVR
 		float s_turnTime = 0.0f;
 		constexpr float kSwingRearmSpeed = 0.8f;
 		constexpr float kSwingBufferSeconds = 0.25f;
+		// Held for the Just Attack window: windows open up to frame ~33 of the motion (~1.1 s at 30 fps).
+		constexpr float kJustAttackWaitSeconds = 1.5f;
 		constexpr float kSwitchWaitSeconds = 0.6f;
 		constexpr float kAttackPulseSeconds = 0.08f;
 		constexpr float kMinTurnSeconds = 0.05f;
@@ -435,6 +437,23 @@ namespace PSUVR
 			return s_combat.activeClass ? s_combat.activeClass : s_combat.weaponClass;
 		}
 
+		// vr.comboBuffer: a press made mid-combo waits. With vr.comboBufferJustAttack on and the
+		// motion's Just Attack window known it waits until the window opens (the press then lands as
+		// a Just Attack); otherwise until the swing animation ends (+0x710 == 0x02, the old check).
+		// The first hit of a chain never waits.
+		bool HoldForCombo()
+		{
+			if( !Config::Get().vr.m_comboBuffer || !s_combatValid || s_combat.comboStep <= 0 )
+			{
+				return false;
+			}
+			if( Config::Get().vr.m_comboBufferJustAttack && PSUCombat::HasJustAttackWindow( s_combat ) )
+			{
+				return s_combat.motionFrame < s_combat.jaStart;
+			}
+			return PSUCombat::Swinging( s_combat );
+		}
+
 		// A gesture asked for `button` with `weapon` (0 = whatever is active). Sent by
 		// PumpRequest once that weapon is active and the combo allows it.
 		void RequestAttack( int button, int hand, uint32_t weapon, const char *what )
@@ -445,7 +464,8 @@ namespace PSUVR
 			s_pendingWeapon = weapon;
 			s_switchSent = false;
 			const bool needSwitch = weapon && ActiveWeapon() != weapon;
-			s_pendingTime = needSwitch ? kSwitchWaitSeconds : kSwingBufferSeconds;
+			s_pendingTime = needSwitch ? kSwitchWaitSeconds :
+				HoldForCombo() && Config::Get().vr.m_comboBufferJustAttack && PSUCombat::HasJustAttackWindow( s_combat ) ? kJustAttackWaitSeconds : kSwingBufferSeconds;
 #ifdef _DEBUG
 			PSU_LOG( "VRSwing: %s hand %s -> %s, step %d, active %X%s\n", hand == 0 ? "left" : "right", what,
 				button == kPadY ? "Y (PA)" : "X", s_combatValid ? s_combat.comboStep : 0, ActiveWeapon(),
@@ -473,8 +493,16 @@ namespace PSUVR
 			{
 				// Still in the weapon switch animation (+0x710 0x..06): presses would be lost.
 			}
-			else if( !( s_combatValid && PSUCombat::Swinging( s_combat ) ) || !Config::Get().vr.m_comboBuffer )
+			else if( !HoldForCombo() )
 			{
+#ifdef _DEBUG
+				if( s_combatValid && s_combat.comboStep > 0 )
+				{
+					PSU_LOG( "VRSwing: press sent, motion 0x%X step %d frame %.1f JA [%.1f..%.1f], %.2f s left\n",
+						s_combat.motionId, s_combat.comboStep, s_combat.motionFrame, s_combat.jaStart, s_combat.jaEnd,
+						s_pendingTime );
+				}
+#endif
 				StartAttack( s_pendingButton, s_pendingHand );
 				s_pendingButton = -1;
 				return;

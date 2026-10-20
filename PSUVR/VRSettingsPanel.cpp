@@ -467,7 +467,13 @@ namespace PSUVR
 				ImGui::SliderFloat( "Swing speed (m/s)", &s.m_swingSpeed, 1.0f, 4.0f, "%.1f" );
 				Help( "Lower: gentler swings count. Higher: only big swings count." );
 				ImGui::Checkbox( "Hold early swings for the combo window", &s.m_comboBuffer );
-				Help( "A swing made while the attack is still playing is sent the moment the next hit can connect (up to 0.25 s)." );
+				Help( "A swing made while the attack is still playing is held, then sent when the next hit can connect." );
+				if( s.m_comboBuffer )
+				{
+					ImGui::Checkbox( "Hold until the Just Attack timing", &s.m_comboBufferJustAttack );
+					Help( "On: the held swing goes out on the Just Attack buzz (up to 1.5 s). Off: as soon as the "
+						"swing animation ends (up to 0.25 s), not timed for a Just Attack." );
+				}
 			}
 			static const char *const profileIds[] = { "psvr2", "generic" };
 			static const char *const profileNames[] = { "PlayStation VR2 Sense", "Other (Touch, Index, ...)" };

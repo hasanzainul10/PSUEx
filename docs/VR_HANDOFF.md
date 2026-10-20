@@ -17,7 +17,7 @@ and pushed to origin `psu_vr` unless noted.
 
 ## In-flight at hand-over (do these first)
 
-1. **Game folder state (2026-10-20).** Loader `dinput8.dll` in place; the Debug build with the JA combo buzz is deployed (it includes the map fix).
+1. **Game folder state (2026-10-20).** Loader `dinput8.dll` in place; the Debug build with the JA combo buzz and the JA combo buffer is deployed (it includes the map fix).
    VR is back on in both settings files (`enabled` true,
    `d3d9exOnly` false; `.bak7` = the earlier d3d9exOnly test state). No test state left behind.
 2. **Mission map: terrain fixed (user-confirmed 2026-10-20).** The D3D9Ex upgrade was cleared
@@ -54,7 +54,14 @@ and pushed to origin `psu_vr` unless noted.
    spear, twin daggers, saber and dagger. Code: `PSUCombat::ReadMotion` / `JustAttackWindowOpen`,
    `ComboFeedback` (fallback: the old `+0x710 == 0x0E` edge when the table can't be read). `+0x710`
    is the allowed-input mask (`0x0053DEB0`), not a combo state. Debug log: `tools/lastlog.sh VRCombat`.
-   Not done: `comboBuffer` still waits on `Swinging` (`+0x710 == 0x02`); it could use the JA window too.
+   **Combo buffer on the JA window (user-confirmed 2026-10-20).** `comboBuffer`
+   now holds a mid-combo swing until the current motion's JA window opens (`HoldForCombo` in
+   `VRSyntheticPad.cpp`: `motionFrame < jaStart`), timeout `kJustAttackWaitSeconds` 1.5 s (windows
+   open up to frame 33, ~1.1 s at 30 fps). Fallback without a table: the old `Swinging` (`0x02`) wait,
+   0.25 s. comboStep 0 still goes out at once. Toggle `comboBufferJustAttack` (default on, checkbox
+   "Hold until the Just Attack timing" under the combo buffer one): off = the old `Swinging` wait. Confirmed on saber, spear and twin daggers: early swings land on the buzz with JUST ATTACK; off
+   sends them early as before. Log: `tools/lastlog.sh VRSwing`
+   ("press sent ... frame F JA [a..b]": F should be at or just past a).
    Ghidra: the full analysis came from a headless run (`tools/ghidra/PrepareFullAnalysis.java`, 19,940
    functions; backup `PSUClementine.rep.bak-2026-10-20`).
    Address scan scripts (pefile / capstone, run with `uv run --with capstone --with pefile`): `tools/findref.py` (dword refs),

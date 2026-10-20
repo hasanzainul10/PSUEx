@@ -104,6 +104,7 @@ namespace
 	X( m_reticleSize, "reticleSize" ) \
 	X( m_swingSpeed, "swingSpeed" ) \
 	X( m_comboBuffer, "comboBuffer" ) \
+	X( m_comboBufferJustAttack, "comboBufferJustAttack" ) \
 	X( m_vignetteStrength, "vignetteStrength" ) \
 	X( m_stereo, "stereo" ) \
 	X( m_stereoMode, "stereoMode" ) \

@@ -203,8 +203,11 @@ struct VRSettings
 	// Free aim reticle radius in degrees of view (the game's shots spread around the centre).
 	float m_reticleSize = 3.0f;
 	float m_swingSpeed = 1.8f;      // m/s to count as a swing
-	// A swing during the attack animation waits for the combo window (up to 0.25 s).
+	// A swing during the attack animation waits for the combo window.
 	bool m_comboBuffer = true;
+	// comboBuffer waits for the motion's Just Attack window (up to 1.5 s); off: until the swing
+	// animation ends (+0x710 == 0x02, up to 0.25 s).
+	bool m_comboBufferJustAttack = true;
 	// 0..1 how far the vignette closes in at full motion.
 	float m_vignetteStrength = 0.7f;
 	// Render the 3D pass per eye (projection layer) with the game frame as a panel.
