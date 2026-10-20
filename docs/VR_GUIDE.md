@@ -136,7 +136,7 @@ Turn on **Play with motion controllers** in the VR settings. The controllers act
 
 **Fighting.** Each hand uses the weapon the game puts in it:
 
-- **Melee:** swing the hand or pull its trigger to attack. Hold that hand's grip while you swing / pull for the Photon Art. A short buzz says the next hit of the combo will connect. Two-handed and twin weapons work from either hand.
+- **Melee:** swing the hand or pull its trigger to attack. Hold that hand's grip while you swing / pull for the Photon Art. A short buzz marks the Just Attack timing of each hit: swing on the buzz for a Just Attack (every melee weapon, timed from the game's own motion data). Two-handed and twin weapons work from either hand.
 - **Techniques:** staff or rod (right hand): swing / trigger casts slot 1, with the right grip held slot 2. TCSM (left hand): the same with the left hand. Rod: the left hand casts slots 3 / 4. The staff / rod stays in your hand while casting (*Staff / rod stays in the hand while casting*); the TCSM keeps its animation.
 - **Guns:** handgun, machinegun and bow (left hand), sniper rifle and shotgun (right hand): pull the trigger to shoot; hold it to keep firing. Grip + trigger is the gun's Photon Art. The bow aims with the left controller. The RCSM fires by itself.
 - While the right weapon has controls the right grip is its Photon Art button, not R1. *Grip = Photon Art* off (Motion controllers) brings back the old scheme: melee by swing only, swing with the trigger held = Photon Art.

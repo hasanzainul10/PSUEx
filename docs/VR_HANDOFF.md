@@ -17,8 +17,8 @@ and pushed to origin `psu_vr` unless noted.
 
 ## In-flight at hand-over (do these first)
 
-1. **Game folder state (2026-10-20, map session).** Loader `dinput8.dll` in place; the Debug build
-   with the map fix is deployed. VR is back on in both settings files (`enabled` true,
+1. **Game folder state (2026-10-20).** Loader `dinput8.dll` in place; the Debug build with the JA combo buzz is deployed (it includes the map fix).
+   VR is back on in both settings files (`enabled` true,
    `d3d9exOnly` false; `.bak7` = the earlier d3d9exOnly test state). No test state left behind.
 2. **Mission map: terrain fixed (user-confirmed 2026-10-20).** The D3D9Ex upgrade was cleared
    (VR off and `d3d9exOnly` both matched vanilla). Cause: the terrain is a `DrawIndexedPrimitive`
@@ -46,6 +46,19 @@ and pushed to origin `psu_vr` unless noted.
 4. **Galaxy**: solved by hiding the sky layer in the headset (`eyeSky` false; set in the user's
    settings). Moving the sky per eye (`skyAtEye`) and keeping the viewport depth range didn't change
    it: the mission's sky is a partial box made for the flat camera.
+
+5. **Combo buzz at Just Attack timing: done (user-confirmed 2026-10-20).** The buzz fires once per
+   hit when the current motion's input window opens, read from the weapon type's motion table
+   (`0x005366E0`: `[0x00B9DAA4]` by active class `+0x1DD` and motion `+0x170`, entry `+0x08` / `+0x0C`
+   in animation frames, `0x005532F0`). Pressing on the buzz gives JUST ATTACK on sword, knuckles,
+   spear, twin daggers, saber and dagger. Code: `PSUCombat::ReadMotion` / `JustAttackWindowOpen`,
+   `ComboFeedback` (fallback: the old `+0x710 == 0x0E` edge when the table can't be read). `+0x710`
+   is the allowed-input mask (`0x0053DEB0`), not a combo state. Debug log: `tools/lastlog.sh VRCombat`.
+   Not done: `comboBuffer` still waits on `Swinging` (`+0x710 == 0x02`); it could use the JA window too.
+   Ghidra: the full analysis came from a headless run (`tools/ghidra/PrepareFullAnalysis.java`, 19,940
+   functions; backup `PSUClementine.rep.bak-2026-10-20`).
+   Address scan scripts (pefile / capstone, run with `uv run --with capstone --with pefile`): `tools/findref.py` (dword refs),
+   `tools/thiscalls.py` (`lea ecx,[reg+DISP]; call` targets), `tools/dispscan.py` (`[reg+DISP]` uses, `w` = writes only).
 
 ## Features done this stretch (all toggles in the VR settings panel)
 

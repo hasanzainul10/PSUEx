@@ -70,8 +70,10 @@ namespace PSUVR
 		float s_gripTime[ 2 ]{};
 		float s_pulse[ 2 ]{};     // short L1 / R1 press left after a quick tap
 		bool s_triggerDown[ 2 ]{};
-		bool s_comboWindow = false;       // last frame's PSUCombat::ComboWindowOpen
+		bool s_comboWindow = false;       // last frame's Just Attack / combo window
 		int s_comboStep = 0;
+		int s_comboMotion = -1;           // last frame's motion (+0x170); the buzz fires once per motion
+		bool s_comboBuzzed = false;
 		bool s_combatValid = false;
 		PSUCombat::State s_combat;
 		int s_lastAttackHand = 1;     // the combo buzz goes to the hand that attacked
@@ -212,25 +214,45 @@ namespace PSUVR
 			VRControllers::Haptic( hand, 0.5f, 0.04f );
 		}
 
-		// Combo window edges from the player's attack state: a tick in the right hand when
-		// the next hit can be pressed (stronger before the last hit).
+		// Just Attack window from the weapon type's motion table: a tick in the hand that attacked
+		// when the window of the current motion opens, once per motion (stronger before the last
+		// hit). Falls back to the +0x710 == 0x0E edge when the motion table can't be read.
 		void ComboFeedback()
 		{
 			PSUCombat::State combat;
 			const bool valid = PSUCombat::Read( combat );
-			const bool open = valid && PSUCombat::ComboWindowOpen( combat );
+			const bool fromTable = valid && PSUCombat::HasJustAttackWindow( combat );
+			const bool open = valid && ( fromTable ? PSUCombat::JustAttackWindowOpen( combat ) : PSUCombat::ComboWindowOpen( combat ) );
+			const int motion = valid ? combat.motionId : -1;
+			if( motion != s_comboMotion )
+			{
+				s_comboBuzzed = false;
+			}
 			const int buzzHand = VRControllers::Active( s_lastAttackHand ) ? s_lastAttackHand : 1;
-			if( open && !s_comboWindow && Config::Get().vr.m_comboHaptic && VRControllers::Active( buzzHand ) )
+			if( open && !s_comboWindow && !s_comboBuzzed && Config::Get().vr.m_comboHaptic && VRControllers::Active( buzzHand ) )
 			{
 				VRControllers::Haptic( buzzHand, combat.comboStep >= 2 ? 0.8f : 0.5f, 0.03f );
+				s_comboBuzzed = true;
 			}
 #ifdef _DEBUG
-			if( open != s_comboWindow || ( valid ? combat.comboStep : 0 ) != s_comboStep )
+			if( open != s_comboWindow || ( valid ? combat.comboStep : 0 ) != s_comboStep || motion != s_comboMotion )
 			{
-				PSU_LOG( "VRCombat: step %d window %s (state 0x%08X%s)\n", valid ? combat.comboStep : 0,
-					open ? "OPEN" : "closed", valid ? combat.attackState : 0u, valid && combat.earlyPress ? ", early press" : "" );
+				PSU_LOG( "VRCombat: class 0x%02X motion 0x%X step %d frame %.1f JA [%.1f..%.1f] %s%s (state 0x%08X%s)\n",
+					valid ? combat.motionClass & 0xFF : 0, motion, valid ? combat.comboStep : 0, valid ? combat.motionFrame : 0.0f,
+					valid ? combat.jaStart : -1.0f, valid ? combat.jaEnd : -1.0f, open ? "OPEN" : "closed",
+					fromTable ? "" : " (no table, 0x0E fallback)", valid ? combat.attackState : 0u,
+					valid && combat.earlyPress ? ", early press" : "" );
+			}
+			// First time a motion is seen: its whole timing entry (16 floats), to check the other fields.
+			if( valid && combat.motionEntry && motion != s_comboMotion && combat.comboStep > 0 )
+			{
+				const float *f = reinterpret_cast< const float * >( combat.motionEntry );
+				PSU_LOG( "VRCombat: entry 0x%08X class 0x%02X motion 0x%X: %.1f %.1f | %.1f %.1f | %.1f %.1f %.1f | %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f\n",
+					static_cast< unsigned >( combat.motionEntry ), combat.motionClass & 0xFF, motion, f[ 0 ], f[ 1 ], f[ 2 ], f[ 3 ],
+					f[ 4 ], f[ 5 ], f[ 6 ], f[ 7 ], f[ 8 ], f[ 9 ], f[ 10 ], f[ 11 ], f[ 12 ], f[ 13 ], f[ 14 ] );
 			}
 #endif
+			s_comboMotion = motion;
 			s_comboWindow = open;
 			s_comboStep = valid ? combat.comboStep : 0;
 			s_combatValid = valid;

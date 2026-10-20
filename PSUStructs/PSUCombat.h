@@ -98,7 +98,89 @@ namespace PSUCombat
 		float position[ 3 ]{};     // +0x114, game world
 		int16_t aimPitch = 0;      // +0x220, free aim pitch (same units, positive = DOWN); shots fly at -aimPitch
 		bool paletteOpen = false;  // weapon / item palette shown (+0x700 top byte: 7 open, counts down closing)
+		// Just Attack window of the current motion, in motion frames (ReadMotion; see ADDRESS_MAP
+		// 0x005366E0). motionValid is false when the table or the animation can't be read.
+		bool motionValid = false;
+		int motionClass = -1;      // +0x1DD: active weapon class, picks the weapon type's motion table
+		int motionId = -1;         // +0x170: current motion (0x14.. while attacking)
+		float motionFrame = 0.0f;  // current animation frame (0x005532F0)
+		float jaStart = -1.0f;     // entry +0x08 (-1 = none)
+		float jaEnd = -1.0f;       // entry +0x0C
+		uintptr_t motionEntry = 0; // the motion's timing entry (Debug logs)
 	};
+
+	namespace detail
+	{
+		inline bool Readable( uintptr_t address )
+		{
+			return address >= 0x10000 && PSUMemory::IsValidPointer( reinterpret_cast< const void * >( address ) );
+		}
+
+		inline uint32_t Dword( uintptr_t address )
+		{
+			return *reinterpret_cast< const uint32_t * >( address );
+		}
+	}
+
+	// The current motion's timing entry from the weapon type's motion table, the way 0x005366E0
+	// looks it up: [0x00B9DAA4] +0x40 + class * 4 -> [ptr] + motion * 0x40 -> +0x38. Entry floats
+	// (frames, -1 = unused): +0x08 / +0x0C the window in which the game accepts the next attack
+	// or Photon Art (0x0053E2D0, allowed-input mask) = the Just Attack window; +0x10 and the pairs
+	// at +0x1C..+0x38 hit frames. The frame comes from the player's animation as 0x005532F0
+	// reads it (render object +0x160).
+	inline void ReadMotion( uintptr_t player, State &out )
+	{
+		using detail::Dword;
+		using detail::Readable;
+		out.motionClass = *reinterpret_cast< const int8_t * >( player + 0x1DD );
+		out.motionId = static_cast< int >( Dword( player + 0x170 ) );
+
+		const uintptr_t render = Dword( player + 0x160 );
+		if( !Readable( render ) || !Readable( render + 0x28 ) )
+		{
+			return;
+		}
+		const uint32_t mode = Dword( render + 0x28 );
+		uintptr_t holder = 0;
+		if( mode == 0 )
+		{
+			const uintptr_t model = Dword( render + 0x04 );
+			holder = Readable( model ) ? Dword( model + 0x84 ) : 0;
+		}
+		else if( mode <= 4 )
+		{
+			const uintptr_t blend = Dword( render + 0x20 );
+			holder = Readable( blend ) ? Dword( blend + 0xA8 ) : 0;
+		}
+		const uintptr_t unit = Readable( holder ) ? Dword( holder ) : 0;
+		if( !Readable( unit ) || !Readable( unit + 0x2C ) )
+		{
+			return;
+		}
+		out.motionFrame = *reinterpret_cast< const float * >( unit + 0x2C );
+
+		const uintptr_t tables = PSUMemory::ReadAbsoluteMemory< uint32_t >( 0x00B9DAA4 );
+		if( !Readable( tables ) || !Dword( tables + 4 ) || out.motionClass < 0 || out.motionClass > 0x3D ||
+			out.motionId < 0 || out.motionId > 0x400 )
+		{
+			return;
+		}
+		const uintptr_t slot = Dword( tables + 0x40 + out.motionClass * 4 );
+		const uintptr_t base = Readable( slot ) ? Dword( slot ) : 0;
+		if( !Readable( base ) || !Readable( base + out.motionId * 0x40 + 0x38 ) )
+		{
+			return;
+		}
+		const uintptr_t entry = Dword( base + out.motionId * 0x40 + 0x38 );
+		if( !Readable( entry ) || !Readable( entry + 0x3C ) )
+		{
+			return;
+		}
+		out.motionEntry = entry;
+		out.jaStart = *reinterpret_cast< const float * >( entry + 0x08 );
+		out.jaEnd = *reinterpret_cast< const float * >( entry + 0x0C );
+		out.motionValid = true;
+	}
 
 	// False when there is no local player (login, area change).
 	inline bool Read( State &out )
@@ -137,7 +219,22 @@ namespace PSUCombat
 		}
 		out.aimPitch = *reinterpret_cast< const int16_t * >( player + 0x220 );
 		out.paletteOpen = ( dword( 0x700 ) & 0xFF000000u ) != 0;
+		ReadMotion( player, out );
 		return true;
+	}
+
+	// The current motion has a Just Attack window (both ends set). False: fall back to ComboWindowOpen.
+	inline bool HasJustAttackWindow( const State &state )
+	{
+		return state.motionValid && state.jaStart >= 0.0f && state.jaEnd >= state.jaStart;
+	}
+
+	// Mid-combo and the animation is inside the motion's Just Attack window (the same frame range
+	// 0x0053E2D0 allows the next attack in).
+	inline bool JustAttackWindowOpen( const State &state )
+	{
+		return state.comboStep > 0 && HasJustAttackWindow( state ) && state.motionFrame >= state.jaStart &&
+			state.motionFrame <= state.jaEnd;
 	}
 
 	// Mid-combo and the next press would be accepted (+0x710 == 0x0E; idle is 0x0080030E).
