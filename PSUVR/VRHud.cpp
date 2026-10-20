@@ -494,6 +494,135 @@ namespace PSUVR
 				zEnable, zFunc, stencil, stencilFunc, stencilRef, colorWrite, blend );
 		}
 
+		bool IsMapLayer( int layer )
+		{
+			return layer == 0x31 || layer == 0x32;
+		}
+
+#ifdef _DEBUG
+		// Mission map diagnostics: every pass-B draw in layers 0x31 / 0x32, by (layer, kind, route,
+		// caller, FVF). The first time a key is seen its draw state is logged; counts every 5 s.
+		void NoteMapDraw( IDirect3DDevice9 *device, int layer, const char *kind, const char *route,
+			unsigned primitiveCount, const void *verts, unsigned stride, void *ret )
+		{
+			if( !IsMapLayer( layer ) || !device )
+			{
+				return;
+			}
+			struct Entry { int layer; const char *kind; const char *route; void *ret; DWORD fvf; unsigned draws; unsigned prims; };
+			constexpr unsigned kMaxEntries = 48;
+			static Entry s_entries[ kMaxEntries ]{};
+			static unsigned s_count = 0;
+			static DWORD s_lastFlush = 0;
+			static unsigned s_flushes = 0;
+			DWORD fvf = 0;
+			device->GetFVF( &fvf );
+			Entry *entry = nullptr;
+			for( unsigned i = 0; i < s_count; ++i )
+			{
+				Entry &e = s_entries[ i ];
+				if( e.layer == layer && e.kind == kind && e.route == route && e.ret == ret && e.fvf == fvf )
+				{
+					entry = &e;
+					break;
+				}
+			}
+			if( !entry && s_count < kMaxEntries )
+			{
+				entry = &s_entries[ s_count++ ];
+				*entry = { layer, kind, route, ret, fvf, 0, 0 };
+				IDirect3DSurface9 *rt = nullptr;
+				D3DSURFACE_DESC rtDesc{};
+				if( SUCCEEDED( device->GetRenderTarget( 0, &rt ) ) && rt )
+				{
+					rt->GetDesc( &rtDesc );
+					rt->Release();
+				}
+				IDirect3DVertexShader9 *vs = nullptr;
+				device->GetVertexShader( &vs );
+				if( vs )
+				{
+					vs->Release();
+				}
+				IDirect3DVertexDeclaration9 *decl = nullptr;
+				device->GetVertexDeclaration( &decl );
+				if( decl )
+				{
+					decl->Release();
+				}
+				unsigned texW = 0, texH = 0, texUsage = 0;
+				IDirect3DBaseTexture9 *texture = nullptr;
+				if( SUCCEEDED( device->GetTexture( 0, &texture ) ) && texture )
+				{
+					IDirect3DTexture9 *tex2d = nullptr;
+					texture->QueryInterface( __uuidof( IDirect3DTexture9 ), reinterpret_cast< void ** >( &tex2d ) );
+					texture->Release();
+					if( tex2d )
+					{
+						D3DSURFACE_DESC desc{};
+						tex2d->GetLevelDesc( 0, &desc );
+						texW = desc.Width;
+						texH = desc.Height;
+						texUsage = desc.Usage;
+						tex2d->Release();
+					}
+				}
+				DWORD blend = 0, src = 0, dst = 0, colorWrite = 0, zEnable = 0, zFunc = 0, zWrite = 0, stencil = 0, cull = 0;
+				device->GetRenderState( D3DRS_ALPHABLENDENABLE, &blend );
+				device->GetRenderState( D3DRS_SRCBLEND, &src );
+				device->GetRenderState( D3DRS_DESTBLEND, &dst );
+				device->GetRenderState( D3DRS_COLORWRITEENABLE, &colorWrite );
+				device->GetRenderState( D3DRS_ZENABLE, &zEnable );
+				device->GetRenderState( D3DRS_ZFUNC, &zFunc );
+				device->GetRenderState( D3DRS_ZWRITEENABLE, &zWrite );
+				device->GetRenderState( D3DRS_STENCILENABLE, &stencil );
+				device->GetRenderState( D3DRS_CULLMODE, &cull );
+				float x = 0, y = 0, z = 0;
+				if( verts && stride >= 12 )
+				{
+					const float *v = static_cast< const float * >( verts );
+					x = v[ 0 ];
+					y = v[ 1 ];
+					z = v[ 2 ];
+				}
+				PSU_LOG( "VRMap new: layer=0x%02X %s %s ret=%p fvf=0x%lX vs=%d decl=%d rt=%ux%u tex=%ux%u%s prims=%u "
+					"blend=%lu src=%lu dst=%lu cw=0x%lX z=%lu zf=%lu zw=%lu stencil=%lu cull=%lu v0=(%.2f,%.2f,%.2f)\n",
+					layer, kind, route, ret, fvf, vs ? 1 : 0, decl ? 1 : 0, rtDesc.Width, rtDesc.Height, texW, texH,
+					( texUsage & D3DUSAGE_RENDERTARGET ) ? "(rt)" : "", primitiveCount, blend, src, dst, colorWrite,
+					zEnable, zFunc, zWrite, stencil, cull, x, y, z );
+			}
+			if( entry )
+			{
+				++entry->draws;
+				entry->prims += primitiveCount;
+			}
+			const DWORD now = GetTickCount();
+			if( now - s_lastFlush >= 5000 && s_flushes < 40 )
+			{
+				s_lastFlush = now;
+				bool any = false;
+				for( unsigned i = 0; i < s_count; ++i )
+				{
+					Entry &e = s_entries[ i ];
+					if( e.draws )
+					{
+						if( !any )
+						{
+							++s_flushes;
+							any = true;
+						}
+						PSU_LOG( "VRMap 5 s: layer=0x%02X %s %s ret=%p fvf=0x%lX draws=%u prims=%u\n",
+							e.layer, e.kind, e.route, e.ret, e.fvf, e.draws, e.prims );
+						e.draws = 0;
+						e.prims = 0;
+					}
+				}
+			}
+		}
+#else
+		inline void NoteMapDraw( IDirect3DDevice9 *, int, const char *, const char *, unsigned, const void *, unsigned, void * ) {}
+#endif
+
 		// One line per unique (caller, route), so psuex.log shows where each UI piece went.
 		// Free aim: the game's reticle (replaced by ours at the controller ray). Pieces on draw
 		// layer 48 with a 256 x 256 texture around the screen centre: four 192 x 192 corners
@@ -1343,12 +1472,14 @@ namespace PSUVR
 		if( !TargetsGameFrame( device ) )
 		{
 			LogRoute( ret, "skip-offscreen", verts, vertCount, stride );
+			NoteMapDraw( device, s_passBLayer, "DP-UP", "skip-offscreen", primitiveCount, verts, stride, ret );
 			return;
 		}
 		if( IsNearFullscreenDraw( verts, vertCount, stride, m_w, m_h ) &&
 			!IsMenuOverlay( device, verts, vertCount, stride, m_w, m_h, ret ) )
 		{
 			LogRoute( ret, "skip-fullscreen", verts, vertCount, stride );
+			NoteMapDraw( device, s_passBLayer, "DP-UP", "skip-fullscreen", primitiveCount, verts, stride, ret );
 			return;
 		}
 		DWORD drawFvf = 0;
@@ -1357,6 +1488,7 @@ namespace PSUVR
 			IsProjectedNearFullscreen( device, verts, vertCount, stride, m_w, m_h ) )
 		{
 			LogRoute( ret, "skip-fullscreen-3d", verts, vertCount, stride );
+			NoteMapDraw( device, s_passBLayer, "DP-UP", "skip-fullscreen-3d", primitiveCount, verts, stride, ret );
 			return;
 		}
 		// Free aim with the gun up: the game's reticle (a square sprite near the screen centre)
@@ -1403,6 +1535,7 @@ namespace PSUVR
 			if( skip )
 			{
 				LogRoute( ret, "skip-reticle", verts, vertCount, stride );
+				NoteMapDraw( device, s_passBLayer, "DP-UP", "skip-reticle", primitiveCount, verts, stride, ret );
 				return;
 			}
 		}
@@ -1432,6 +1565,7 @@ namespace PSUVR
 				if( std::fabs( cx - gw * 0.5f ) < gw * 0.15f && cy > gh * 0.1f && cy < gh * 0.55f )
 				{
 					LogLayerRoute( layer, "skip-own-plate", verts, vertCount, stride );
+					NoteMapDraw( device, layer, "DP-UP", "skip-own-plate", primitiveCount, verts, stride, ret );
 					if( m_inUiDraw )
 					{
 						++m_uiPassBCaptures;
@@ -1452,6 +1586,7 @@ namespace PSUVR
 			if( hasDepth && firstPerson && std::fabs( depth - headDepth ) < kOwnBand )
 			{
 				LogLayerRoute( layer, "skip-own", verts, vertCount, stride );
+				NoteMapDraw( device, layer, "DP-UP", "skip-own", primitiveCount, verts, stride, ret );
 				if( m_inUiDraw )
 				{
 					++m_uiPassBCaptures;
@@ -1462,6 +1597,7 @@ namespace PSUVR
 			if( hasDepth && depth > worldDepth )
 			{
 				LogLayerRoute( layer, "eyes", verts, vertCount, stride );
+				NoteMapDraw( device, layer, "DP-UP", "eyes", primitiveCount, verts, stride, ret );
 				stereo.DrawNameplateToEyes( device, primitiveType, primitiveCount, verts, stride );
 				if( m_inUiDraw )
 				{
@@ -1474,6 +1610,7 @@ namespace PSUVR
 		if( IsAvatarAnchoredPassB( verts, primitiveType, primitiveCount, stride, m_w, m_h ) )
 		{
 			LogRoute( ret, "eyes", verts, vertCount, stride );
+			NoteMapDraw( device, s_passBLayer, "DP-UP", "eyes-avatar", primitiveCount, verts, stride, ret );
 			stereo.DrawNameplateToEyes( device, primitiveType, primitiveCount, verts, stride );
 			if( m_inUiDraw )
 			{
@@ -1509,6 +1646,7 @@ namespace PSUVR
 				verts = faded;
 			}
 		}
+		NoteMapDraw( device, s_passBLayer, "DP-UP", world ? "panel-world" : "panel", primitiveCount, verts, stride, ret );
 		ReplayPassBOnto( device, world, primitiveType, primitiveCount, verts, stride );
 		if( m_inUiDraw )
 		{
@@ -1650,6 +1788,132 @@ namespace PSUVR
 		{
 			++m_uiPassBCaptures;
 		}
+	}
+
+	void VRHud::CaptureMapMeshDraw( IDirect3DDevice9 *device, int kind, unsigned primitiveType,
+		int baseVertexIndex, unsigned minIndex, unsigned numVertices, unsigned start,
+		unsigned primitiveCount, const void *indexData, unsigned indexFormat,
+		const void *verts, unsigned stride, void *ret )
+	{
+		const int layer = s_passBLayer;
+		if( m_capturing || !m_active || !device || !IsMapLayer( layer ) ||
+			StereoRenderer::InEyePass() || StereoRenderer::InNameplateDraw() || !StereoRenderer::Get().HasFrame() )
+		{
+			return;
+		}
+		static const char *const kKinds[] = { "DP", "DIP", "DIP-UP" };
+		const char *kindName = kKinds[ kind < 0 || kind > 2 ? 0 : kind ];
+		DWORD fvf = 0;
+		device->GetFVF( &fvf );
+		// Screen-space DIPs are the font path's (CaptureXyzrhwIndexed).
+		if( kind == 1 && ( fvf & D3DFVF_POSITION_MASK ) == D3DFVF_XYZRHW )
+		{
+			NoteMapDraw( device, layer, kindName, "font-path", primitiveCount, verts, stride, ret );
+			return;
+		}
+		if( !TargetsGameFrame( device ) )
+		{
+			NoteMapDraw( device, layer, kindName, "skip-offscreen", primitiveCount, verts, stride, ret );
+			return;
+		}
+		if( !Config::Get().vr.m_hudMapMeshes )
+		{
+			NoteMapDraw( device, layer, kindName, "off", primitiveCount, verts, stride, ret );
+			return;
+		}
+		D3D11Bridge *bridge = System::Get().StereoBridge();
+		IDirect3DSurface9 *target = bridge ? bridge->HudUserSurface() : nullptr;
+		if( !target )
+		{
+			return;
+		}
+		NoteMapDraw( device, layer, kindName, "panel", primitiveCount, verts, stride, ret );
+
+		// Same as ReplayPassBOnto: the game's depth/stencil masks the map, so test against it
+		// (the game's own draw just wrote the same depth) but never write it.
+		IDirect3DSurface9 *savedRt = nullptr;
+		IDirect3DSurface9 *savedDs = nullptr;
+		D3DVIEWPORT9 savedVp{};
+		RECT savedScissor{};
+		DWORD zWrite = 0, scissorEnable = 0, stencilWriteMask = 0;
+		device->GetRenderTarget( 0, &savedRt );
+		device->GetDepthStencilSurface( &savedDs );
+		device->GetViewport( &savedVp );
+		device->GetScissorRect( &savedScissor );
+		device->GetRenderState( D3DRS_ZWRITEENABLE, &zWrite );
+		device->GetRenderState( D3DRS_SCISSORTESTENABLE, &scissorEnable );
+		device->GetRenderState( D3DRS_STENCILWRITEMASK, &stencilWriteMask );
+		DWORD zEnable = 0;
+		device->GetRenderState( D3DRS_ZENABLE, &zEnable );
+		IDirect3DSurface9 *replayDs = nullptr;
+		if( savedDs )
+		{
+			D3DSURFACE_DESC dsDesc{};
+			if( SUCCEEDED( savedDs->GetDesc( &dsDesc ) ) && dsDesc.Width == m_w && dsDesc.Height == m_h )
+			{
+				replayDs = savedDs;
+			}
+		}
+		// DIP-UP leaves stream 0 and the indices unset afterwards; put back whatever was bound.
+		IDirect3DVertexBuffer9 *savedVb = nullptr;
+		UINT savedVbOffset = 0, savedVbStride = 0;
+		IDirect3DIndexBuffer9 *savedIb = nullptr;
+		device->GetStreamSource( 0, &savedVb, &savedVbOffset, &savedVbStride );
+		device->GetIndices( &savedIb );
+
+		m_capturing = true;
+		{
+			const AdditiveAlphaGuard additiveGuard( device );
+			device->SetRenderState( D3DRS_ZENABLE, replayDs ? zEnable : FALSE );
+			device->SetRenderState( D3DRS_ZWRITEENABLE, FALSE );
+			device->SetRenderState( D3DRS_STENCILWRITEMASK, 0 );
+			device->SetRenderTarget( 0, target );
+			device->SetDepthStencilSurface( replayDs );
+			ApplyGameClip( device, savedVp, savedScissor, m_w, m_h );
+			const auto type = static_cast< D3DPRIMITIVETYPE >( primitiveType );
+			if( kind == 0 )
+			{
+				device->DrawPrimitive( type, start, primitiveCount );
+			}
+			else if( kind == 1 )
+			{
+				device->DrawIndexedPrimitive( type, baseVertexIndex, minIndex, numVertices, start, primitiveCount );
+			}
+			else if( indexData && verts )
+			{
+				device->DrawIndexedPrimitiveUP( type, minIndex, numVertices, primitiveCount, indexData,
+					static_cast< D3DFORMAT >( indexFormat ), verts, stride );
+			}
+		}
+		m_capturing = false;
+
+		device->SetStreamSource( 0, savedVb, savedVbOffset, savedVbStride );
+		device->SetIndices( savedIb );
+		if( savedVb )
+		{
+			savedVb->Release();
+		}
+		if( savedIb )
+		{
+			savedIb->Release();
+		}
+		device->SetRenderTarget( 0, savedRt );
+		device->SetDepthStencilSurface( savedDs );
+		device->SetViewport( &savedVp );
+		device->SetScissorRect( &savedScissor );
+		device->SetRenderState( D3DRS_SCISSORTESTENABLE, scissorEnable );
+		device->SetRenderState( D3DRS_STENCILWRITEMASK, stencilWriteMask );
+		device->SetRenderState( D3DRS_ZENABLE, zEnable );
+		device->SetRenderState( D3DRS_ZWRITEENABLE, zWrite );
+		if( savedRt )
+		{
+			savedRt->Release();
+		}
+		if( savedDs )
+		{
+			savedDs->Release();
+		}
+		m_hasUser = true;
 	}
 
 	void VRHud::CaptureUiDraw( IDirect3DDevice9 *device,

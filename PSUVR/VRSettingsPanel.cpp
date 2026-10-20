@@ -314,6 +314,9 @@ namespace PSUVR
 			ImGui::SliderFloat( "Size", &s.m_hudSize, 0.5f, 2.0f, "%.2f" );
 			ImGui::SliderFloat( "Below eye level (m)", &s.m_hudDrop, -0.3f, 0.6f, "%.2f" );
 			ImGui::SliderFloat( "Map backdrop opacity", &s.m_hudMapBlackAlpha, 0.0f, 1.0f, "%.2f" );
+			ImGui::Checkbox( "Mission map terrain on the panel", &s.m_hudMapMeshes );
+			Help( "Draws the mission map's terrain (its mesh draws) on the HUD panel too. Off: only the "
+				"map frame and markers show in the headset." );
 			ImGui::SliderFloat( "Nameplate scale", &s.m_uiScale, 1.0f, 2.5f, "%.2f" );
 			ImGui::Checkbox( "World-locked kiosk panel (experimental)", &s.m_hudWorldPanel );
 		}

@@ -47,6 +47,13 @@ namespace PSUVR
 			unsigned minVertexIndex, unsigned numVertices, unsigned primitiveCount,
 			const void *indexData, unsigned indexFormat, const void *verts, unsigned stride, void *ret );
 
+		// Mission map (pass-B layers 0x31 / 0x32) vertex-buffer, indexed and DIP-UP draws, after the
+		// game's own draw: replayed onto the visor panel (hudMapMeshes). kind: 0 DP, 1 DIP, 2 DIP-UP.
+		void CaptureMapMeshDraw( IDirect3DDevice9 *device, int kind, unsigned primitiveType,
+			int baseVertexIndex, unsigned minIndex, unsigned numVertices, unsigned start,
+			unsigned primitiveCount, const void *indexData, unsigned indexFormat,
+			const void *verts, unsigned stride, void *ret );
+
 		// Fallback when 0x793C40 issued no Pass B DP-UP (no eyes path).
 		void CaptureUiDraw( IDirect3DDevice9 *device,
 			void *thisPtr, int a4, int vertexCount, void *vertexPtr, int drawType,

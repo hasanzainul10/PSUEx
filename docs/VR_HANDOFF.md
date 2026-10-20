@@ -17,24 +17,19 @@ and pushed to origin `psu_vr` unless noted.
 
 ## In-flight at hand-over (do these first)
 
-1. **The game folder is in a test state (updated 2026-10-20, later session).** The loader
-   `dinput8.dll` is back in place, and the latest Debug build (with `aa61991` + `68fa71c`) **is
-   deployed**. VR is still `"enabled": false` in both settings files (backups
-   `psuex_vr.json.bak5` / `config.json.bak5`) for the VR-off map test below. No game run has
-   happened since. After the map test(s): set VR `enabled` true again in both files.
-2. **Mission map test.** Vanilla (no PSUEx) shows the map terrain (off-centre: the game's own
-   high-resolution problem). With PSUEx + VR the terrain is missing (only the box + north
-   indicator, a stuck player marker). Every logged session had VR on, so the pending test is PSUEx
-   with VR truly off. Hypothesis: the D3D9Ex upgrade (`PSUVR/D3D9ExCompat.cpp`,
-   `RemapManagedTexture`: MANAGED -> DEFAULT + DYNAMIC) breaks a CPU-written / managed map texture.
-   If VR-off works, fix the remap for that texture rather than disabling the upgrade.
-   With VR off and `forceD3D9Ex` / `d3d9exOnly` false, the Ex upgrade is not installed
-   (`VRSystem.cpp`), so this test isolates it. If the map works VR-off, the next test is
-   `"d3d9exOnly": true` (Ex upgrade, no VR): broken map there confirms the remap. The last VR log
-   shows no `D3D9ExCompat ... FAILED` creates.
-   Note: commit `8696cb6` (route map pieces by FVF) made the map vanish and was reverted (`aa61991`):
-   the VRHud pass-B routing misreads transformed 3D (non-XYZRHW) map draws at several checks
-   (`ClassifyWorldLayer` sent pieces to the hidden world panel).
+1. **Game folder state (2026-10-20, map session).** Loader `dinput8.dll` in place; the Debug build
+   with the map fix is deployed. VR is back on in both settings files (`enabled` true,
+   `d3d9exOnly` false; `.bak7` = the earlier d3d9exOnly test state). No test state left behind.
+2. **Mission map: terrain fixed (user-confirmed 2026-10-20).** The D3D9Ex upgrade was cleared
+   (VR off and `d3d9exOnly` both matched vanilla). Cause: the terrain is a `DrawIndexedPrimitive`
+   from `0x0074E4FD` (layer 0x31, FVF XYZ|NORMAL, ~837 triangles), and pass B only captured DP-UPs
+   and screen-space DIPs for the HUD panel. `VRHud::CaptureMapMeshDraw` now replays transformed
+   DP / DIP / DIP-UP draws in layers 0x31 / 0x32 onto the user panel (`hudMapMeshes`, default on,
+   checkbox "Mission map terrain on the panel"). Debug logs: `tools/lastlog.sh 'VRMap'`.
+   Still open: the player marker looks stuck. Some layer-0x32 marker DP-UPs (from `0x00747BE7`) are
+   sent to `eyes` / `skip-own` because their world z (0.9-0.99) is read as a projected depth.
+   Don't reapply `8696cb6` (route by FVF; it made the whole map vanish, reverted in `aa61991`):
+   bypass the depth routing only for layers 0x31 / 0x32, and test that on its own.
 3. **Glare (floating glow off enemies, glow through the weapon, "rectangles").** Layer bisect found:
    layer `0x12` = `TLandDisplayerHevenTask` (sky / galaxy), `0x1F` = `TBlur`, `0x20` = `TGlare`.
    These layers make no draw calls themselves; the visible output is a later full-screen blend.

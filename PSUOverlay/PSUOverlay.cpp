@@ -391,7 +391,15 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawPrimitive( LPDIRECT3DDEVICE9 pDevice, D3DP
 	{
 		return D3D_OK;
 	}
-	return m_pOriginalDrawPrimitive( pDevice, PrimitiveType, StartVertex, PrimitiveCount );
+	const HRESULT hr = m_pOriginalDrawPrimitive( pDevice, PrimitiveType, StartVertex, PrimitiveCount );
+	// Mission map (pass-B layers 0x31 / 0x32) mesh draws onto the HUD panel.
+	auto &hud = PSUVR::VRHud::Get();
+	if( SUCCEEDED( hr ) && hud.Active() && FrameTrace::CurrentPassAddress() == 0x004FDBC0 )
+	{
+		hud.CaptureMapMeshDraw( pDevice, 0, static_cast< unsigned >( PrimitiveType ), 0, 0, 0, StartVertex,
+			PrimitiveCount, nullptr, 0, nullptr, 0, _ReturnAddress() );
+	}
+	return hr;
 }
 
 HRESULT APIENTRY PSUOverlay::Hook_SetVertexShaderConstantF( LPDIRECT3DDEVICE9 pDevice, UINT StartRegister, CONST float *pConstantData, UINT Vector4fCount )
@@ -438,6 +446,11 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawIndexedPrimitive( LPDIRECT3DDEVICE9 pDevic
 		hudDip.CaptureXyzrhwIndexed( pDevice,
 			static_cast< unsigned >( PrimitiveType ), BaseVertexIndex, MinIndex, NumVertices,
 			StartIndex, PrimitiveCount, _ReturnAddress() );
+	}
+	if( SUCCEEDED( hr ) && hudDip.Active() && FrameTrace::CurrentPassAddress() == 0x004FDBC0 )
+	{
+		hudDip.CaptureMapMeshDraw( pDevice, 1, static_cast< unsigned >( PrimitiveType ), BaseVertexIndex, MinIndex,
+			NumVertices, StartIndex, PrimitiveCount, nullptr, 0, nullptr, 0, _ReturnAddress() );
 	}
 	return hr;
 }
@@ -525,10 +538,18 @@ HRESULT APIENTRY PSUOverlay::Hook_DrawIndexedPrimitiveUP( LPDIRECT3DDEVICE9 pDev
 	{
 		return D3D_OK;
 	}
-	// (No HUD capture here: this hook only became attached for the glare / glow, and the HUD
-	// worked without it.)
-	return m_pOriginalDrawIndexedPrimitiveUP( pDevice, Type, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData,
-		IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride );
+	// HUD capture here only for the mission map (pass-B layers 0x31 / 0x32): this hook only became
+	// attached for the glare / glow, and the rest of the HUD worked without it.
+	const HRESULT hr = m_pOriginalDrawIndexedPrimitiveUP( pDevice, Type, MinVertexIndex, NumVertices, PrimitiveCount,
+		pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride );
+	auto &hud = PSUVR::VRHud::Get();
+	if( SUCCEEDED( hr ) && hud.Active() && FrameTrace::CurrentPassAddress() == 0x004FDBC0 )
+	{
+		hud.CaptureMapMeshDraw( pDevice, 2, static_cast< unsigned >( Type ), 0, MinVertexIndex, NumVertices, 0,
+			PrimitiveCount, pIndexData, static_cast< unsigned >( IndexDataFormat ), pVertexStreamZeroData,
+			VertexStreamZeroStride, _ReturnAddress() );
+	}
+	return hr;
 }
 
 void PrintMatrix( const Matrix4x4 &matrix, const char *name )

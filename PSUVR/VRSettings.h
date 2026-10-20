@@ -64,6 +64,9 @@ struct VRSettings
 	bool m_hudWorldPanel = false;
 	// Opacity kept for near-black parts of the mission map backdrop on the visor (0 = invisible).
 	float m_hudMapBlackAlpha = 0.15f;
+	// Mission map: also put its vertex-buffer / indexed draws (layers 0x31 / 0x32) on the visor
+	// panel; only its DP-UP pieces were captured, so the terrain was missing in the headset.
+	bool m_hudMapMeshes = true;
 	// HUD/menu panel in front of the body (lazy follow) instead of locked to the head.
 	bool m_hudFollow = true;
 	// Menus / 2D scenes: a dark backdrop behind the panel instead of the runtime's own
