@@ -62,8 +62,8 @@ VR settings: run PSUExVRConfig.exe (game closed), or in game press Ctrl+F10
 (or hold Back and press Start).
 Recenter: Ctrl+F9 or Back+X.  First/third person: Ctrl+F7 or Back+Y.
 
-Full guide: VR_GUIDE.md (or https://github.com/hasanzainul10/PSUEx/blob/psu_vr/docs/VR_GUIDE.md)
-Source code (GPLv3): https://github.com/hasanzainul10/PSUEx
+Full guide: VR_GUIDE.md (or https://github.com/hasanzainul10/PSUEx-VR/blob/psu_vr/docs/VR_GUIDE.md)
+Source code (GPLv3): https://github.com/hasanzainul10/PSUEx-VR
 "@ | Set-Content -Path ( Join-Path $dist "README.txt" ) -Encoding UTF8
 
 $zip = Join-Path $root "dist\$name.zip"

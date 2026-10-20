@@ -5,7 +5,7 @@ It enhances and extends the original game by injecting new features and improvem
 
 > **Note:** This project is still in early development. Expect breaking changes and bugs along the way.
 
-**Play in VR:** download the release zip from [Releases](https://github.com/hasanzainul10/PSUEx/releases) and follow the **[VR player guide](docs/VR_GUIDE.md)**.  
+**Play in VR:** download the release zip from [Releases](https://github.com/hasanzainul10/PSUEx-VR/releases) and follow the **[VR player guide](docs/VR_GUIDE.md)**.  
 **Install reference / developers:** see **[docs/INSTALL.md](docs/INSTALL.md)** (files, all VR settings, troubleshooting).
 
 ---

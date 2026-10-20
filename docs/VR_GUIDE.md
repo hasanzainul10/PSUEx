@@ -17,7 +17,7 @@ Play Phantasy Star Universe (Clementine) in VR with a gamepad: stereo 3D in the 
 
 ## 2. Install
 
-1. **Download** `PSUEx-VR-v0.1.0.zip` from the [Releases page](https://github.com/hasanzainul10/PSUEx/releases).
+1. **Download** `PSUEx-VR-v0.1.0.zip` from the [Releases page](https://github.com/hasanzainul10/PSUEx-VR/releases).
 2. **Find your game folder**: the folder with `PSUC.exe` and `online.exe` (for example `C:\Games\PSU Clementine`).
 3. **Extract everything from the zip into that folder**:
 

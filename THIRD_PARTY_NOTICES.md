@@ -1,7 +1,7 @@
 # Third-party notices
 
 PSUEx is licensed under the GNU General Public License v3 (see `LICENSE`). Source code:
-https://github.com/hasanzainul10/PSUEx
+https://github.com/hasanzainul10/PSUEx-VR
 
 PSUEx and its tools include or ship the following third-party components.
 
