@@ -619,6 +619,190 @@ namespace PSUVR
 				}
 			}
 		}
+		// Mission map geometry, one sample frame every 5 s: the screen box of every map-layer draw
+		// (2D as drawn, 3D projected through WORLD * VIEW * PROJ and the viewport), to fit the 3D map
+		// into its 2D frame.
+		struct MapGeoEntry { int layer; const char *kind; void *ret; void *tex; bool projected; float minX, minY, maxX, maxY; unsigned draws; };
+		constexpr unsigned kMaxMapGeo = 32;
+		MapGeoEntry s_mapGeo[ kMaxMapGeo ]{};
+		unsigned s_mapGeoCount = 0;
+		bool s_mapGeoSampling = false;
+		DWORD s_mapGeoLast = 0;
+		unsigned s_mapGeoSamples = 0;
+		bool s_mapGeoMatricesLogged = false;
+
+		bool MapGeoSampling()
+		{
+			return s_mapGeoSampling;
+		}
+
+		// Called once per stereo frame: print the last sample, maybe start a new one.
+		void MapGeoFrame()
+		{
+			if( s_mapGeoSampling )
+			{
+				s_mapGeoSampling = false;
+				for( unsigned i = 0; i < s_mapGeoCount; ++i )
+				{
+					const MapGeoEntry &e = s_mapGeo[ i ];
+					PSU_LOG( "VRMap geo: layer=0x%02X %s ret=%p tex=%p %s box=(%.0f,%.0f)-(%.0f,%.0f) draws=%u\n", e.layer, e.kind,
+						e.ret, e.tex, e.projected ? "projected" : "screen", e.minX, e.minY, e.maxX, e.maxY, e.draws );
+				}
+				s_mapGeoCount = 0;
+			}
+			const DWORD now = GetTickCount();
+			if( s_mapGeoSamples < 12 && now - s_mapGeoLast >= 5000 )
+			{
+				s_mapGeoLast = now;
+				s_mapGeoSampling = true;
+			}
+		}
+
+		void NoteMapGeometry( IDirect3DDevice9 *device, int layer, const char *kind, void *ret, const unsigned char *verts,
+			unsigned vertCount, unsigned stride, bool transformed )
+		{
+			// Screen-space draws from any pass-B layer (the map frame may sit outside 0x31 / 0x32).
+			if( !s_mapGeoSampling || layer < 0 || ( transformed && !IsMapLayer( layer ) ) || !device || !verts ||
+				vertCount < 1 || stride < 12 )
+			{
+				return;
+			}
+			float minX = 1.0e30f, minY = 1.0e30f, maxX = -1.0e30f, maxY = -1.0e30f;
+			if( transformed )
+			{
+				D3DMATRIX world{}, view{}, proj{};
+				device->GetTransform( D3DTS_WORLD, &world );
+				device->GetTransform( D3DTS_VIEW, &view );
+				device->GetTransform( D3DTS_PROJECTION, &proj );
+				D3DVIEWPORT9 vp{};
+				device->GetViewport( &vp );
+				if( !s_mapGeoMatricesLogged && std::strcmp( kind, "DIP" ) == 0 )
+				{
+					s_mapGeoMatricesLogged = true;
+					const D3DMATRIX *ms[] = { &world, &view, &proj };
+					const char *names[] = { "world", "view", "proj" };
+					for( int m = 0; m < 3; ++m )
+					{
+						const D3DMATRIX &x = *ms[ m ];
+						PSU_LOG( "VRMap %s: [%.4f %.4f %.4f %.4f] [%.4f %.4f %.4f %.4f] [%.4f %.4f %.4f %.4f] [%.4f %.4f %.4f %.4f]\n",
+							names[ m ], x._11, x._12, x._13, x._14, x._21, x._22, x._23, x._24, x._31, x._32, x._33, x._34,
+							x._41, x._42, x._43, x._44 );
+					}
+					PSU_LOG( "VRMap viewport: (%lu,%lu %lux%lu) z=%.2f-%.2f\n", vp.X, vp.Y, vp.Width, vp.Height, vp.MinZ, vp.MaxZ );
+				}
+				auto mul = []( const float in[ 4 ], const D3DMATRIX &m, float out[ 4 ] )
+				{
+					for( int c = 0; c < 4; ++c )
+					{
+						out[ c ] = in[ 0 ] * m.m[ 0 ][ c ] + in[ 1 ] * m.m[ 1 ][ c ] + in[ 2 ] * m.m[ 2 ][ c ] + in[ 3 ] * m.m[ 3 ][ c ];
+					}
+				};
+				for( unsigned i = 0; i < vertCount; ++i )
+				{
+					const float *p = reinterpret_cast< const float * >( verts + i * stride );
+					const float v[ 4 ] = { p[ 0 ], p[ 1 ], p[ 2 ], 1.0f };
+					float a[ 4 ], b[ 4 ], c[ 4 ];
+					mul( v, world, a );
+					mul( a, view, b );
+					mul( b, proj, c );
+					if( c[ 3 ] <= 1.0e-6f )
+					{
+						continue;
+					}
+					const float sx = vp.X + ( c[ 0 ] / c[ 3 ] * 0.5f + 0.5f ) * vp.Width;
+					const float sy = vp.Y + ( 0.5f - c[ 1 ] / c[ 3 ] * 0.5f ) * vp.Height;
+					minX = ( std::min )( minX, sx );
+					maxX = ( std::max )( maxX, sx );
+					minY = ( std::min )( minY, sy );
+					maxY = ( std::max )( maxY, sy );
+				}
+			}
+			else
+			{
+				ComputeAabb( verts, vertCount, stride, minX, minY, maxX, maxY );
+			}
+			if( minX > maxX )
+			{
+				return;
+			}
+			D3DVIEWPORT9 gameVp{};
+			device->GetViewport( &gameVp );
+			const float gw = static_cast< float >( gameVp.Width ), gh = static_cast< float >( gameVp.Height );
+			// Skip the huge backdrop plane, and 2D outside the top-right quarter (the minimap).
+			if( transformed ? ( maxX - minX > gw * 2.0f ) :
+				( ( minX + maxX ) * 0.5f < gw * 0.5f || ( minY + maxY ) * 0.5f > gh * 0.6f ||
+					( maxX - minX ) * ( maxY - minY ) > gw * gh * 0.3f ) )
+			{
+				return;
+			}
+			IDirect3DBaseTexture9 *tex = nullptr;
+			device->GetTexture( 0, &tex );
+			if( tex )
+			{
+				tex->Release();
+			}
+			for( unsigned i = 0; i < s_mapGeoCount; ++i )
+			{
+				MapGeoEntry &e = s_mapGeo[ i ];
+				if( e.layer == layer && e.kind == kind && e.ret == ret && e.tex == tex && e.projected == transformed )
+				{
+					e.minX = ( std::min )( e.minX, minX );
+					e.minY = ( std::min )( e.minY, minY );
+					e.maxX = ( std::max )( e.maxX, maxX );
+					e.maxY = ( std::max )( e.maxY, maxY );
+					++e.draws;
+					return;
+				}
+			}
+			if( s_mapGeoCount < kMaxMapGeo )
+			{
+				s_mapGeo[ s_mapGeoCount++ ] = { layer, kind, ret, tex, transformed, minX, minY, maxX, maxY, 1 };
+				if( s_mapGeoCount == 1 )
+				{
+					++s_mapGeoSamples;
+				}
+			}
+		}
+
+		// The map DIP's vertices, read back from its vertex buffer for the geometry sample.
+		void NoteMapGeometryDip( IDirect3DDevice9 *device, int layer, void *ret, int baseVertexIndex, unsigned minIndex,
+			unsigned numVertices )
+		{
+			if( !s_mapGeoSampling || !IsMapLayer( layer ) || !device || numVertices < 1 )
+			{
+				return;
+			}
+			IDirect3DVertexBuffer9 *vb = nullptr;
+			UINT offset = 0, vbStride = 0;
+			if( FAILED( device->GetStreamSource( 0, &vb, &offset, &vbStride ) ) || !vb )
+			{
+				return;
+			}
+			void *data = nullptr;
+			if( vbStride >= 12 && SUCCEEDED( vb->Lock( 0, 0, &data, D3DLOCK_READONLY ) ) && data )
+			{
+				D3DVERTEXBUFFER_DESC desc{};
+				vb->GetDesc( &desc );
+				const unsigned first = static_cast< unsigned >( baseVertexIndex + static_cast< int >( minIndex ) );
+				const unsigned long end = offset + static_cast< unsigned long >( first + numVertices ) * vbStride;
+				if( end <= desc.Size )
+				{
+					NoteMapGeometry( device, layer, "DIP", ret,
+						static_cast< const unsigned char * >( data ) + offset + first * vbStride, numVertices, vbStride, true );
+				}
+				vb->Unlock();
+			}
+			else
+			{
+				static bool s_loggedFail = false;
+				if( !s_loggedFail )
+				{
+					s_loggedFail = true;
+					PSU_LOG( "VRMap geo: map VB lock failed (stride=%u)\n", vbStride );
+				}
+			}
+			vb->Release();
+		}
 #else
 		inline void NoteMapDraw( IDirect3DDevice9 *, int, const char *, const char *, unsigned, const void *, unsigned, void * ) {}
 #endif
@@ -844,9 +1028,13 @@ namespace PSUVR
 
 	void VRHud::BeginStereoFrame( IDirect3DDevice9 *device, unsigned gameW, unsigned gameH )
 	{
+#ifdef _DEBUG
+		MapGeoFrame();
+#endif
 		m_active = false;
 		m_hasUser = false;
 		m_hasWorld = false;
+		m_haveMapFrame = false;
 		m_userAabbCount = 0;
 		m_worldAabbCount = 0;
 		if( !device || gameW < 1 || gameH < 1 || !Config::Get().vr.m_enabled || !Config::Get().vr.m_stereo )
@@ -1268,6 +1456,14 @@ namespace PSUVR
 			}
 		}
 
+		D3DMATRIX savedProj{}, fitProj{};
+		const bool fit = transformed && MapFitProjection( device, s_passBLayer, fitProj );
+		if( fit )
+		{
+			device->GetTransform( D3DTS_PROJECTION, &savedProj );
+			device->SetTransform( D3DTS_PROJECTION, &fitProj );
+		}
+
 		m_capturing = true;
 		device->SetRenderState( D3DRS_ZENABLE, ( transformed && replayDs ) ? zEnable : FALSE );
 		device->SetRenderState( D3DRS_ZWRITEENABLE, FALSE );
@@ -1281,6 +1477,10 @@ namespace PSUVR
 			primitiveCount, verts, stride );
 		m_capturing = false;
 		device->SetRenderState( D3DRS_STENCILWRITEMASK, stencilWriteMask );
+		if( fit )
+		{
+			device->SetTransform( D3DTS_PROJECTION, &savedProj );
+		}
 
 		device->SetFVF( savedFvf );
 		device->SetStreamSource( 0, savedVb, savedVbOffset, savedVbStride );
@@ -1469,6 +1669,15 @@ namespace PSUVR
 			return;
 		}
 		const unsigned vertCount = VertCountForPrimitive( primitiveType, primitiveCount );
+#ifdef _DEBUG
+		if( MapGeoSampling() )
+		{
+			DWORD geoFvf = 0;
+			device->GetFVF( &geoFvf );
+			NoteMapGeometry( device, s_passBLayer, "DP-UP", ret, static_cast< const unsigned char * >( verts ), vertCount,
+				stride, ( geoFvf & D3DFVF_POSITION_MASK ) != D3DFVF_XYZRHW );
+		}
+#endif
 		if( !TargetsGameFrame( device ) )
 		{
 			LogRoute( ret, "skip-offscreen", verts, vertCount, stride );
@@ -1543,12 +1752,16 @@ namespace PSUVR
 		// (0.94-0.98 seen), which DrawNameplateToEyes uses to place it in 3D.
 		// Exact layer from Hook_PassB (stack scans hit stale return addresses).
 		const int layer = s_passBLayer;
+		NoteMapFrame( device, layer, verts, vertCount, stride );
 		const bool menuOverlay = IsMenuOverlay( device, verts, vertCount, stride, m_w, m_h, ret );
+		// Fitted map: its 3D pieces (markers) belong in the frame, not placed by depth.
+		D3DMATRIX fitProj{};
+		const bool mapFit = ( drawFvf & D3DFVF_POSITION_MASK ) != D3DFVF_XYZRHW && MapFitProjection( device, layer, fitProj );
 		if( menuOverlay )
 		{
 			LogLayerRoute( layer, "visor-overlay", verts, vertCount, stride );
 		}
-		if( layer >= 0 && !menuOverlay )
+		if( layer >= 0 && !menuOverlay && !mapFit )
 		{
 			float minX = 0, minY = 0, maxX = 0, maxY = 0;
 			ComputeAabb( verts, vertCount, stride, minX, minY, maxX, maxY );
@@ -1607,7 +1820,7 @@ namespace PSUVR
 			}
 			LogLayerRoute( layer, "visor", verts, vertCount, stride );
 		}
-		if( IsAvatarAnchoredPassB( verts, primitiveType, primitiveCount, stride, m_w, m_h ) )
+		if( !mapFit && IsAvatarAnchoredPassB( verts, primitiveType, primitiveCount, stride, m_w, m_h ) )
 		{
 			LogRoute( ret, "eyes", verts, vertCount, stride );
 			NoteMapDraw( device, s_passBLayer, "DP-UP", "eyes-avatar", primitiveCount, verts, stride, ret );
@@ -1739,6 +1952,9 @@ namespace PSUVR
 			return;
 		}
 
+#ifdef _DEBUG
+		NoteMapGeometry( device, s_passBLayer, "DIP-2D", ret, s_uiXformBuf, outVerts, vbStride, false );
+#endif
 		ReplayFontBatch( device, s_uiXformBuf, outVerts, vbStride, ret );
 		if( m_inUiDraw )
 		{
@@ -1790,6 +2006,86 @@ namespace PSUVR
 		}
 	}
 
+	void VRHud::NoteMapFrame( IDirect3DDevice9 *device, int layer, const void *verts, unsigned vertCount, unsigned stride )
+	{
+		// The frame: small screen-space pieces on layer 0x30 (a 128 x 128 box at the top right).
+		if( layer != 0x30 || !device || !verts )
+		{
+			return;
+		}
+		DWORD fvf = 0;
+		device->GetFVF( &fvf );
+		float minX = 0, minY = 0, maxX = 0, maxY = 0;
+		if( ( fvf & D3DFVF_POSITION_MASK ) != D3DFVF_XYZRHW ||
+			!ComputeAabb( verts, vertCount, stride, minX, minY, maxX, maxY ) ||
+			maxX - minX > 400.0f || maxY - minY > 400.0f || ( minX + maxX ) * 0.5f < m_w * 0.5f )
+		{
+			return;
+		}
+		if( !m_haveMapFrame )
+		{
+			m_mapFrame = { minX, minY, maxX, maxY };
+			m_haveMapFrame = true;
+			return;
+		}
+		m_mapFrame.minX = ( std::min )( m_mapFrame.minX, minX );
+		m_mapFrame.minY = ( std::min )( m_mapFrame.minY, minY );
+		m_mapFrame.maxX = ( std::max )( m_mapFrame.maxX, maxX );
+		m_mapFrame.maxY = ( std::max )( m_mapFrame.maxY, maxY );
+	}
+
+	bool VRHud::MapFitProjection( IDirect3DDevice9 *device, int layer, D3DMATRIX &fitted ) const
+	{
+		const auto &vr = Config::Get().vr;
+		if( !vr.m_hudMapFit || !m_haveMapFrame || !IsMapLayer( layer ) || !device || m_w < 1 || m_h < 1 )
+		{
+			return false;
+		}
+		D3DMATRIX proj{};
+		device->GetTransform( D3DTS_PROJECTION, &proj );
+		// The map camera is a perspective projection pushed off-centre (_31 / _32) to where the
+		// game thinks the frame is; w = -z ( _34 = -1 ).
+		if( std::fabs( proj._34 ) < 1.0e-4f || std::fabs( proj._44 ) > 1.0e-4f )
+		{
+			return false;
+		}
+		// NDC centre of the map now, and where the frame centre is.
+		const float cx = proj._31 / proj._34;
+		const float cy = proj._32 / proj._34;
+		const float fx = ( m_mapFrame.minX + m_mapFrame.maxX ) / static_cast< float >( m_w ) - 1.0f;
+		const float fy = 1.0f - ( m_mapFrame.minY + m_mapFrame.maxY ) / static_cast< float >( m_h );
+		// The game's 2D is drawn at 640 x 480 pixel size; the 3D map scales with the screen.
+		const float zoom = vr.m_hudMapFitScale > 0.05f ? vr.m_hudMapFitScale : 1.0f;
+		const float sx = 640.0f / static_cast< float >( m_w ) * zoom;
+		const float sy = 480.0f / static_cast< float >( m_h ) * zoom;
+		// clip' = clip * M: x' = sx * x + ( fx - sx * cx ) * w, the same for y.
+		D3DMATRIX m{};
+		m._11 = sx;
+		m._22 = sy;
+		m._33 = 1.0f;
+		m._44 = 1.0f;
+		m._41 = fx - sx * cx;
+		m._42 = fy - sy * cy;
+		for( int r = 0; r < 4; ++r )
+		{
+			for( int c = 0; c < 4; ++c )
+			{
+				fitted.m[ r ][ c ] = proj.m[ r ][ 0 ] * m.m[ 0 ][ c ] + proj.m[ r ][ 1 ] * m.m[ 1 ][ c ] +
+					proj.m[ r ][ 2 ] * m.m[ 2 ][ c ] + proj.m[ r ][ 3 ] * m.m[ 3 ][ c ];
+			}
+		}
+#ifdef _DEBUG
+		static unsigned s_logs = 0;
+		if( s_logs < 4 )
+		{
+			++s_logs;
+			PSU_LOG( "VRMap fit: frame=(%.0f,%.0f)-(%.0f,%.0f) centre ndc (%.3f,%.3f) -> (%.3f,%.3f) scale %.3f x %.3f\n",
+				m_mapFrame.minX, m_mapFrame.minY, m_mapFrame.maxX, m_mapFrame.maxY, cx, cy, fx, fy, sx, sy );
+		}
+#endif
+		return true;
+	}
+
 	void VRHud::CaptureMapMeshDraw( IDirect3DDevice9 *device, int kind, unsigned primitiveType,
 		int baseVertexIndex, unsigned minIndex, unsigned numVertices, unsigned start,
 		unsigned primitiveCount, const void *indexData, unsigned indexFormat,
@@ -1828,6 +2124,17 @@ namespace PSUVR
 			return;
 		}
 		NoteMapDraw( device, layer, kindName, "panel", primitiveCount, verts, stride, ret );
+#ifdef _DEBUG
+		if( kind == 1 )
+		{
+			NoteMapGeometryDip( device, layer, ret, baseVertexIndex, minIndex, numVertices );
+		}
+		else if( kind == 2 && verts )
+		{
+			NoteMapGeometry( device, layer, "DIP-UP", ret, static_cast< const unsigned char * >( verts ) + minIndex * stride,
+				numVertices, stride, ( fvf & D3DFVF_POSITION_MASK ) != D3DFVF_XYZRHW );
+		}
+#endif
 
 		// Same as ReplayPassBOnto: the game's depth/stencil masks the map, so test against it
 		// (the game's own draw just wrote the same depth) but never write it.
@@ -1861,6 +2168,13 @@ namespace PSUVR
 		device->GetStreamSource( 0, &savedVb, &savedVbOffset, &savedVbStride );
 		device->GetIndices( &savedIb );
 
+		D3DMATRIX savedProj{}, fitProj{};
+		const bool fit = MapFitProjection( device, layer, fitProj );
+		if( fit )
+		{
+			device->GetTransform( D3DTS_PROJECTION, &savedProj );
+			device->SetTransform( D3DTS_PROJECTION, &fitProj );
+		}
 		m_capturing = true;
 		{
 			const AdditiveAlphaGuard additiveGuard( device );
@@ -1886,6 +2200,10 @@ namespace PSUVR
 			}
 		}
 		m_capturing = false;
+		if( fit )
+		{
+			device->SetTransform( D3DTS_PROJECTION, &savedProj );
+		}
 
 		device->SetStreamSource( 0, savedVb, savedVbOffset, savedVbStride );
 		device->SetIndices( savedIb );

@@ -1,6 +1,8 @@
 #pragma once
 
 struct IDirect3DDevice9;
+struct _D3DMATRIX;
+typedef _D3DMATRIX D3DMATRIX;
 struct ID3D11Texture2D;
 
 namespace PSUVR
@@ -10,6 +12,8 @@ namespace PSUVR
 	// Avatar nameplates/bubbles are remapped onto stereo eyes separately.
 	class VRHud
 	{
+		struct Aabb { float minX, minY, maxX, maxY; };
+
 	public:
 		static VRHud &Get();
 
@@ -99,7 +103,14 @@ namespace PSUVR
 		bool IsVisorChrome( float minX, float minY, float maxX, float maxY,
 			unsigned gameW, unsigned gameH ) const;
 
+		// Mission map fit: the 2D frame seen this frame (layer 0x30), and the projection that
+		// moves the 3D map into it. false = draw unchanged.
+		void NoteMapFrame( IDirect3DDevice9 *device, int layer, const void *verts, unsigned vertCount, unsigned stride );
+		bool MapFitProjection( IDirect3DDevice9 *device, int layer, D3DMATRIX &fitted ) const;
+
 		static int s_passBLayer;
+		Aabb m_mapFrame{};
+		bool m_haveMapFrame = false;
 		bool m_active = false;
 		bool m_capturing = false;
 		bool m_inUiDraw = false;
@@ -111,7 +122,6 @@ namespace PSUVR
 		unsigned m_h = 0;
 
 		static constexpr unsigned kMaxLayerAabbs = 96;
-		struct Aabb { float minX, minY, maxX, maxY; };
 		Aabb m_userAabbs[ kMaxLayerAabbs ]{};
 		unsigned m_userAabbCount = 0;
 		Aabb m_worldAabbs[ kMaxLayerAabbs ]{};

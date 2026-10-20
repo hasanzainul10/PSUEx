@@ -26,10 +26,15 @@ and pushed to origin `psu_vr` unless noted.
    and screen-space DIPs for the HUD panel. `VRHud::CaptureMapMeshDraw` now replays transformed
    DP / DIP / DIP-UP draws in layers 0x31 / 0x32 onto the user panel (`hudMapMeshes`, default on,
    checkbox "Mission map terrain on the panel"). Debug logs: `tools/lastlog.sh 'VRMap'`.
-   Still open: the player marker looks stuck. Some layer-0x32 marker DP-UPs (from `0x00747BE7`) are
-   sent to `eyes` / `skip-own` because their world z (0.9-0.99) is read as a projected depth.
-   Don't reapply `8696cb6` (route by FVF; it made the whole map vanish, reverted in `aa61991`):
-   bypass the depth routing only for layers 0x31 / 0x32, and test that on its own.
+   **Map fit (user-confirmed 2026-10-20):** the game draws the minimap frame at 640 x 480 pixel size
+   (layer 0x30, 128 x 128 at (2240,108)-(2368,236) on 2560 x 1440) but sizes the 3D map for the
+   whole screen (off-centre perspective, `_31` -0.65 / `_32` -0.583 -> centre (2112,300)), so only
+   a sliver showed in the frame (vanilla too). On the panel replay only, `VRHud::MapFitProjection`
+   rescales PROJ by 640/W x 480/H and moves the map centre onto the frame centre (`hudMapFit`,
+   default on; zoom `hudMapFitScale`). With the fit on, transformed map-layer DP-UPs skip the
+   depth routing (eyes / skip-own) and go to the panel. The flat frame is unchanged.
+   Not done: the red 2D arrow right of the frame (layer 0x33, DP-UP `0x0074722D`, ~(2437,274)) is
+   still where the game puts it; ask the user whether it matters.
 3. **Glare (floating glow off enemies, glow through the weapon, "rectangles").** Layer bisect found:
    layer `0x12` = `TLandDisplayerHevenTask` (sky / galaxy), `0x1F` = `TBlur`, `0x20` = `TGlare`.
    These layers make no draw calls themselves; the visible output is a later full-screen blend.
@@ -66,6 +71,8 @@ and pushed to origin `psu_vr` unless noted.
 - Ctrl+Shift+PageUp/PageDown: hide one render layer `0x02..0x3F` (toast shows it).
 - Ctrl+Shift+Home: write every layer's nodes (callback, object, RTTI class) to the log.
 - Ctrl+Shift+Insert/Delete: hide one eye-pass draw site at a time (toast shows address + layer).
+- Ctrl+Shift+End: save the flat frame and the HUD panel as `psuex_dump_frame.png` / `psuex_dump_hud.png` in the game folder (the last run's press didn't save; check the `Dump:` log line).
+- `VRMap new:` / `VRMap 5 s:` / `VRMap geo:` / `VRMap fit:`: mission map draws, screen boxes and the fit.
 - Logs: `VREffect:` (screen-space draw kinds), `Layers 5 s:` (sky/blur/glare draw counts),
   `Stereo: model near the camera` / `3D near camera`, `VRBullet:`, `VRAim:`.
 

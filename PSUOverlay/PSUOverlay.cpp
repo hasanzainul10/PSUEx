@@ -17,6 +17,9 @@
 #include "Interface/VRDisplay.h"
 #include "../PSUVR/D3D11Bridge.h"
 #include <intrin.h>
+#ifdef _DEBUG
+#include <d3dx9tex.h>
+#endif
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam );
 
@@ -645,6 +648,35 @@ HRESULT APIENTRY PSUOverlay::Hook_EndScene( LPDIRECT3DDEVICE9 pDevice )
 			hud.MarkUserContent();
 		}
 	}
+
+#ifdef _DEBUG
+	// Ctrl+Shift+End: save the flat frame and the HUD panel as PNGs in the game folder.
+	{
+		static bool s_endDown = false;
+		const bool end = ( GetAsyncKeyState( VK_CONTROL ) & 0x8000 ) && ( GetAsyncKeyState( VK_SHIFT ) & 0x8000 ) &&
+			( GetAsyncKeyState( VK_END ) & 0x8000 );
+		if( end && !s_endDown )
+		{
+			IDirect3DSurface9 *backBuffer = nullptr;
+			HRESULT bbHr = pDevice->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer );
+			if( SUCCEEDED( bbHr ) && backBuffer )
+			{
+				bbHr = D3DXSaveSurfaceToFileA( "psuex_dump_frame.png", D3DXIFF_PNG, backBuffer, nullptr, nullptr );
+				backBuffer->Release();
+			}
+			PSUVR::D3D11Bridge *dumpBridge = PSUVR::System::Get().StereoBridge();
+			IDirect3DSurface9 *hudUser = dumpBridge ? dumpBridge->HudUserSurface() : nullptr;
+			HRESULT hudHr = E_FAIL;
+			if( hudUser )
+			{
+				hudHr = D3DXSaveSurfaceToFileA( "psuex_dump_hud.png", D3DXIFF_PNG, hudUser, nullptr, nullptr );
+			}
+			PSU_LOG( "Dump: frame hr=0x%08lX hud hr=0x%08lX\n", static_cast< unsigned long >( bbHr ),
+				static_cast< unsigned long >( hudHr ) );
+		}
+		s_endDown = end;
+	}
+#endif
 
 	return m_pOriginalEndScene( pDevice );
 }

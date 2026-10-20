@@ -28,6 +28,8 @@ namespace
 	X( m_hudWorldPanel, "hudWorldPanel" ) \
 	X( m_hudMapBlackAlpha, "hudMapBlackAlpha" ) \
 	X( m_hudMapMeshes, "hudMapMeshes" ) \
+	X( m_hudMapFit, "hudMapFit" ) \
+	X( m_hudMapFitScale, "hudMapFitScale" ) \
 	X( m_hudFollow, "hudFollow" ) \
 	X( m_menuBackdrop, "menuBackdrop" ) \
 	X( m_hudOverlays, "hudOverlays" ) \

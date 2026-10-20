@@ -67,6 +67,11 @@ struct VRSettings
 	// Mission map: also put its vertex-buffer / indexed draws (layers 0x31 / 0x32) on the visor
 	// panel; only its DP-UP pieces were captured, so the terrain was missing in the headset.
 	bool m_hudMapMeshes = true;
+	// Mission map on the panel: shrink and move the 3D map (terrain, markers) into its 2D frame.
+	// The game sizes the 3D map to the screen but draws the frame at 640 x 480 pixel size.
+	bool m_hudMapFit = true;
+	// Extra zoom of the fitted map (1 = the game's 640 x 480 proportions).
+	float m_hudMapFitScale = 1.0f;
 	// HUD/menu panel in front of the body (lazy follow) instead of locked to the head.
 	bool m_hudFollow = true;
 	// Menus / 2D scenes: a dark backdrop behind the panel instead of the runtime's own

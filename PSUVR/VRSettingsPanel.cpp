@@ -317,6 +317,10 @@ namespace PSUVR
 			ImGui::Checkbox( "Mission map terrain on the panel", &s.m_hudMapMeshes );
 			Help( "Draws the mission map's terrain (its mesh draws) on the HUD panel too. Off: only the "
 				"map frame and markers show in the headset." );
+			ImGui::Checkbox( "Fit the mission map into its frame", &s.m_hudMapFit );
+			Help( "The game sizes the 3D map for the whole screen but draws its frame small at high "
+				"resolutions; this shrinks the map and its markers into the frame on the panel." );
+			ImGui::SliderFloat( "Fitted map zoom", &s.m_hudMapFitScale, 0.5f, 3.0f, "%.2f" );
 			ImGui::SliderFloat( "Nameplate scale", &s.m_uiScale, 1.0f, 2.5f, "%.2f" );
 			ImGui::Checkbox( "World-locked kiosk panel (experimental)", &s.m_hudWorldPanel );
 		}
