@@ -4,6 +4,7 @@
 #include "../PSUStructs/PSUCombat.h"
 #include "VRControllerSim.h"
 #include "VRSyntheticPad.h"
+#include "VRUiPointer.h"
 
 #include "../Misc/Log.h"
 #include "../PSUExConfig.h"
@@ -217,6 +218,23 @@ namespace PSUVR
 			return VRCamera::WorldToTracking( world, tracking );
 		}
 
+		// Thick line (one quad), width in pixels.
+		void DrawLine( IDirect3DDevice9 *device, float x0, float y0, float x1, float y1, float width, DWORD color )
+		{
+			float nx = y0 - y1, ny = x1 - x0;
+			const float length = std::sqrt( nx * nx + ny * ny );
+			if( length < 0.5f )
+			{
+				return;
+			}
+			nx *= width * 0.5f / length;
+			ny *= width * 0.5f / length;
+			const Vertex strip[ 4 ] = {
+				{ x0 + nx, y0 + ny, 0.0f, 1.0f, color }, { x0 - nx, y0 - ny, 0.0f, 1.0f, color },
+				{ x1 + nx, y1 + ny, 0.0f, 1.0f, color }, { x1 - nx, y1 - ny, 0.0f, 1.0f, color } };
+			device->DrawPrimitiveUP( D3DPT_TRIANGLESTRIP, 2, strip, sizeof( Vertex ) );
+		}
+
 		void DrawReticle( IDirect3DDevice9 *device, float cx, float cy, float radius, bool firing )
 		{
 			radius = radius < 6.0f ? 6.0f : radius;
@@ -376,6 +394,26 @@ namespace PSUVR
 			}
 
 			OverlayState state( device );
+			// Pointing at the PSUEx overlay: a beam from the right controller to the panel.
+			float beamFrom[ 3 ], beamTo[ 3 ];
+			bool beamHit = false;
+			if( VRUiPointer::Beam( beamFrom, beamTo, beamHit ) )
+			{
+				const V3 a{ beamFrom[ 0 ], beamFrom[ 1 ], beamFrom[ 2 ] };
+				V3 b{ beamTo[ 0 ], beamTo[ 1 ], beamTo[ 2 ] };
+				float ax, ay, ad, bx, by, bd;
+				if( proj.Project( a, ax, ay, ad ) )
+				{
+					// The far end may be behind the eye only when pointing back; then skip it.
+					if( proj.Project( b, bx, by, bd ) )
+					{
+						const DWORD beam = beamHit ? D3DCOLOR_ARGB( 200, 120, 220, 255 ) : D3DCOLOR_ARGB( 110, 200, 200, 200 );
+						float width = 0.004f * proj.Scale( ad );
+						width = width < 1.5f ? 1.5f : ( width > 6.0f ? 6.0f : width );
+						DrawLine( device, ax, ay, bx, by, width, beam );
+					}
+				}
+			}
 			for( int hand = 0; hand < 2; ++hand )
 			{
 				const ControllerState &c = s_state[ hand ];

@@ -228,6 +228,21 @@ namespace PSUVR
 		return true;
 	}
 
+	bool D3D11Bridge::EnsureLabelTarget( IDirect3DDevice9 *d3d9, UINT width, UINT height )
+	{
+		if( m_label.texture11 )
+		{
+			return true;
+		}
+		if( !d3d9 || !m_d3d11 || !CreateSharedTarget( d3d9, width, height, m_label ) )
+		{
+			ReleaseSharedTarget( m_label );
+			return false;
+		}
+		PSU_LOG( "D3D11Bridge: label target %ux%u\n", width, height );
+		return true;
+	}
+
 	bool D3D11Bridge::EnsureEyeTargets( IDirect3DDevice9 *d3d9, UINT width, UINT height, D3DFORMAT depthFormat )
 	{
 		if( !d3d9 || !m_d3d11 || width == 0 || height == 0 )
@@ -266,6 +281,7 @@ namespace PSUVR
 	{
 		ShutdownEyes();
 		ShutdownHud();
+		ReleaseSharedTarget( m_label );
 		if( m_eventQuery )
 		{
 			m_eventQuery->Release();

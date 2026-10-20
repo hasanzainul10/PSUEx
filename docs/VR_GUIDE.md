@@ -60,6 +60,14 @@ Set these in Clementine's game options (the options tool that comes with Clement
    - **Login, menus, loading:** the game on a big floating screen.
    - **In the game world:** stereo 3D. In first person you're in your character's head; the HUD and menus sit on a panel in front of you.
 5. **Recenter** whenever "forward" feels off: **Ctrl + F9** on the keyboard, or hold **Back/Select** and press **X** on the pad.
+6. **Setup wizard** (motion controllers): the first time the game shows stereo 3D, a **VR Setup** panel opens. Point at it with the right controller and click with the trigger. Steps:
+   1. **Welcome:** how the pointer works (trigger clicks, right stick scrolls, right grip moves the panel).
+   2. **Play position:** stand or sit where you'll play, look ahead, press **Recenter**.
+   3. **Eye height:** stand straight and press **Measure**: your head height above the floor (from the headset's floor level) becomes the first person eye height (1.2-2.0 m). Fine tune with the slider, or **Keep current**. Headsets without a floor level show only the slider.
+   4. **Hands:** **Calibrate** the hand angle (arms straight out, fists, palms facing each other, keep still 5 s), or **Keep the PS VR2 defaults**. Needs first person with the hands following the controllers.
+   5. **Controls:** the controller layout and how to see the label cards.
+
+   **Finish** or **Skip** saves `setupDone` so it doesn't open again. Run it again from **VR Settings → General → Run VR setup again** (that button also works with a gamepad, using the mouse). Untick **VR setup done** in `PSUExVRConfig.exe` to get it on the next start.
 
 ---
 
@@ -127,12 +135,12 @@ Turn on **Play with motion controllers** in the VR settings. The controllers act
 |---|---|---|
 | Stick | Move | Turn |
 | Stick click | Free aim mode on / off | START (menu) |
-| Square / Cross (X / A) | X in menus; speech to text (not made yet) in the field | B (confirm) |
-| Triangle / Circle (Y / B) | Y in menus; chat log window in the field | A (cancel) |
+| Square / Cross (X / A) | X in menus; in the field **hold to talk**: speech to text (see *Talking* below) | B (confirm) |
+| Triangle / Circle (Y / B) | Y in menus; in the field R2: opens the game chat log (*Left Triangle = game chat log (R2)* off: the PSUEx chat log window) | A (cancel) |
 | Grip | L1 | R1 |
 | Trigger | L2, or that hand's weapon (see below) | R2, or that hand's weapon |
 
-**Hold both grips** for VR shortcuts: + Cross recenter, + Circle first / third person, + Square VR settings, + Triangle pause VR, + stick clicks L3 / R3, + **both triggers: hand calibration**. Left grip + left stick click switches the left stick to the D-pad (it switches by itself in menus, shops and the weapon palette).
+**Hold both grips** for VR shortcuts: + Cross recenter, + Circle first / third person, + Square VR settings, + Triangle pause VR, + left stick click switches the left stick to the D-pad (it switches by itself in menus, shops and the weapon palette), + right stick click R3, + **both triggers: hand calibration**. Left grip + left stick click is L3.
 
 **Fighting.** Each hand uses the weapon the game puts in it:
 
@@ -149,6 +157,12 @@ Turn on **Play with motion controllers** in the VR settings. The controllers act
 - *Play the game's Photon Art / technique animation*: the same for grip + swing / trigger (off by default: arms stay on the controllers).
 - **Hand calibration:** the defaults come with a calibration made on PS VR2 Sense controllers; *Back to automatic* estimates the hand angle from the skeleton instead. If it looks off, hold both grips + both triggers, then within 5 seconds hold your arms straight forward, fists around the controllers, palms facing each other, and keep still until the long buzz. It's saved. *Hand pitch / roll* fine-tune it; *Back to automatic* undoes it.
 - **Own body → Hands only** (First person settings): only the hands and weapons, right on the controllers, so the camera never clips your shoulders.
+
+**Talking** (*Voice* settings, off by default). Turn on *Speech to text (hold left Square)*, then in the field hold **left Square**, talk, let go. What you said goes into the game chat as if typed (the chat box opens, the text goes in, Enter sends it), and a toast shows it. Recognition runs on your PC, offline and English only, in `PSUExSpeech\PSUExSpeech.exe` (Moonshine), which starts with the game while the setting is on; the microphone stays open while it runs.
+
+- *Speech model*: Small comes with the mod. Tiny (faster, more mistakes) and Medium (best, more CPU) can be fetched with *Download* (needs internet once).
+- *Send what I say to the game chat* off: the text is only shown.
+- *Voice commands*: with a rod, staff or TCSM, say the name of a technique set on the weapon ("Barta") to cast it from its slot, the same as a swing (slot 1) or grip + swing (slot 2); "slot one" .. "slot four" work too. Only techniques on the weapon in your hands count; anything else you say goes to the chat. Needs *Motion combat*.
 
 **Walking in your room** walks your character: step away and it follows until it's under you again (*Walk in the room moves the character*, First person settings). Your stick still works and takes over.
 

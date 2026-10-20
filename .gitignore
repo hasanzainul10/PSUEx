@@ -364,3 +364,6 @@ FodyWeavers.xsd
 
 # Release packages (tools/package-release.ps1)
 dist/
+
+# Moonshine library and models (tools/fetch-moonshine.ps1)
+third_party/moonshine/

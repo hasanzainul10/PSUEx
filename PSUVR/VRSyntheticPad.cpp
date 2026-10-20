@@ -5,6 +5,8 @@
 #include "VRControllers.h"
 #include "VRSystem.h"
 #include "VRMotionLayout.h"
+#include "VRSpeech.h"
+#include "VRUiPointer.h"
 #include "../Misc/Log.h"
 #include "../PSUExConfig.h"
 #include "../PSUStructs/PSUCombat.h"
@@ -110,7 +112,7 @@ namespace PSUVR
 			}
 			return true;
 		}
-		bool s_dpadMode = false;          // manual flip of the D-pad mode (left grip + stick click)
+		bool s_dpadMode = false;          // manual flip of the D-pad mode (both grips + left stick click)
 		bool s_ui = false;                // a menu has the input (UiContext)
 
 		// The input manager's context (0x00B9CC80): 0x1007 while moving freely, 0x0405 while a
@@ -128,7 +130,8 @@ namespace PSUVR
 			const bool palette = s_combatValid && s_combat.paletteOpen;
 			return ( Config::Get().vr.m_autoDpad && ( s_ui || palette ) ) != s_dpadMode;
 		}
-		bool s_leftClickConsumed = false; // the stick click toggled the D-pad: no SELECT
+		bool s_leftClickConsumed = false; // the stick click was a grip combination: not the layout's output
+		bool s_leftClickL3 = false;       // left grip + left stick click: L3 while the click is held
 
 		constexpr float kGripDelay = 0.15f;
 		constexpr float kTapPulse = 0.06f;
@@ -1151,6 +1154,7 @@ namespace PSUVR
 				s_pulse[ 0 ] = s_pulse[ 1 ] = 0.0f;
 				s_dpadMode = false;
 				s_leftClickConsumed = false;
+				s_leftClickL3 = false;
 				s_pendingButton = -1;
 				s_pulseButton = -1;
 				s_pulseTime = 0.0f;
@@ -1159,6 +1163,7 @@ namespace PSUVR
 				s_gunShot = false;
 				s_gunTail = 0.0f;
 				s_r3Pulse = 0.0f;
+				VRSpeech::EndTalk();
 				std::lock_guard lock( s_mutex );
 				s_active = false;
 				s_out = {};
@@ -1181,6 +1186,11 @@ namespace PSUVR
 				const float value = hands[ hand ]->trigger;
 				s_triggerDown[ hand ] = s_triggerDown[ hand ] ? value > 0.4f : value > 0.6f;
 			}
+			// Speech to text is hold-to-talk: releasing left Square (anywhere) ends the utterance.
+			if( VRSpeech::Talking() && !( left.buttons & ControlBit( Control::Primary ) ) )
+			{
+				VRSpeech::EndTalk();
+			}
 
 			// Menus switch the left stick to the D-pad; a context change drops the manual flip.
 			const bool ui = UiContext();
@@ -1194,25 +1204,36 @@ namespace PSUVR
 #endif
 			}
 
-			// Left grip + left stick click toggles the D-pad; that grip and click send nothing.
-			if( !s_leftClickConsumed && ( VRControllers::Pressed( 0 ) & kControllerStick ) && leftGripDown &&
-				s_grip[ 0 ] != Grip::Modifier && s_grip[ 1 ] != Grip::Modifier )
+			// Both grips + left stick click toggles the D-pad. Left grip alone + left stick click is
+			// L3 (that grip sends no L1).
+			if( !s_leftClickConsumed && ( VRControllers::Pressed( 0 ) & kControllerStick ) && leftGripDown )
 			{
-				s_dpadMode = !s_dpadMode;
 				s_leftClickConsumed = true;
-				s_grip[ 0 ] = Grip::Consumed;
-				s_pulse[ 0 ] = 0.0f;
-				VRBindings::ShowToast( DpadActive() ? "D-pad on" : "D-pad off" );
+				if( s_grip[ 0 ] == Grip::Modifier && s_grip[ 1 ] == Grip::Modifier )
+				{
+					s_dpadMode = !s_dpadMode;
+					VRBindings::ShowToast( DpadActive() ? "D-pad on" : "D-pad off" );
+				}
+				else if( s_grip[ 1 ] != Grip::Modifier )
+				{
+					s_leftClickL3 = true;
+					s_grip[ 0 ] = Grip::Consumed;
+					s_pulse[ 0 ] = 0.0f;
+				}
 				Buzz( 0 );
 			}
 			if( s_leftClickConsumed && !( left.buttons & kControllerStick ) )
 			{
 				s_leftClickConsumed = false;
+				s_leftClickL3 = false;
 			}
 
 			const bool l1 = UpdateGrip( 0, dt, rightGripDown );
 			const bool r1 = UpdateGrip( 1, dt, leftGripDown );
 			const bool modifier = s_grip[ 0 ] == Grip::Modifier;
+			// The right controller points at a PSUEx window (VR settings): the game gets nothing but
+			// the both-grip chords (to close it, recenter, ...).
+			const bool uiOwns = VRUiPointer::Wanted();
 
 			PadState pad;
 			const HandRoles roles = Roles();
@@ -1224,6 +1245,7 @@ namespace PSUVR
 			// weapon is used from the left hand).
 			const bool rightGripPa = Config::Get().vr.m_gripPhotonArt && roles.Any( 1 );
 			if( r1 && !modifier && !freeAim && !rightGripPa ) pad.buttons |= Bit( kPadR1 );
+			if( s_leftClickL3 ) pad.buttons |= Bit( kPadL3 );
 			for( const VRMotionLayout::Entry &entry : VRMotionLayout::kLayout )
 			{
 				if( entry.control == Control::Grip || entry.control == Control::Stick )
@@ -1231,6 +1253,10 @@ namespace PSUVR
 					continue;
 				}
 				const ControllerState &c = *hands[ entry.hand ];
+				if( uiOwns && !modifier )
+				{
+					continue;
+				}
 				if( entry.hand == 0 && entry.control == Control::StickClick && s_leftClickConsumed )
 				{
 					continue;
@@ -1262,13 +1288,17 @@ namespace PSUVR
 					output = Output::R1;
 				}
 				// Square / Triangle: X / Y while a menu or the palette has the input; in the field the
-				// chat log and speech to text.
+				// chat log (the game's R2 with vr.triangleChatL2, else the PSUEx window) and speech to text.
 				if( output == Output::ChatLog || output == Output::SpeechToText )
 				{
 					const bool menu = s_ui || ( s_combatValid && s_combat.paletteOpen );
 					if( menu )
 					{
 						output = output == Output::ChatLog ? Output::Y : Output::X;
+					}
+					else if( output == Output::ChatLog && Config::Get().vr.m_triangleChatL2 )
+					{
+						output = Output::R2;
 					}
 					else
 					{
@@ -1280,7 +1310,7 @@ namespace PSUVR
 							}
 							else
 							{
-								VRBindings::ShowToast( "Speech to text: not made yet" );
+								VRSpeech::BeginTalk();
 							}
 							Buzz( entry.hand );
 						}
@@ -1293,6 +1323,19 @@ namespace PSUVR
 					if( ControlDown( c, entry.hand, entry.control ) )
 					{
 						pad.buttons |= Bit( button );
+					}
+					continue;
+				}
+				if( output == Output::ToggleControllerLabels )
+				{
+					if( VRControllers::Pressed( entry.hand ) & ControlBit( entry.control ) )
+					{
+						auto &vr = Config::Get().vr;
+						vr.m_controllerLabels = !vr.m_controllerLabels;
+						Config::Get().SaveToFile();
+						VRBindings::ShowToast( vr.m_controllerLabels ? "Controller labels on (look down)" : "Controller labels off" );
+						Buzz( 0 );
+						Buzz( 1 );
 					}
 					continue;
 				}
@@ -1335,6 +1378,10 @@ namespace PSUVR
 			Combat( dt, modifier, pad );
 			pad.rx = Deadzone( right.stick[ 0 ], 0.15f );
 			pad.ry = Deadzone( right.stick[ 1 ], 0.15f );
+			if( uiOwns )
+			{
+				pad = PadState{};
+			}
 			// Free aim, both grips held: the right stick turns the gun model onto the reticle
 			// (saved when the grips are let go). The stick sends nothing to the game meanwhile.
 			{
@@ -1420,11 +1467,158 @@ namespace PSUVR
 			return s_freeAim;
 		}
 
+		void DescribeControls( int gripMask, HandLabels out[ 2 ] )
+		{
+			out[ 0 ] = {};
+			out[ 1 ] = {};
+			const auto &vr = Config::Get().vr;
+			const auto set = [ & ]( int hand, Control control, const char *text )
+			{
+				out[ hand ].control[ static_cast< int >( control ) ] = text;
+			};
+
+			// Both grips: the VR chords (VRMotionLayout::kLayout plus the rules in Update).
+			if( gripMask == 3 )
+			{
+				for( const VRMotionLayout::Entry &entry : VRMotionLayout::kLayout )
+				{
+					if( entry.chord != Output::None && entry.control != Control::Trigger )
+					{
+						set( entry.hand, entry.control, VRMotionLayout::OutputName( entry.chord ) );
+					}
+				}
+				set( 0, Control::Trigger, "Both triggers: calibrate hands" );
+				set( 1, Control::Trigger, "Both triggers: calibrate hands" );
+				int aimHand = 0;
+				if( vr.m_aimLeash && GunAiming( aimHand ) )
+				{
+					set( 1, Control::Stick, "Gun model angle" );
+				}
+				return;
+			}
+
+			const bool menu = s_ui || ( s_combatValid && s_combat.paletteOpen );
+			const HandRoles roles = Roles();
+			const bool freeAim = s_aimModeOn && VRCamera::CameraState() == 4;
+			const uint32_t rightCat = s_combatValid ? s_combat.rightCategory : 0;
+			const uint32_t leftCat = s_combatValid ? s_combat.leftCategory : 0;
+			const bool rightTech = rightCat == 3 || rightCat == 8;
+			const bool leftTech = leftCat == 0xB || ( leftCat == 0 && rightCat == 3 );
+
+			for( int hand = 0; hand < 2; ++hand )
+			{
+				const bool gripHeld = ( gripMask & ( 1 << hand ) ) != 0;
+				// Grip + attack is the Photon Art (technique slot 2 / 4) when the grip is the modifier.
+				const bool byGrip = vr.m_gripPhotonArt || roles.shoot[ hand ];
+				const bool pa = gripHeld && byGrip && vr.m_paGesture;
+				const bool tech = hand == 1 ? rightTech : leftTech;
+				const char *attack = nullptr;
+				if( roles.Any( hand ) )
+				{
+					if( tech )
+					{
+						attack = hand == 1 ? ( pa ? "Technique slot 2" : "Technique slot 1" ) : ( pa ? "Technique slot 4" : "Technique slot 3" );
+					}
+					else if( roles.shoot[ hand ] )
+					{
+						attack = pa ? "Photon Art (shot)" : "Fire";
+					}
+					else
+					{
+						attack = pa ? "Photon Art" : "Attack";
+					}
+				}
+				if( roles.swing[ hand ] )
+				{
+					out[ hand ].swing = attack;
+				}
+				if( roles.trigger[ hand ] )
+				{
+					set( hand, Control::Trigger, attack );
+				}
+				else
+				{
+					set( hand, Control::Trigger, hand == 0 ? "L2" : "R2" );
+				}
+			}
+
+			// Grips.
+			if( freeAim )
+			{
+				set( 0, Control::Grip, "Hold + trigger: gun Photon Art" );
+				set( 1, Control::Grip, nullptr );
+			}
+			else
+			{
+				set( 0, Control::Grip, roles.Any( 0 ) && ( vr.m_gripPhotonArt || roles.shoot[ 0 ] )
+					? "L1 (hold + attack: Photon Art)" : "L1 (lock on)" );
+				set( 1, Control::Grip, vr.m_gripPhotonArt && roles.Any( 1 )
+					? "Hold + attack: Photon Art" : "R1" );
+			}
+
+			// Sticks.
+			set( 0, Control::Stick, DpadActive() ? "D-pad" : "Move" );
+			set( 1, Control::Stick, "Turn / camera" );
+			if( gripMask == 1 )
+			{
+				set( 0, Control::StickClick, "L3" );
+			}
+			else
+			{
+				set( 0, Control::StickClick, s_aimModeOn ? "Free aim mode off" : "Free aim mode on" );
+			}
+			set( 1, Control::StickClick, ( s_aimModeOn && s_gunInView && VRCamera::CameraState() == 4 ) ? "Scan (R1)" : "Main menu (START)" );
+
+			// Face buttons.
+			set( 1, Control::Primary, menu ? "Confirm" : "Action / talk / confirm" );
+			set( 1, Control::Secondary, menu ? "Cancel" : "Cancel (hold: palette)" );
+			if( menu )
+			{
+				set( 0, Control::Primary, "X" );
+				set( 0, Control::Secondary, "Y" );
+			}
+			else
+			{
+				set( 0, Control::Primary, vr.m_speechToText ? "Hold: speech to text" : "Speech to text (off)" );
+				set( 0, Control::Secondary, vr.m_triangleChatL2 ? "R2 (chat log)" : "Chat log" );
+			}
+		}
+
 		unsigned TakeActions()
 		{
 			const unsigned actions = s_actions;
 			s_actions = 0;
 			return actions;
+		}
+
+		bool CastTechSlot( int slot )
+		{
+			if( slot < 0 || slot > 3 || !s_active )
+			{
+				return false;
+			}
+			const HandRoles roles = Roles();
+			if( slot < 2 )
+			{
+				// Right staff / rod: X = slot 1, Y = slot 2, like a swing / grip + swing.
+				if( !roles.swing[ 1 ] || ( s_combat.rightCategory != 3 && s_combat.rightCategory != 8 ) )
+				{
+					return false;
+				}
+				s_lastAttackHand = 1;
+				RequestAttack( slot == 0 ? kPadX : kPadY, 1, 0, "voice" );
+				return true;
+			}
+			// Rod slots 3 / 4 and the TCSM: R1 held, then X / Y, through the left-hand cast.
+			if( !roles.shoot[ 0 ] )
+			{
+				return false;
+			}
+			s_gunShot = true;
+			s_gunShotTime = kGunShotWaitSeconds;
+			s_gunPhotonArt = slot == 3;
+			VRControllers::Haptic( 0, 0.25f, 0.02f );
+			return true;
 		}
 
 		bool MergeJoystickState( void *statePtr, unsigned size, const long axisMin[ 8 ], const long axisMax[ 8 ], bool replace )

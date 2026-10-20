@@ -150,6 +150,7 @@ DetoursHookAll()
 		sub_4F9F50::Hook();			// Aim shot angles (free aim reticle calibration log)
 		sub_4D50B0::Hook();			// Technique aim (log each technique once)
 #endif
+		sub_7738E0::Hook();			// Keyboard held keys (VR speech to text: chat key / Enter)
 		sub_4CB3A0::Hook();			// Bullet direction (free aim shot start for the VR reticle; Debug log)
 		sub_814040::Hook();			// File Processing
 

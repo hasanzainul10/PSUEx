@@ -10,6 +10,9 @@
 #include "VRControllers.h"
 #include "VRProbe.h"
 #include "VRSyntheticPad.h"
+#include "VRUiPointer.h"
+#include "VRControllerLabels.h"
+#include "VRSpeech.h"
 #include "VRHud.h"
 #include "../Misc/Log.h"
 #include "../PSUExConfig.h"
@@ -337,18 +340,23 @@ namespace PSUVR
 
 			// The next game frame renders with poses predicted one display period ahead.
 			m_haveNextViews = m_xr->LocateNextViews( m_nextViews, m_nextViewSpacePoses );
+			m_haveHeadHeight = m_xr->GetHeadHeightAboveFloor( m_headHeight );
 			// Controllers for the same display time as those views.
 			m_xr->UpdateInput();
 			VRControllers::Update( m_xr );
+			VRUiPointer::Update( m_xr );
 			VRSyntheticPad::Update();
+			VRControllerLabels::Update( m_haveNextViews ? m_nextViews : nullptr );
+			VRSpeech::Update();
 
 			// VR shortcuts (rebindable keys and Back+button pad chords, see VRBindings).
 			DWORD foregroundPid = 0;
 			GetWindowThreadProcessId( GetForegroundWindow(), &foregroundPid );
 			const unsigned actions = VRBindings::Poll( foregroundPid == GetCurrentProcessId() ) |
 				VRSyntheticPad::TakeActions();
-			if( ( actions & VRBindings::Bit( VRAction::Recenter ) ) && m_haveNextViews )
+			if( ( ( actions & VRBindings::Bit( VRAction::Recenter ) ) || m_recenterRequest ) && m_haveNextViews )
 			{
+				m_recenterRequest = false;
 				VRCamera::Recenter( m_nextViews );
 				VRBindings::ShowToast( "Recentered" );
 			}
@@ -493,6 +501,7 @@ namespace PSUVR
 				m_xr->ClearEyes( 0.05f, 0.05f, 0.08f );
 			}
 
+			VRControllerLabels::Submit( m_xr, m_bridge );
 			m_xr->EndFrame();
 		}
 		__except( EXCEPTION_EXECUTE_HANDLER )

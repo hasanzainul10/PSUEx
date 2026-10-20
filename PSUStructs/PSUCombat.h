@@ -3,6 +3,7 @@
 #include "../PSUMemory/Memory.hpp"
 
 #include <cstdint>
+#include <cstring>
 
 // Read-only view of the local player's melee combo state (offsets from probe runs,
 // 2026-10-15; see docs/ADDRESS_MAP.md "Local player struct fields").
@@ -247,5 +248,73 @@ namespace PSUCombat
 	inline bool Swinging( const State &state )
 	{
 		return state.comboStep > 0 && ( state.attackState & 0xFFFF ) == 0x0002;
+	}
+
+	// Techniques on the equipped technique weapons, by cast slot: 0 = X, 1 = Y (right weapon),
+	// 2 = R1 + X, 3 = R1 + Y (rod slots 3 / 4, or the left-hand TCSM). The weapon object
+	// (player +0x2E0 right, +0x2E4 left) keeps 4 slots at +0x48 + slot * 2: byte 0 technique id
+	// (0 = empty), byte 1 level. TItemWpnTech (vtable 0x008CC4EC) picks the slot as
+	// (button - 2) + hand * 2 (0x004DE400 / 0x004DE7C0). The id matches a technique disk as
+	// group (id - 1) / 10 + 1, entry (id - 1) % 10 (0x004DE4D0).
+	struct TechSlots
+	{
+		uint8_t id[ 4 ]{};
+		uint8_t level[ 4 ]{};
+		uint8_t raw[ 2 ][ 8 ]{};    // +0x48..+0x4F of the right / left weapon (Debug logs)
+		uint32_t vtable[ 2 ]{};     // right / left weapon object vtables
+	};
+
+	inline bool ReadTechSlots( const State &state, TechSlots &out )
+	{
+		using detail::Dword;
+		using detail::Readable;
+		out = {};
+		if( !Readable( 0x009CA8AC ) )
+		{
+			return false;
+		}
+		const uintptr_t player = Dword( 0x009CA8AC );
+		if( !Readable( player ) || !Readable( player + 0x2E8 ) )
+		{
+			return false;
+		}
+		bool any = false;
+		for( int hand = 0; hand < 2; ++hand )
+		{
+			const uintptr_t weapon = Dword( player + 0x2E0 + hand * 4 );
+			if( !Readable( weapon ) || !Readable( weapon + 0x50 ) )
+			{
+				continue;
+			}
+			out.vtable[ hand ] = Dword( weapon );
+			memcpy( out.raw[ hand ], reinterpret_cast< const void * >( weapon + 0x48 ), 8 );
+			any = true;
+		}
+		const auto take = [ &out ]( int slot, int hand, int index )
+		{
+			out.id[ slot ] = out.raw[ hand ][ index * 2 ];
+			out.level[ slot ] = out.raw[ hand ][ index * 2 + 1 ];
+		};
+		if( state.rightCategory == 3 )
+		{
+			// Rod: all four slots on the one weapon.
+			for( int slot = 0; slot < 4; ++slot )
+			{
+				take( slot, 0, slot );
+			}
+		}
+		else if( state.rightCategory == 8 )
+		{
+			take( 0, 0, 0 );
+			take( 1, 0, 1 );
+		}
+		if( state.leftCategory == 0xB )
+		{
+			// TCSM: its own slots 2 / 3 (R1 + X / Y), or 0 / 1 if those are empty.
+			const bool high = out.raw[ 1 ][ 4 ] || out.raw[ 1 ][ 6 ];
+			take( 2, 1, high ? 2 : 0 );
+			take( 3, 1, high ? 3 : 1 );
+		}
+		return any;
 	}
 }

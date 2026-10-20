@@ -30,6 +30,11 @@ namespace PSUVR
 		IDirect3DSurface9 *HudWorldSurface() const { return m_hudWorld.surface9; }
 		ID3D11Texture2D *HudUserTexture() const { return m_hudUser.texture11; }
 		ID3D11Texture2D *HudWorldTexture() const { return m_hudWorld.texture11; }
+		// Controller label cards (VRControllerLabels), a fixed small transparent target.
+		bool EnsureLabelTarget( IDirect3DDevice9 *d3d9, UINT width, UINT height );
+		IDirect3DSurface9 *LabelSurface() const { return m_label.surface9; }
+		ID3D11Texture2D *LabelTexture() const { return m_label.texture11; }
+
 		UINT HudWidth() const { return m_hudWidth; }
 		UINT HudHeight() const { return m_hudHeight; }
 
@@ -61,6 +66,8 @@ namespace PSUVR
 		SharedTarget m_hudWorld;
 		UINT m_hudWidth = 0;
 		UINT m_hudHeight = 0;
+
+		SharedTarget m_label;
 
 		IDirect3DTexture9 *m_d3d9Texture = nullptr;
 		IDirect3DSurface9 *m_d3d9Surface = nullptr;

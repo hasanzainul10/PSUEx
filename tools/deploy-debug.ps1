@@ -22,6 +22,20 @@ if( Test-Path $vrConfig ) {
     Copy-Item $vrConfig $GameDir -Force
 }
 
+# Speech to text helper (64-bit) and its default model, as the PSUExSpeech folder.
+$speech = Join-Path ( Split-Path -Parent $dll ) "PSUExSpeech"
+if( Test-Path ( Join-Path $speech "PSUExSpeech.exe" ) ) {
+    $speechDest = Join-Path $GameDir "PSUExSpeech"
+    New-Item -ItemType Directory -Force $speechDest | Out-Null
+    Copy-Item ( Join-Path $speech "PSUExSpeech.exe" ), ( Join-Path $speech "onnxruntime.dll" ) $speechDest -Force
+    $model = Join-Path $root "third_party\moonshine\models\small-streaming-en"
+    $modelDest = Join-Path $speechDest "models\small-streaming-en"
+    if( ( Test-Path $model ) -and -not ( Test-Path ( Join-Path $modelDest "decoder_kv.ort" ) ) ) {
+        New-Item -ItemType Directory -Force $modelDest | Out-Null
+        Copy-Item ( Join-Path $model "*" ) $modelDest -Force
+    }
+}
+
 $loaderDll = Join-Path $root "tools\dinput8_proxy\dinput8.dll"
 if( Test-Path $loaderDll ) {
     Copy-Item $loaderDll ( Join-Path $GameDir "dinput8.dll" ) -Force

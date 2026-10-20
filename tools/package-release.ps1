@@ -43,6 +43,14 @@ foreach( $f in $files ) {
     Copy-Item $src ( Join-Path $dist $f[1] )
 }
 
+# Speech to text: the 64-bit helper, ONNX Runtime and the bundled small English model (all MIT).
+$speechDest = Join-Path $dist "PSUExSpeech"
+$modelSrc = Join-Path $root "third_party\moonshine\models\small-streaming-en"
+if( -not ( Test-Path ( Join-Path $modelSrc "decoder_kv.ort" ) ) ) { throw "Missing $modelSrc (see third_party\moonshine\README.md)" }
+New-Item -ItemType Directory -Force ( Join-Path $speechDest "models\small-streaming-en" ) | Out-Null
+Copy-Item ( Join-Path $root "Release\PSUExSpeech\PSUExSpeech.exe" ), ( Join-Path $root "Release\PSUExSpeech\onnxruntime.dll" ) $speechDest
+Copy-Item ( Join-Path $modelSrc "*" ) ( Join-Path $speechDest "models\small-streaming-en" )
+
 # Starter settings from the shared serializer, so the file always matches the code.
 $config = Join-Path $dist "PSUExVRConfig.exe"
 $json = Join-Path $dist "psuex_vr.json"

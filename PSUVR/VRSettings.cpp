@@ -60,6 +60,11 @@ namespace
 	X( m_snapTurn, "snapTurn" ) \
 	X( m_comfortVignette, "comfortVignette" ) \
 	X( m_showControllers, "showControllers" ) \
+	X( m_uiPointer, "uiPointer" ) \
+	X( m_controllerLabels, "controllerLabels" ) \
+	X( m_controllerLabelsGrip, "controllerLabelsGrip" ) \
+	X( m_controllerLabelsHoldSeconds, "controllerLabelsHoldSeconds" ) \
+	X( m_controllerLabelsSize, "controllerLabelsSize" ) 	X( m_setupDone, "setupDone" ) \
 	X( m_roomWalk, "roomWalk" ) \
 	X( m_roomWalkStart, "roomWalkStart" ) \
 	X( m_emulateControllers, "emulateControllers" ) \
@@ -84,6 +89,7 @@ namespace
 	X( m_swingAttack, "swingAttack" ) \
 	X( m_paGesture, "paGesture" ) \
 	X( m_gripPhotonArt, "gripPhotonArt" ) \
+	X( m_triangleChatL2, "triangleChatL2" ) \
 	X( m_attackFaceLook, "attackFaceLook" ) \
 	X( m_controllerAim, "controllerAim" ) \
 	X( m_aimInvertPitch, "aimInvertPitch" ) \
@@ -105,6 +111,10 @@ namespace
 	X( m_swingSpeed, "swingSpeed" ) \
 	X( m_comboBuffer, "comboBuffer" ) \
 	X( m_comboBufferJustAttack, "comboBufferJustAttack" ) \
+	X( m_speechToText, "speechToText" ) \
+	X( m_speechModel, "speechModel" ) \
+	X( m_speechChat, "speechChat" ) \
+	X( m_voiceCommands, "voiceCommands" ) \
 	X( m_vignetteStrength, "vignetteStrength" ) \
 	X( m_stereo, "stereo" ) \
 	X( m_stereoMode, "stereoMode" ) \

@@ -7,6 +7,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PSUEx", "PSUEx.vcxproj", "{
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PSUExVRConfig", "tools\PSUExVRConfig\PSUExVRConfig.vcxproj", "{5B1D2C3E-7A44-4F0B-9E2A-6C1D7E8F9A01}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PSUExSpeech", "tools\PSUExSpeech\PSUExSpeech.vcxproj", "{8E3F6A21-4C5D-4B7E-9A10-2D3C4B5A6F72}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x86 = Debug|x86
@@ -21,6 +23,10 @@ Global
 		{5B1D2C3E-7A44-4F0B-9E2A-6C1D7E8F9A01}.Debug|x86.Build.0 = Debug|Win32
 		{5B1D2C3E-7A44-4F0B-9E2A-6C1D7E8F9A01}.Release|x86.ActiveCfg = Release|Win32
 		{5B1D2C3E-7A44-4F0B-9E2A-6C1D7E8F9A01}.Release|x86.Build.0 = Release|Win32
+		{8E3F6A21-4C5D-4B7E-9A10-2D3C4B5A6F72}.Debug|x86.ActiveCfg = Debug|x64
+		{8E3F6A21-4C5D-4B7E-9A10-2D3C4B5A6F72}.Debug|x86.Build.0 = Debug|x64
+		{8E3F6A21-4C5D-4B7E-9A10-2D3C4B5A6F72}.Release|x86.ActiveCfg = Release|x64
+		{8E3F6A21-4C5D-4B7E-9A10-2D3C4B5A6F72}.Release|x86.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

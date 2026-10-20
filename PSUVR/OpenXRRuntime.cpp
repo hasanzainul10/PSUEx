@@ -143,6 +143,31 @@ namespace PSUVR
 			return false;
 		}
 		m_viewSpace = static_cast< uint64_t >( viewSpace );
+
+		// STAGE (floor at y = 0) only for the setup wizard's eye height; optional.
+		uint32_t spaceCount = 0;
+		if( XR_SUCCEEDED( xrEnumerateReferenceSpaces( session, 0, &spaceCount, nullptr ) ) && spaceCount )
+		{
+			std::vector< XrReferenceSpaceType > types( spaceCount );
+			if( XR_SUCCEEDED( xrEnumerateReferenceSpaces( session, spaceCount, &spaceCount, types.data() ) ) &&
+				std::find( types.begin(), types.end(), XR_REFERENCE_SPACE_TYPE_STAGE ) != types.end() )
+			{
+				XrReferenceSpaceCreateInfo stageInfo{ XR_TYPE_REFERENCE_SPACE_CREATE_INFO };
+				stageInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
+				stageInfo.poseInReferenceSpace.orientation.w = 1.0f;
+				XrSpace stageSpace = XR_NULL_HANDLE;
+				r = xrCreateReferenceSpace( session, &stageInfo, &stageSpace );
+				if( XR_SUCCEEDED( r ) )
+				{
+					m_stageSpace = static_cast< uint64_t >( stageSpace );
+				}
+				else
+				{
+					PSU_LOG( "OpenXR: xrCreateReferenceSpace(STAGE) failed %s\n", XrResultString( r ) );
+				}
+			}
+		}
+		PSU_LOG( "OpenXR: STAGE space %s\n", m_stageSpace ? "available" : "not available" );
 		return true;
 	}
 
@@ -708,6 +733,60 @@ namespace PSUVR
 		}
 	}
 
+	void OpenXRRuntime::DestroyLabelSwapchain()
+	{
+		if( m_labelImages )
+		{
+			delete[] reinterpret_cast< XrSwapchainImageD3D11KHR * >( m_labelImages );
+			m_labelImages = nullptr;
+		}
+		m_labelImageCount = 0;
+		if( m_labelSwapchain )
+		{
+			xrDestroySwapchain( static_cast< XrSwapchain >( m_labelSwapchain ) );
+			m_labelSwapchain = 0;
+		}
+		m_labelWidth = 0;
+		m_labelHeight = 0;
+	}
+
+	bool OpenXRRuntime::SubmitHandLabels( ID3D11Texture2D *tex, const float position[ 2 ][ 3 ], const float orientation[ 2 ][ 4 ],
+		float widthM, const bool visible[ 2 ] )
+	{
+		if( !tex || !m_context || !m_device || !m_frameStarted || !m_shouldRender || !m_session )
+		{
+			return false;
+		}
+		D3D11_TEXTURE2D_DESC desc{};
+		tex->GetDesc( &desc );
+		if( !m_labelSwapchain || m_labelWidth != static_cast< int32_t >( desc.Width ) || m_labelHeight != static_cast< int32_t >( desc.Height ) )
+		{
+			DestroyLabelSwapchain();
+			if( !CreateSwapchain( static_cast< int32_t >( desc.Width ), static_cast< int32_t >( desc.Height ),
+				m_labelSwapchain, m_labelImages, m_labelImageCount ) )
+			{
+				DestroyLabelSwapchain();
+				return false;
+			}
+			m_labelWidth = static_cast< int32_t >( desc.Width );
+			m_labelHeight = static_cast< int32_t >( desc.Height );
+			PSU_LOG( "OpenXR: label swapchain %dx%d\n", m_labelWidth, m_labelHeight );
+		}
+		if( !BlitIntoSwapchain( m_labelSwapchain, m_labelImages, tex ) )
+		{
+			return false;
+		}
+		m_context->Flush();
+		m_labelSize = widthM;
+		for( int hand = 0; hand < 2; ++hand )
+		{
+			m_submitLabels[ hand ] = visible[ hand ];
+			std::memcpy( m_labelPosition[ hand ], position[ hand ], sizeof( m_labelPosition[ hand ] ) );
+			std::memcpy( m_labelOrientation[ hand ], orientation[ hand ], sizeof( m_labelOrientation[ hand ] ) );
+		}
+		return true;
+	}
+
 	bool OpenXRRuntime::ResizeSwapchains( int32_t width, int32_t height )
 	{
 		if( !m_ready || !m_session )
@@ -751,6 +830,7 @@ namespace PSUVR
 		m_sessionRunning = false;
 		m_loggedSubmitFormats = false;
 
+		DestroyLabelSwapchain();
 		DestroyVisorSwapchain();
 		DestroyPanelSwapchain();
 		DestroySwapchains();
@@ -761,6 +841,11 @@ namespace PSUVR
 		if( m_blitVS ) { m_blitVS->Release(); m_blitVS = nullptr; }
 		m_loggedBlitRtv = false;
 		DestroyActions();
+		if( m_stageSpace )
+		{
+			xrDestroySpace( static_cast< XrSpace >( m_stageSpace ) );
+			m_stageSpace = 0;
+		}
 		if( m_viewSpace )
 		{
 			xrDestroySpace( static_cast< XrSpace >( m_viewSpace ) );
@@ -1397,6 +1482,58 @@ namespace PSUVR
 		return ( viewState.viewStateFlags & needed ) == needed;
 	}
 
+	// A layer pose given in VIEW space, in LOCAL space at `time` (head pose * pose).
+	static bool ViewPoseInLocal( XrSpace viewSpace, XrSpace localSpace, XrTime time, const XrPosef &inView, XrPosef &out )
+	{
+		XrSpaceLocation head{ XR_TYPE_SPACE_LOCATION };
+		constexpr XrSpaceLocationFlags kPoseValid = XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
+		if( XR_FAILED( xrLocateSpace( viewSpace, localSpace, time, &head ) ) || ( head.locationFlags & kPoseValid ) != kPoseValid )
+		{
+			return false;
+		}
+		const XrQuaternionf &a = head.pose.orientation;
+		const XrQuaternionf &b = inView.orientation;
+		out.orientation = {
+			a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+			a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+			a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+			a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z };
+		// p rotated by a: p + 2w(u x p) + 2u x (u x p).
+		const XrVector3f &p = inView.position;
+		const float tx = 2.0f * ( a.y * p.z - a.z * p.y );
+		const float ty = 2.0f * ( a.z * p.x - a.x * p.z );
+		const float tz = 2.0f * ( a.x * p.y - a.y * p.x );
+		out.position = {
+			head.pose.position.x + p.x + a.w * tx + ( a.y * tz - a.z * ty ),
+			head.pose.position.y + p.y + a.w * ty + ( a.z * tx - a.x * tz ),
+			head.pose.position.z + p.z + a.w * tz + ( a.x * ty - a.y * tx ) };
+		return true;
+	}
+
+	bool OpenXRRuntime::GetUiQuad( UiQuad &out )
+	{
+		out = m_uiQuadValid ? m_uiQuad : UiQuad{};
+		return m_uiQuadValid;
+	}
+
+	bool OpenXRRuntime::GetHeadHeightAboveFloor( float &meters )
+	{
+		meters = 0.0f;
+		if( !m_frameStarted || !m_stageSpace || !m_viewSpace )
+		{
+			return false;
+		}
+		XrSpaceLocation head{ XR_TYPE_SPACE_LOCATION };
+		constexpr XrSpaceLocationFlags kPositionValid = XR_SPACE_LOCATION_POSITION_VALID_BIT;
+		if( XR_FAILED( xrLocateSpace( static_cast< XrSpace >( m_viewSpace ), static_cast< XrSpace >( m_stageSpace ),
+				m_displayTime, &head ) ) || !( head.locationFlags & kPositionValid ) )
+		{
+			return false;
+		}
+		meters = head.pose.position.y;
+		return true;
+	}
+
 	bool OpenXRRuntime::LocateNextViews( EyePose localOut[ 2 ], EyePose viewSpaceOut[ 2 ] )
 	{
 		if( !m_frameStarted || !m_space || !m_viewSpace )
@@ -1446,8 +1583,32 @@ namespace PSUVR
 		XrCompositionLayerQuad quadLayer{ XR_TYPE_COMPOSITION_LAYER_QUAD };
 		XrCompositionLayerQuad userHudLayer{ XR_TYPE_COMPOSITION_LAYER_QUAD };
 		XrCompositionLayerQuad worldHudLayer{ XR_TYPE_COMPOSITION_LAYER_QUAD };
-		const XrCompositionLayerBaseHeader *layers[ 3 ]{};
+		XrCompositionLayerQuad labelLayers[ 2 ]{ { XR_TYPE_COMPOSITION_LAYER_QUAD }, { XR_TYPE_COMPOSITION_LAYER_QUAD } };
+		// Projection + user HUD + world HUD / panel + two controller label cards.
+		const XrCompositionLayerBaseHeader *layers[ 5 ]{};
 		uint32_t layerCount = 0;
+		m_uiQuadValid = false;
+		// The overlay's layer, for pointing at it with a controller (VRUiPointer).
+		const auto noteUiQuad = [ & ]( const XrCompositionLayerQuad &layer )
+		{
+			XrPosef pose = layer.pose;
+			if( layer.space == viewSpace && !ViewPoseInLocal( viewSpace, localSpace, m_displayTime, layer.pose, pose ) )
+			{
+				return;
+			}
+			m_uiQuad.position[ 0 ] = pose.position.x;
+			m_uiQuad.position[ 1 ] = pose.position.y;
+			m_uiQuad.position[ 2 ] = pose.position.z;
+			m_uiQuad.orientation[ 0 ] = pose.orientation.x;
+			m_uiQuad.orientation[ 1 ] = pose.orientation.y;
+			m_uiQuad.orientation[ 2 ] = pose.orientation.z;
+			m_uiQuad.orientation[ 3 ] = pose.orientation.w;
+			m_uiQuad.width = layer.size.width;
+			m_uiQuad.height = layer.size.height;
+			m_uiQuad.pixelWidth = m_panelWidth;
+			m_uiQuad.pixelHeight = m_panelHeight;
+			m_uiQuadValid = true;
+		};
 
 		if( m_shouldRender && m_clearedThisFrame )
 		{
@@ -1529,6 +1690,7 @@ namespace PSUVR
 				}
 				userHudLayer.size = { heightM * aspect, heightM };
 				layers[ layerCount++ ] = reinterpret_cast< const XrCompositionLayerBaseHeader * >( &userHudLayer );
+				noteUiQuad( userHudLayer );
 			}
 
 			if( m_submitWorldHud && m_panelSwapchain && m_panelWorldLocked && layerCount < 3 )
@@ -1570,6 +1732,33 @@ namespace PSUVR
 				}
 				quadLayer.size = { widthM, heightM };
 				layers[ layerCount++ ] = reinterpret_cast< const XrCompositionLayerBaseHeader * >( &quadLayer );
+				// In stereo this panel is a stand-in; the overlay is on the user HUD.
+				if( !stereo )
+				{
+					noteUiQuad( quadLayer );
+				}
+			}
+
+			// Controller label cards, on top of everything (one swapchain, a half each).
+			for( int hand = 0; hand < 2; ++hand )
+			{
+				if( !m_submitLabels[ hand ] || !m_labelSwapchain || localSpace == XR_NULL_HANDLE || layerCount >= 5 )
+				{
+					continue;
+				}
+				XrCompositionLayerQuad &label = labelLayers[ hand ];
+				label.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+				label.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
+				label.subImage.swapchain = static_cast< XrSwapchain >( m_labelSwapchain );
+				label.subImage.imageRect.offset = { hand * ( m_labelWidth / 2 ), 0 };
+				label.subImage.imageRect.extent = { m_labelWidth / 2, m_labelHeight };
+				label.space = localSpace;
+				label.pose.position = { m_labelPosition[ hand ][ 0 ], m_labelPosition[ hand ][ 1 ], m_labelPosition[ hand ][ 2 ] };
+				label.pose.orientation = { m_labelOrientation[ hand ][ 0 ], m_labelOrientation[ hand ][ 1 ],
+					m_labelOrientation[ hand ][ 2 ], m_labelOrientation[ hand ][ 3 ] };
+				const float aspect = m_labelHeight > 0 ? static_cast< float >( m_labelWidth / 2 ) / static_cast< float >( m_labelHeight ) : 1.0f;
+				label.size = { m_labelSize, m_labelSize / ( aspect > 0.01f ? aspect : 1.0f ) };
+				layers[ layerCount++ ] = reinterpret_cast< const XrCompositionLayerBaseHeader * >( &label );
 			}
 		}
 
@@ -1587,6 +1776,7 @@ namespace PSUVR
 		m_submitUserHud = false;
 		m_submitWorldHud = false;
 		m_submitStereo = false;
+		m_submitLabels[ 0 ] = m_submitLabels[ 1 ] = false;
 		if( XR_FAILED( r ) )
 		{
 			PSU_LOG( "OpenXR: xrEndFrame failed %s\n", XrResultString( r ) );
