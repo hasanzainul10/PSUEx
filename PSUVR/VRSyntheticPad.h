@@ -22,12 +22,28 @@ namespace PSUVR
 		bool GunAdjust( float &pitchDegrees, float &yawDegrees );
 		// VRAction bits fired by grip chords since the last call.
 		unsigned TakeActions();
+
+		// What each control of one hand does now (for the controller label cards). Index by
+		// VRMotionLayout::Control; nullptr = nothing. swing: what a swing of that hand does.
+		struct HandLabels
+		{
+			const char *control[ 6 ]{};
+			const char *swing = nullptr;
+		};
+		// gripMask: the grips held for the context (1 left, 2 right, 3 both = the VR chords).
+		// Uses the same weapon roles, menu / palette state and modes as Update.
+		void DescribeControls( int gripMask, HandLabels out[ 2 ] );
 		// Free aim with the controller: the game yaw / pitch (radians) the aim is being steered
 		// to this frame. False when the controller isn't aiming.
 		bool LastFreeAim( float &yaw, float &pitch );
 		// Direct free aim (vr.aimDirect, first person): the game yaw / pitch (radians) to write
 		// into the player's aim this update. False = leave the game's aim alone.
 		bool DirectAim( float &yaw, float &pitch );
+
+		// Voice command: casts the technique in cast slot 0..3 (PSUCombat::TechSlots) the way the
+		// gestures do (X / Y on the right weapon, R1 + X / Y for slots 3 / 4). False when motion
+		// combat can't press it now (menu, palette, no technique weapon).
+		bool CastTechSlot( int slot );
 
 		// state: DIJOYSTATE2. axisMin / axisMax: the device range of lX, lY, lZ, lRx, lRy,
 		// lRz, slider 0, slider 1. replace: drop the device's own input first (the device is

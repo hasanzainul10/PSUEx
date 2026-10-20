@@ -129,6 +129,19 @@ struct VRSettings
 	bool m_comfortVignette = false;
 	// Motion controllers: draw a marker and pointer ray at each tracked controller.
 	bool m_showControllers = true;
+	// Motion controllers: point the right controller at PSUEx windows (VR settings) in the
+	// headset; the trigger clicks, the right stick scrolls, Circle closes.
+	bool m_uiPointer = true;
+	// Controller label cards (what each button does) floating at the controllers: when you look
+	// down at a controller (toggle: both grips + right stick click), and while a grip is held
+	// still for controllerLabelsHoldSeconds. Size: card width in meters.
+	bool m_controllerLabels = true;
+	bool m_controllerLabelsGrip = true;
+	float m_controllerLabelsHoldSeconds = 0.4f;
+	float m_controllerLabelsSize = 0.14f;
+	// The in-headset setup wizard (recenter, eye height, hand calibration, controls tour) has
+	// been finished; false opens it on the first stereo frame (motion input).
+	bool m_setupDone = false;
 	// Testing without the headset on: emulated controllers (Ctrl+F9; Ctrl+numpad hotkeys) and a
 	// command file in the game folder that runs whenever it changes.
 	bool m_emulateControllers = false;
@@ -167,6 +180,9 @@ struct VRSettings
 	// slot 2 (the right grip sends no R1 while the right weapon has controls). Off: the old
 	// scheme, melee swings only, swing with the trigger held = Photon Art.
 	bool m_gripPhotonArt = true;
+	// Left Triangle in the field: the game's R2 (opens the chat log). Off: the
+	// PSUEx chat log window. Y in menus either way.
+	bool m_triangleChatL2 = true;  // (name kept for old settings files; it now sends R2)
 	// Before the first hit of a chain, turn the character toward where you look.
 	bool m_attackFaceLook = true;
 	// Free aim (R3 with a gun): the gun hand steers the aim.
@@ -208,6 +224,14 @@ struct VRSettings
 	// comboBuffer waits for the motion's Just Attack window (up to 1.5 s); off: until the swing
 	// animation ends (+0x710 == 0x02, up to 0.25 s).
 	bool m_comboBufferJustAttack = true;
+	// Speech to text: hold left Square in the field and talk. Recognition runs offline in the
+	// PSUExSpeech helper (Moonshine, English); speechModel tiny / small / medium picks the model
+	// in PSUExSpeech\models. The text goes to the game chat (speechChat) or, with voiceCommands,
+	// casts a technique on the equipped weapon when it names one ("Barta").
+	bool m_speechToText = false;
+	std::string m_speechModel = "small";
+	bool m_speechChat = true;
+	bool m_voiceCommands = false;
 	// 0..1 how far the vignette closes in at full motion.
 	float m_vignetteStrength = 0.7f;
 	// Render the 3D pass per eye (projection layer) with the game frame as a panel.

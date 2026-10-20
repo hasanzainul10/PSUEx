@@ -27,6 +27,10 @@ namespace PSUVR
 			// Field only (X / Y while a menu or the palette has the input): the PSUEx chat log
 			// window, and speech to text (reserved, not made yet).
 			ChatLog, SpeechToText,
+			// The left stick sends the D-pad until toggled off (VRSyntheticPad handles the press).
+			DpadToggle,
+			// Both grips + right stick click: the look-down controller labels on / off.
+			ToggleControllerLabels,
 		};
 
 		struct Entry
@@ -42,19 +46,19 @@ namespace PSUVR
 			{ 0, Control::Trigger, Output::L2, Output::CalibrateHands },
 			{ 0, Control::Grip, Output::L1, Output::None },
 			{ 0, Control::Stick, Output::LeftStick, Output::None },
-			{ 0, Control::StickClick, Output::FreeAimMode, Output::L3 },
+			{ 0, Control::StickClick, Output::FreeAimMode, Output::DpadToggle },
 			{ 0, Control::Primary, Output::SpeechToText, Output::ToggleSettings },
 			{ 0, Control::Secondary, Output::ChatLog, Output::TogglePause },
 			{ 1, Control::Trigger, Output::R2, Output::CalibrateHands },
 			{ 1, Control::Grip, Output::R1, Output::None },
 			{ 1, Control::Stick, Output::RightStick, Output::None },
-			{ 1, Control::StickClick, Output::Start, Output::R3 },
+			{ 1, Control::StickClick, Output::Start, Output::ToggleControllerLabels },
 			{ 1, Control::Primary, Output::B, Output::Recenter },
 			{ 1, Control::Secondary, Output::A, Output::ToggleCamera },
 		};
 
-		// Left grip + left stick click: the left stick sends the D-pad until toggled off.
-		inline constexpr const char *kDpadToggleText = "Left grip + left stick click: D-pad on / off (the left stick moves the D-pad)";
+		// Left grip + left stick click: L3 (both grips + left stick click is the D-pad toggle).
+		inline constexpr const char *kDpadToggleText = "Left grip + left stick click: L3";
 
 		inline bool IsPsvr2( const std::string &profile )
 		{
@@ -100,8 +104,10 @@ namespace PSUVR
 				case Output::TogglePause: return "Pause VR";
 				case Output::FreeAimMode: return "Free aim mode on / off";
 				case Output::CalibrateHands: return "Calibrate hands (both triggers)";
-				case Output::ChatLog: return "Chat log (Y in menus)";
+				case Output::ChatLog: return "Chat log, R2 (Y in menus)";
 				case Output::SpeechToText: return "Speech to text, soon (X in menus)";
+				case Output::DpadToggle: return "D-pad on / off (the left stick moves the D-pad)";
+				case Output::ToggleControllerLabels: return "Controller labels on / off (look down)";
 				default: return "";
 			}
 		}

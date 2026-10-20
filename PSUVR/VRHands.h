@@ -18,5 +18,21 @@ namespace PSUVR
 		void AfterPlayerDraw( void *model );
 		// The pose has the head folded away (vr.fpBody "headless"): no neck clip plane needed.
 		bool HeadHidden();
+
+		// The hand angle calibration that vr.handCalibRequest asked for (setup wizard).
+		struct CalibStatus
+		{
+			enum Phase
+			{
+				Idle,      // nothing asked since the game started
+				Waiting,   // asked; the first person hands haven't run yet (no player / not first person)
+				Counting,  // countdown, secondsLeft until the capture
+				Done,      // captured (hands = how many)
+				Missed,    // the capture frame had no tracked hand
+			} phase = Idle;
+			float secondsLeft = 0.0f;
+			int hands = 0;
+		};
+		CalibStatus CalibrationStatus();
 	}
 }

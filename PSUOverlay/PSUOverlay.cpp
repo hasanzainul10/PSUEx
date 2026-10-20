@@ -5,6 +5,8 @@
 #include "../PSUVR/StereoRenderer.h"
 #include "../PSUVR/VRHud.h"
 #include "../PSUVR/VRPlayerDraw.h"
+#include "../PSUVR/VRUiPointer.h"
+#include "../PSUVR/VRControllerLabels.h"
 #include "../PSUVR/D3D9ExUpgrade.h"
 #include "../PSUVR/D3D9ExCompat.h"
 #include "../Misc/Log.h"
@@ -15,6 +17,7 @@
 #include "Interface/LogDisplay.h"
 #include "Interface/CameraDisplay.h"
 #include "Interface/VRDisplay.h"
+#include "Interface/VRSetupDisplay.h"
 #include "../PSUVR/D3D11Bridge.h"
 #include <intrin.h>
 #ifdef _DEBUG
@@ -166,6 +169,7 @@ void PSUOverlay::InitializeControls()
 	AddControl( WINDOW_CONTROL_ID::WINDOW_LOG_DISPLAY, LogDisplay::Create() );
 	AddControl( WINDOW_CONTROL_ID::WINDOW_CAMERA_DISPLAY, CameraDisplay::Create() );
 	AddControl( WINDOW_CONTROL_ID::WINDOW_VR_DISPLAY, VRDisplay::Create() );
+	AddControl( WINDOW_CONTROL_ID::WINDOW_VR_SETUP_DISPLAY, VRSetupDisplay::Create() );
 }
 
 void PSUOverlay::HookWindow()
@@ -593,6 +597,8 @@ HRESULT APIENTRY PSUOverlay::Hook_EndScene( LPDIRECT3DDEVICE9 pDevice )
 
 	ImGui_ImplDX9_NewFrame();
 	ImGui_ImplWin32_NewFrame();
+	// After the Win32 backend, so the controller pointer wins over the OS mouse.
+	PSUVR::VRUiPointer::FeedImGui();
 	ImGui::NewFrame();
 	{
 		if( ImGui::IsKeyPressed( ImGuiKey_Insert, false ) )
@@ -648,6 +654,8 @@ HRESULT APIENTRY PSUOverlay::Hook_EndScene( LPDIRECT3DDEVICE9 pDevice )
 			hud.MarkUserContent();
 		}
 	}
+	// Controller label cards into their own target (submitted as quads at the controllers).
+	PSUVR::VRControllerLabels::Render( pDevice, PSUVR::System::Get().StereoBridge() );
 
 #ifdef _DEBUG
 	// Ctrl+Shift+End: save the flat frame and the HUD panel as PNGs in the game folder.
@@ -891,6 +899,21 @@ void PSUOverlay::InitializeImGui( const LPDIRECT3DDEVICE9 pDevice )
 	io.ConfigFlags = ImGuiConfigFlags_NoMouseCursorChange;
 	io.IniFilename = nullptr;
 	io.Fonts->AddFontDefault();
+	// The controller label cards are read at arm's length in the headset: a large TrueType font
+	// (the default bitmap font blurs when scaled). Only when VR is on.
+	if( config.vr.m_enabled )
+	{
+		char fontPath[ MAX_PATH ]{};
+		const UINT length = GetWindowsDirectoryA( fontPath, MAX_PATH );
+		if( length > 0 && length < MAX_PATH - 24 )
+		{
+			strcat_s( fontPath, "\\Fonts\\segoeui.ttf" );
+			if( GetFileAttributesA( fontPath ) != INVALID_FILE_ATTRIBUTES )
+			{
+				PSUVR::VRControllerLabels::SetFont( io.Fonts->AddFontFromFileTTF( fontPath, 32.0f ) );
+			}
+		}
+	}
 
 	ImGui::StyleColorsDark( &m_style );
 

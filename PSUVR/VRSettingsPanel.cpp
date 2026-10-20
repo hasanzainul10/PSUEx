@@ -3,6 +3,7 @@
 #include "VRControllerDiagram.h"
 
 #include "VRGamepad.h"
+#include "VRSpeechFiles.h"
 
 #include <imgui.h>
 
@@ -197,6 +198,23 @@ namespace PSUVR
 		}
 	}
 
+	// The panel is split into tabs (one screen each in the headset, no long scroll); sections
+	// keep their order in the code and say which tab they belong to.
+	enum class Tab : int { General, Camera, Hud, Controllers, Combat, Voice, Keys, Count };
+	const char *const kTabNames[] = { "General", "Camera", "HUD", "Controllers", "Combat", "Voice", "Keys" };
+	static Tab s_tab = Tab::General;
+
+	// A section of the selected tab: a heading, then its widgets.
+	static bool Section( Tab tab, const char *title )
+	{
+		if( s_tab != tab )
+		{
+			return false;
+		}
+		ImGui::SeparatorText( title );
+		return true;
+	}
+
 	void DrawVRSettingsPanel( VRSettings &s, VRPanelContext &context )
 	{
 		UpdateCapture( s );
@@ -210,7 +228,23 @@ namespace PSUVR
 			ImGui::Separator();
 		}
 
-		if( ImGui::CollapsingHeader( "General", ImGuiTreeNodeFlags_DefaultOpen ) )
+		if( ImGui::BeginTabBar( "vr_settings_tabs", ImGuiTabBarFlags_FittingPolicyResizeDown ) )
+		{
+			for( int i = 0; i < static_cast< int >( Tab::Count ); ++i )
+			{
+				if( ImGui::BeginTabItem( kTabNames[ i ] ) )
+				{
+					s_tab = static_cast< Tab >( i );
+					ImGui::EndTabItem();
+				}
+			}
+			ImGui::EndTabBar();
+		}
+		// The tab scrolls on its own; Save / Reload stay in view below it.
+		const float footer = ImGui::GetFrameHeightWithSpacing() * 2.0f + ImGui::GetStyle().ItemSpacing.y * 2.0f;
+		ImGui::BeginChild( "vr_settings_tab", ImVec2( 0.0f, -footer ) );
+
+		if( Section( Tab::General, "General" ) )
 		{
 			ImGui::Checkbox( "VR enabled", &s.m_enabled );
 			Help( "Applies on the next game launch (the game's Direct3D device is set up for VR at startup)." );
@@ -230,9 +264,16 @@ namespace PSUVR
 			static const char *const cameraNames[] = { "First person", "Third person" };
 			Combo( "Camera", s.m_cameraMode, cameraIds, cameraNames, 2 );
 			ImGui::SliderFloat( "World scale", &s.m_worldScale, 0.5f, 2.0f, "%.2f" );
+			ImGui::Checkbox( "VR setup done", &s.m_setupDone );
+			Help( "Off: the setup wizard (play position, eye height, hand calibration, controls) opens in the headset "
+				"when VR starts with the motion controllers. Finishing or skipping it turns this on." );
+			if( context.inGame && context.runSetup && ImGui::Button( "Run VR setup again" ) )
+			{
+				context.runSetup();
+			}
 		}
 
-		if( ImGui::CollapsingHeader( "First person", ImGuiTreeNodeFlags_DefaultOpen ) )
+		if( Section( Tab::Camera, "First person" ) )
 		{
 			static const char *const moveIds[] = { "head", "body" };
 			static const char *const moveNames[] = { "Where you look (head)", "Where the body faces" };
@@ -261,7 +302,7 @@ namespace PSUVR
 			ImGui::SliderFloat( "LB follow time (s)", &s.m_lbWindowSeconds, 0.5f, 5.0f, "%.1f" );
 		}
 
-		if( ImGui::CollapsingHeader( "Third person" ) )
+		if( Section( Tab::Camera, "Third person" ) )
 		{
 			ImGui::TextDisabled( "Right stick: left/right turns, up/down zooms. Hold Back: left/right tilts, up/down height." );
 			ImGui::Checkbox( "Snap turn##tp", &s.m_tpSnapTurn );
@@ -286,7 +327,7 @@ namespace PSUVR
 			ImGui::SliderFloat( "Farthest (m)", &s.m_tpMaxDistance, 3.0f, 20.0f, "%.1f" );
 		}
 
-		if( ImGui::CollapsingHeader( "Turning", ImGuiTreeNodeFlags_DefaultOpen ) )
+		if( Section( Tab::General, "Turning" ) )
 		{
 			ImGui::Checkbox( "Snap turn", &s.m_snapTurn );
 			Help( "Snap turn is the comfort default. Smooth turn can cause motion sickness." );
@@ -300,7 +341,7 @@ namespace PSUVR
 			}
 		}
 
-		if( ImGui::CollapsingHeader( "HUD and menus" ) )
+		if( Section( Tab::Hud, "HUD and menus" ) )
 		{
 			ImGui::Checkbox( "Body-locked panel (lazy follow)", &s.m_hudFollow );
 			ImGui::Checkbox( "Dark backdrop behind menus", &s.m_menuBackdrop );
@@ -310,7 +351,8 @@ namespace PSUVR
 			Help( "Menus and 2D screens float on a dark background. Off: SteamVR's own space shows "
 				"around them, and with it the play-area boundary." );
 			ImGui::SliderFloat( "Follow angle (deg)", &s.m_hudFollowAngle, 10.0f, 90.0f, "%.0f" );
-			ImGui::SliderFloat( "Distance (m)", &s.m_hudDistance, 1.0f, 4.0f, "%.2f" );
+			ImGui::SliderFloat( "Distance (m)", &s.m_hudDistance, 0.6f, 4.0f, "%.2f" );
+			Help( "In the headset: hold the right grip while pointing at this panel and move the hand forward / back." );
 			ImGui::SliderFloat( "Size", &s.m_hudSize, 0.5f, 2.0f, "%.2f" );
 			ImGui::SliderFloat( "Below eye level (m)", &s.m_hudDrop, -0.3f, 0.6f, "%.2f" );
 			ImGui::SliderFloat( "Map backdrop opacity", &s.m_hudMapBlackAlpha, 0.0f, 1.0f, "%.2f" );
@@ -325,7 +367,7 @@ namespace PSUVR
 			ImGui::Checkbox( "World-locked kiosk panel (experimental)", &s.m_hudWorldPanel );
 		}
 
-		if( ImGui::CollapsingHeader( "Comfort" ) )
+		if( Section( Tab::General, "Comfort" ) )
 		{
 			ImGui::Checkbox( "Vignette while moving / smooth turning", &s.m_comfortVignette );
 			ImGui::Checkbox( "Place glows and sprite effects in 3D", &s.m_reprojectSprites );
@@ -348,7 +390,7 @@ namespace PSUVR
 			ImGui::SliderFloat( "Vignette strength", &s.m_vignetteStrength, 0.0f, 1.0f, "%.2f" );
 		}
 
-		if( ImGui::CollapsingHeader( "Motion controllers", ImGuiTreeNodeFlags_DefaultOpen ) )
+		if( Section( Tab::Controllers, "Motion controllers" ) )
 		{
 			bool motion = s.m_inputMode == "motion";
 			if( ImGui::Checkbox( "Play with motion controllers", &motion ) )
@@ -362,6 +404,19 @@ namespace PSUVR
 				ImGui::TextDisabled( "Motion controllers: %s (applies when the game starts)", motion ? "on" : "off" );
 			}
 			ImGui::Checkbox( "Show controllers", &s.m_showControllers );
+			ImGui::Checkbox( "Point at PSUEx windows with the right controller", &s.m_uiPointer );
+			ImGui::Checkbox( "Controller labels when you look down", &s.m_controllerLabels );
+			Help( "A card above each controller lists what its buttons do now (weapon, menu, aim mode). "
+				"Both grips + right stick click turns this on / off." );
+			ImGui::Checkbox( "Controller labels while a grip is held still", &s.m_controllerLabelsGrip );
+			Help( "Hold a grip (or both) without pressing anything else: the cards show what the buttons do with "
+				"that grip held. They hide as soon as you use another button, so grip + attack never shows them." );
+			ImGui::SliderFloat( "Grip hold before the labels (s)", &s.m_controllerLabelsHoldSeconds, 0.2f, 1.5f, "%.2f" );
+			ImGui::SliderFloat( "Label card size (m)", &s.m_controllerLabelsSize, 0.08f, 0.30f, "%.2f" );
+			Help( "While this panel is open in the headset: aim the right controller at it, the trigger clicks "
+				"(hold it to drag a slider), the right stick scrolls, the right grip held moves the panel nearer / "
+				"farther with the hand, and Circle closes the panel. The game gets "
+				"no controller input meanwhile, apart from the both-grip chords." );
 			ImGui::Checkbox( "Emulate controllers (testing)", &s.m_emulateControllers );
 			Help( "For testing without the headset on: Ctrl+Shift+F9 toggles. Ctrl+numpad: 7/8/9 left/both/right, 1-5 rest/forward/gun/"
 				"raised/calib, 0 trigger, . grip, / Cross (A), + Circle (B), - stick click, 6 swing, * both grips. Ctrl+T/G/F/H "
@@ -408,9 +463,13 @@ namespace PSUVR
 			}
 			ImGui::Checkbox( "Left stick works menus (D-pad) automatically", &s.m_autoDpad );
 			Help( "In menus, shops, the mission counter, login screens and the weapon / item palette the left stick sends the D-pad. "
-				"Left grip + left stick click still flips it by hand." );
+				"Both grips + left stick click still flips it by hand." );
 			ImGui::Checkbox( "Buzz when the next combo hit can be pressed", &s.m_comboHaptic );
 			Help( "A short buzz in the right hand the moment the game accepts the next attack of a melee combo." );
+		}
+
+		if( Section( Tab::Combat, "Motion combat" ) )
+		{
 			ImGui::Checkbox( "Motion combat (swing / shoot)", &s.m_swingAttack );
 			Help( "Follows what each hand holds: swing or pull the trigger of a melee / technique hand to "
 				"attack or cast, pull the trigger of the hand holding a gun to shoot. Two-handed and twin "
@@ -475,17 +534,60 @@ namespace PSUVR
 						"swing animation ends (up to 0.25 s), not timed for a Just Attack." );
 				}
 			}
+		}
+
+		if( Section( Tab::Controllers, "Buttons" ) )
+		{
+			ImGui::Checkbox( "Left Triangle = game chat log (R2)", &s.m_triangleChatL2 );
+			Help( "On: Left Triangle in the field presses R2, which opens the game's chat log. "
+				"Off: it opens the PSUEx chat log window. Y in menus either way." );
 			static const char *const profileIds[] = { "psvr2", "generic" };
 			static const char *const profileNames[] = { "PlayStation VR2 Sense", "Other (Touch, Index, ...)" };
 			Combo( "Controllers", s.m_motionProfile, profileIds, profileNames, 2 );
-			if( ImGui::TreeNodeEx( "Controller layout", context.inGame ? 0 : ImGuiTreeNodeFlags_DefaultOpen ) )
+			if( ImGui::TreeNodeEx( "Controller layout", ImGuiTreeNodeFlags_DefaultOpen ) )
 			{
 				DrawControllerDiagram( s.m_motionProfile );
 				ImGui::TreePop();
 			}
 		}
 
-		if( ImGui::CollapsingHeader( "Controls", ImGuiTreeNodeFlags_DefaultOpen ) )
+		if( Section( Tab::Voice, "Voice" ) )
+		{
+			ImGui::Checkbox( "Speech to text (hold left Square)", &s.m_speechToText );
+			Help( "Hold left Square in the field, talk, let go. Recognition runs on this PC (Moonshine, English) in "
+				"PSUExSpeech.exe, which starts with the game while this is on. The microphone stays open while it runs." );
+			static const char *const modelIds[] = { "tiny", "small", "medium" };
+			static const char *const modelNames[] = { "Tiny (43 MB, fastest)", "Small (135 MB, recommended)", "Medium (256 MB, best)" };
+			Combo( "Speech model", s.m_speechModel, modelIds, modelNames, 3 );
+			if( !VRSpeechFiles::HelperInstalled() )
+			{
+				ImGui::TextDisabled( "PSUExSpeech\\PSUExSpeech.exe is missing from the game folder." );
+			}
+			else if( VRSpeechFiles::ModelInstalled( s.m_speechModel ) )
+			{
+				ImGui::TextDisabled( "Model installed." );
+			}
+			else
+			{
+				ImGui::TextDisabled( "Model not installed." );
+				ImGui::SameLine();
+				if( ImGui::Button( "Download" ) )
+				{
+					context.message = VRSpeechFiles::LaunchDownload( s.m_speechModel ) ?
+						"Downloading the speech model (see its window)." : "Couldn't start the download.";
+				}
+				Help( "Fetches the model from download.moonshine.ai into PSUExSpeech\\models. Needs internet once." );
+			}
+			ImGui::Checkbox( "Send what I say to the game chat", &s.m_speechChat );
+			Help( "Opens the chat box, types the text and presses Enter, like the keyboard would. "
+				"Off: the text is only shown as a toast." );
+			ImGui::Checkbox( "Voice commands (say a technique to cast it)", &s.m_voiceCommands );
+			Help( "With a rod, staff or TCSM: saying the name of a technique set on the weapon (\"Barta\") casts it from "
+				"its slot, like a swing (slot 1) or grip + swing (slot 2). \"Slot one\" .. \"slot four\" also work. "
+				"Anything else goes to the chat. Needs motion combat." );
+		}
+
+		if( Section( Tab::Keys, "Keyboard and gamepad shortcuts" ) )
 		{
 			ImGui::TextDisabled( "Pad chords: hold Back/Select, then press the button." );
 			if( ImGui::BeginTable( "vr_bindings", 4, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg ) )
@@ -539,6 +641,7 @@ namespace PSUVR
 				s_captureAction = -1;
 			}
 		}
+		ImGui::EndChild();
 
 		ImGui::Separator();
 		if( context.save && ImGui::Button( "Save" ) )

@@ -32,6 +32,14 @@ namespace PSUVR
 		D3D11Bridge *StereoBridge() const;
 		bool NextViews( EyePose localOut[ 2 ], EyePose viewSpaceOut[ 2 ] ) const;
 		bool EyeSwapchainSize( uint32_t &width, uint32_t &height ) const;
+		// The setup wizard: recenter on the next VR frame (as the Recenter action does), and
+		// the head height above the floor from the last frame (false without a STAGE space).
+		void RequestRecenter() { m_recenterRequest = true; }
+		bool HeadHeightAboveFloor( float &meters ) const
+		{
+			meters = m_headHeight;
+			return m_haveHeadHeight;
+		}
 
 	private:
 		System() = default;
@@ -53,6 +61,9 @@ namespace PSUVR
 		bool m_capturedThisFrame = false;
 		bool m_haveNextViews = false;
 		bool m_loggedStereo = false;
+		bool m_recenterRequest = false;
+		bool m_haveHeadHeight = false;
+		float m_headHeight = 0.0f;
 		EyePose m_nextViews[ 2 ]{};
 		EyePose m_nextViewSpacePoses[ 2 ]{};
 

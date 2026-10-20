@@ -303,13 +303,31 @@
     <ClInclude Include="PSUVR\VRControllers.h">
       <Filter>Header Files\PSUVR</Filter>
     </ClInclude>
+    <ClInclude Include="PSUVR\VRUiPointer.h">
+      <Filter>Header Files\PSUVR</Filter>
+    </ClInclude>
+    <ClInclude Include="PSUVR\VRControllerLabels.h">
+      <Filter>Header Files\PSUVR</Filter>
+    </ClInclude>
     <ClInclude Include="PSUVR\VRProbe.h">
       <Filter>Header Files\PSUVR</Filter>
     </ClInclude>
     <ClInclude Include="PSUVR\VRSyntheticPad.h">
       <Filter>Header Files\PSUVR</Filter>
     </ClInclude>
+    <ClInclude Include="PSUVR\VRSpeech.h">
+      <Filter>Header Files\PSUVR</Filter>
+    </ClInclude>
+    <ClInclude Include="PSUVR\VRSpeechFiles.h">
+      <Filter>Header Files\PSUVR</Filter>
+    </ClInclude>
+    <ClInclude Include="PSUDetour\Hook_007738E0_KeyboardKeys.hpp">
+      <Filter>Header Files\PSUFunction</Filter>
+    </ClInclude>
     <ClInclude Include="PSUOverlay\Interface\VRDisplay.h">
+      <Filter>Header Files\PSUOverlay\Interface</Filter>
+    </ClInclude>
+    <ClInclude Include="PSUOverlay\Interface\VRSetupDisplay.h">
       <Filter>Header Files\PSUOverlay\Interface</Filter>
     </ClInclude>
     <ClInclude Include="PSUVR\VRGamepad.h">
@@ -473,13 +491,25 @@
     <ClCompile Include="PSUVR\VRControllers.cpp">
       <Filter>Source Files\PSUVR</Filter>
     </ClCompile>
+    <ClCompile Include="PSUVR\VRUiPointer.cpp">
+      <Filter>Source Files\PSUVR</Filter>
+    </ClCompile>
+    <ClCompile Include="PSUVR\VRControllerLabels.cpp">
+      <Filter>Source Files\PSUVR</Filter>
+    </ClCompile>
     <ClCompile Include="PSUVR\VRProbe.cpp">
       <Filter>Source Files\PSUVR</Filter>
     </ClCompile>
     <ClCompile Include="PSUVR\VRSyntheticPad.cpp">
       <Filter>Source Files\PSUVR</Filter>
     </ClCompile>
+    <ClCompile Include="PSUVR\VRSpeech.cpp">
+      <Filter>Source Files\PSUVR</Filter>
+    </ClCompile>
     <ClCompile Include="PSUOverlay\Interface\VRDisplay.cpp">
+      <Filter>Source Files\PSUOverlay\Interface</Filter>
+    </ClCompile>
+    <ClCompile Include="PSUOverlay\Interface\VRSetupDisplay.cpp">
       <Filter>Source Files\PSUOverlay\Interface</Filter>
     </ClCompile>
     <ClCompile Include="PSUVR\VRGamepad.cpp">

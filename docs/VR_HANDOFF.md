@@ -67,6 +67,88 @@ and pushed to origin `psu_vr` unless noted.
    Address scan scripts (pefile / capstone, run with `uv run --with capstone --with pefile`): `tools/findref.py` (dword refs),
    `tools/thiscalls.py` (`lea ecx,[reg+DISP]; call` targets), `tools/dispscan.py` (`[reg+DISP]` uses, `w` = writes only).
 
+6. **Speech to text + voice commands (built, untested, uncommitted, 2026-10-20).** Design agreed with
+   the user: Moonshine (MIT) in a **64-bit helper** `tools/PSUExSpeech` (`PSUExSpeech.exe`, built x64 from
+   the x86 solution), **hold left Square** to talk, the transcript is **sent to chat at once**. Small
+   streaming English model bundled (`PSUExSpeech\models\small-streaming-en`, 135 MB), tiny / medium via
+   the panel's *Download* (helper `--download`, console window). Library + model live in git-ignored
+   `third_party\moonshine` (`tools/fetch-moonshine.ps1`). Helper protocol: stdin `BEGIN / END / CANCEL /
+   KEYTERMS a,b / QUIT`, stdout `STATUS / READY / ERROR / PARTIAL / FINAL <text>`; test offline with
+   `PSUExSpeech.exe --models <dir> --size small --wav clip.wav` (16 kHz mono; TTS clips worked: 4.4 s
+   of speech in 0.6 s, "Barta" / "Resta" exact, keyterms fix "Gibarda" -> "Gibarta").
+   DLL: `PSUVR/VRSpeech.cpp` (helper process, toasts, chat sender, voice commands),
+   `PSUDetour/Hook_007738E0_KeyboardKeys.hpp` (adds game key codes to the keyboard poll, works unfocused).
+   Chat: press the open-chat key (`[0x0099225F]`, Space 0x45) -> wait for `0x00B9D4AB` -> `PostMessage
+   WM_CHAR` per char (`0x004C9070` subclass) -> Enter (0x38) -> wait for the box to close. Voice
+   commands: `PSUCombat::ReadTechSlots` (weapon `+0x48`, 4 x {id, level}) + `VRSyntheticPad::CastTechSlot`.
+   **The technique id -> name table in VRSpeech.cpp is a guess** (groups by element are right, the order
+   inside a group isn't verified): fix it from the `VRVoice: slots` log line.
+   Settings: `speechToText` (default off), `speechModel` "small", `speechChat` true, `voiceCommands`
+   (default off); *Voice* section of the panel. **Game folder:** Debug build + `PSUExSpeech\` deployed,
+   `speechToText` / `speechChat` / `voiceCommands` **on** in both settings files (`.bak8` = before).
+   **Pending test:** hold left Square in the field, say a sentence, release -> toasts "Listening...",
+   "... text", then the chat box opens, fills and sends ("Chat: ..."). Equip a rod / staff with known
+   techniques -> `tools/lastlog.sh VRVoice` shows each slot's id: map ids to names. Say a technique
+   name -> it casts from its slot. Logs: `tools/lastlog.sh 'VRSpeech|VRVoice'`.
+
+7. **Controller UI (in progress, 2026-10-20, uncommitted).** Plan agreed with the user, 3 phases, each
+   built and tested before the next: (1) right-controller laser pointer for PSUEx ImGui windows,
+   (2) floating label cards at each controller (look down; or hold a grip still ~0.4 s; both grips +
+   right stick click toggles look-down, replacing the chord R3), (3) setup wizard (recenter, real eye
+   height from the OpenXR STAGE floor, hand calibration, controls tour; `setupDone` flag). Full plan:
+   `C:\Users\hasan\.claude\plans\i-want-to-plan-concurrent-lake.md`.
+   **Phase 1 built and deployed (Debug):** `PSUVR/VRUiPointer.{h,cpp}`; `IVRRuntime::GetUiQuad`
+   (OpenXR records the user HUD layer in stereo, the back-buffer panel otherwise, in LOCAL space);
+   beam in `VRControllers::DrawMarkers` (needs "Show controllers"; eye pass only, so no beam in 2D
+   scenes, only the ImGui cursor); `VRSyntheticPad` sends only both-grip chords while the pointer is
+   wanted, and holds buttons back after closing until all are released. Setting `uiPointer` (default on).
+   Sliders: hold the trigger and drag (no left-stick nudge). Log: `tools/lastlog.sh VRUi`.
+   **Phase 1 user-confirmed (2026-10-20):** the pointer works in the headset.
+   **Phase 2 built and deployed (Debug, 2026-10-20 21:43), untested:** `PSUVR/VRControllerLabels.{h,cpp}`
+   (look-down / grip-hold logic, billboard pose above the grip, cards drawn with an `ImDrawList` +
+   custom `ImDrawData` into `D3D11Bridge::LabelSurface` 1024x512, Segoe UI 32 px font loaded when VR
+   is on), `VRSyntheticPad::DescribeControls(gripMask, HandLabels[2])` (labels from the same roles /
+   menu / aim state), `OpenXRRuntime::SubmitHandLabels` (own swapchain, two quads from its halves,
+   layers array now 5). Chord: right stick click with both grips = `ToggleControllerLabels` (was R3).
+   Settings `controllerLabels`, `controllerLabelsGrip`, `controllerLabelsHoldSeconds` 0.4,
+   `controllerLabelsSize` 0.14. Not done from the plan: the settings diagram still reads `kLayout`
+   (not `DescribeControls`); no leader lines on the cards. The field names of A / B / L1 / R2 etc.
+   on the cards are guesses: ask the user. Log: `tools/lastlog.sh 'VRLabels|label'`.
+   **Settings panel tabs + grip drag (built and deployed 22:06, untested):** `VRSettingsPanel.cpp` is now tabs
+   (General, Camera, HUD, Controllers, Combat, Voice, Keys; `Section(Tab, title)` picks the tab, the tab
+   body is a child that scrolls on its own, Save / Reload stay below). In the headset, right grip held
+   while pointing moves the panel (`hudDistance`, 0.6-4 m, tick every 25 cm, saved + toast on release).
+   It moves the game HUD too (same quad). Label cards user-confirmed (2026-10-20). First drag try:
+   the panel didn't visibly move (log: 2.50 -> 2.46 m, hand travel ~1 cm along the aim ray). Fix
+   deployed 22:33, untested: level direction hand -> panel, distance x e^(3.5 x hand travel), and the
+   right stick moves it 1.5 m/s while the grip is held (no scroll then). Log line now shows hand
+   travel and stick metres: `tools/lastlog.sh 'VRUi: panel'`.
+   **Left Triangle = R2 (built and deployed 22:18, untested):** with `triangleChatL2` on (name kept)
+   left Triangle in the field now sends R2, the game's open-chat-log button (was L2). Labels, panel text,
+   `OutputName` and VR_GUIDE updated.
+   **Phase 3 setup wizard (built and deployed Debug 2026-10-21 00:14, untested):**
+   `PSUOverlay/Interface/VRSetupDisplay.{h,cpp}` (IFWinCtrl `WINDOW_VR_SETUP_DISPLAY`, registered after
+   VRDisplay). Steps Welcome, Play position (`System::RequestRecenter`, consumed with the Recenter action in
+   VRSystem), Eye height (`System::HeadHeightAboveFloor`, cached per frame from
+   `IVRRuntime::GetHeadHeightAboveFloor` = VIEW in STAGE; OpenXR creates STAGE when listed, log
+   "OpenXR: STAGE space available"), Hands (motion only; `++m_handCalibRequest`, progress from
+   `VRHands::CalibrationStatus()` Waiting / Counting / Done / Missed; "Keep the PS VR2 defaults" restores the
+   default quaternions), Controls (motion only; `DrawControllerDiagram` + chord text). Finish / Skip set
+   `setupDone` and save. Opens by itself on the first stereo frame with `inputMode` motion and `setupDone`
+   false (once per run); gamepad mode only via General > "Run VR setup again" (closes the settings panel).
+   `VRUiPointer::SetWizardOpen` ORs into Wanted. Setting `setupDone` (default false, checkbox "VR setup
+   done"); `--write-defaults` writes false. Game folder: neither `psuex_vr.json` nor `config.json` has
+   `setupDone`, so it reads false and the wizard opens on the next start. Log: `tools/lastlog.sh 'VRSetup|STAGE'`.
+   Circle doesn't close the wizard (only Skip / Finish).
+   **Phase 3 pending test:** wizard appears on the first stereo frame; Recenter -> "Recentered" toast;
+   Measure -> head height ~ your real eye height, eye height set (clamped 1.2-2.0); Calibrate -> countdown,
+   "Calibrated (2 hands)"; Finish -> toast "VR setup saved", `setupDone: true` in the file, no wizard next
+   start; General > "Run VR setup again" reopens it.
+   **Pending test:** look down at a controller -> its card; both grips +
+   right stick click -> toast, look-down cards stop; hold a grip still ~0.4 s -> both cards with that
+   grip's context; grip + swing -> no flash; both grips -> chord labels; menu / gun / free aim change
+   the labels.
+
 ## Features done this stretch (all toggles in the VR settings panel)
 
 - Combat by weapon category (`+0x2D4`/`+0x2D8`): trigger/swing = attack / tech slot 1, grip + = PA /
@@ -106,5 +188,5 @@ and pushed to origin `psu_vr` unless noted.
 
 ## Ideas not started
 
-- Speech to text with Moonshine (ONNX Runtime x86, record while Square held, type into chat as
-  local input). Needs a plan first.
+- Speech to text: an online recognizer as a second `ISpeechEngine` in the helper; push-to-talk
+  without motion controllers (gamepad / keyboard key); voice commands beyond techniques.

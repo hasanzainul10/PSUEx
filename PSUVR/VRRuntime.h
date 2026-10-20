@@ -54,6 +54,18 @@ namespace PSUVR
 		uint32_t buttons = 0;        // ControllerButton bits
 	};
 
+	// The quad layer that shows the PSUEx overlay (ImGui) in the headset: LOCAL-space pose
+	// (the quad faces +Z, x right, y up), size in meters and the image size in pixels.
+	struct UiQuad
+	{
+		float position[ 3 ]{};
+		float orientation[ 4 ]{ 0.0f, 0.0f, 0.0f, 1.0f };
+		float width = 0.0f;
+		float height = 0.0f;
+		int pixelWidth = 0;
+		int pixelHeight = 0;
+	};
+
 	class IVRRuntime
 	{
 	public:
@@ -70,5 +82,10 @@ namespace PSUVR
 		// hand: 0 = left, 1 = right. Valid after the frame's input update.
 		virtual bool GetControllerState( int /*hand*/, ControllerState &out ) { out = {}; return false; }
 		virtual void Haptic( int /*hand*/, float /*amplitude*/, float /*seconds*/ ) {}
+		// Where the last submitted frame showed the overlay. False when no such layer was shown.
+		virtual bool GetUiQuad( UiQuad &out ) { out = {}; return false; }
+		// Head (VIEW origin) height above the floor (STAGE space), meters. False without a STAGE
+		// space or a valid head pose.
+		virtual bool GetHeadHeightAboveFloor( float &meters ) { meters = 0.0f; return false; }
 	};
 }

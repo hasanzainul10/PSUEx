@@ -271,6 +271,8 @@ static bool WriteReleaseDefaults( const wchar_t *path )
 	VRSettings starter;
 	starter.m_enabled = true;
 	starter.m_cameraMode = "firstPerson";
+	// New users get the in-headset setup wizard.
+	starter.m_setupDone = false;
 	std::ofstream file( path, std::ios::trunc );
 	if( !file.is_open() )
 	{

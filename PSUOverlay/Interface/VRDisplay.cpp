@@ -1,9 +1,11 @@
 #include "VRDisplay.h"
+#include "VRSetupDisplay.h"
 
 #include "../../PSUExConfig.h"
 #include "../../PSUVR/VRBindings.h"
 #include "../../PSUVR/VRCamera.h"
 #include "../../PSUVR/VRHud.h"
+#include "../../PSUVR/VRUiPointer.h"
 
 #include <cfloat>
 #include <cstdio>
@@ -19,6 +21,11 @@ VRDisplay::VRDisplay() : IFWinCtrl( "VRDisplay", false )
 	m_context.reload = []()
 	{
 		return Config::Get().ReloadVRFromFile();
+	};
+	m_context.runSetup = [this]()
+	{
+		m_bEnabled = false;
+		VRSetupDisplay::RequestOpen();
 	};
 }
 
@@ -50,10 +57,16 @@ void VRDisplay::Render()
 	{
 		Toggle();
 	}
+	// Circle on the right controller closes the panel while it points at it.
+	if( PSUVR::VRUiPointer::ConsumeCloseRequest() && m_bEnabled )
+	{
+		m_bEnabled = false;
+	}
+	PSUVR::VRUiPointer::SetWindowOpen( m_bEnabled );
 
 	// In the headset the OS cursor isn't visible; let ImGui draw one on the panel.
 	const bool inHeadset = PSUVR::VRHud::Get().Active();
-	ImGui::GetIO().MouseDrawCursor = inHeadset && m_bEnabled;
+	ImGui::GetIO().MouseDrawCursor = ( inHeadset || PSUVR::VRUiPointer::Wanted() ) && m_bEnabled;
 
 	DrawToast();
 	if( !m_bEnabled )

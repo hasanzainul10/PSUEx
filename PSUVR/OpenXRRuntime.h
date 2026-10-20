@@ -21,6 +21,8 @@ namespace PSUVR
 		const char *Name() const override { return "OpenXR"; }
 		bool GetControllerState( int hand, ControllerState &out ) override;
 		void Haptic( int hand, float amplitude, float seconds ) override;
+		bool GetUiQuad( UiQuad &out ) override;
+		bool GetHeadHeightAboveFloor( float &meters ) override;
 
 		// Sync controller actions and locate the controllers for the next views' display
 		// time (after BeginFrame, with LocateNextViews).
@@ -43,6 +45,11 @@ namespace PSUVR
 			ID3D11Texture2D *worldTex, float worldDistanceM, float worldHeightM,
 			const float worldPosition[ 3 ], const float worldOrientation[ 4 ],
 			const float userPosition[ 3 ] = nullptr, const float userOrientation[ 4 ] = nullptr );
+
+		// Controller label cards: tex holds the left card in its left half and the right card in
+		// its right half; each visible card is a square quad (widthM) at its LOCAL pose, on top.
+		bool SubmitHandLabels( ID3D11Texture2D *tex, const float position[ 2 ][ 3 ], const float orientation[ 2 ][ 4 ],
+			float widthM, const bool visible[ 2 ] );
 
 		// Recreate the panel swapchain to match the game back-buffer.
 		bool ResizeSwapchains( int32_t width, int32_t height );
@@ -81,6 +88,7 @@ namespace PSUVR
 		bool CreatePanelSwapchain( int32_t width, int32_t height );
 		void DestroyPanelSwapchain();
 		void DestroyVisorSwapchain();
+		void DestroyLabelSwapchain();
 		bool CreateSwapchain( int32_t width, int32_t height, uint64_t &handle, void *&images, uint32_t &imageCount );
 		bool BlitIntoSwapchain( uint64_t swapchain, void *images, ID3D11Texture2D *src );
 		int64_t PickSwapchainFormat( uint64_t sessionHandle );
@@ -104,6 +112,7 @@ namespace PSUVR
 		uint64_t m_session = 0;
 		uint64_t m_space = 0;     // LOCAL — stereo projection
 		uint64_t m_viewSpace = 0; // VIEW — head-locked virtual screen quad
+		uint64_t m_stageSpace = 0; // STAGE — floor level, when the runtime has one (eye height)
 		uint64_t m_swapchain[ 2 ]{};
 		int32_t m_swapchainWidth = 0;
 		int32_t m_swapchainHeight = 0;
@@ -152,6 +161,17 @@ namespace PSUVR
 		void *m_visorImages = nullptr;
 		uint32_t m_visorImageCount = 0;
 
+		// Controller label cards (created on first use, at the texture's size).
+		uint64_t m_labelSwapchain = 0;
+		void *m_labelImages = nullptr;
+		uint32_t m_labelImageCount = 0;
+		int32_t m_labelWidth = 0;
+		int32_t m_labelHeight = 0;
+		bool m_submitLabels[ 2 ]{};
+		float m_labelPosition[ 2 ][ 3 ]{};
+		float m_labelOrientation[ 2 ][ 4 ]{};
+		float m_labelSize = 0.14f;
+
 		// Motion controllers (OpenXR actions).
 		uint64_t m_actionSet = 0;
 		uint64_t m_actGripPose = 0;
@@ -168,6 +188,11 @@ namespace PSUVR
 		uint64_t m_gripSpace[ 2 ]{};
 		uint64_t m_aimSpace[ 2 ]{};
 		ControllerState m_controllers[ 2 ]{};
+
+		// The layer that carried the overlay in the last EndFrame (user HUD in stereo, the
+		// back-buffer panel otherwise), in LOCAL space.
+		UiQuad m_uiQuad{};
+		bool m_uiQuadValid = false;
 
 		EyePose m_submittedPoses[ 2 ]{};      // FOV (+ debug); layer uses view-space poses
 		EyePose m_submittedViewSpacePoses[ 2 ]{};

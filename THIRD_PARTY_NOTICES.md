@@ -26,7 +26,17 @@ Source: https://github.com/ocornut/imgui
 Copyright (c) 2013-2023 Niels Lohmann. MIT License.
 Source: https://github.com/nlohmann/json
 
-## MIT License (applies to Detours, Dear ImGui and JSON for Modern C++)
+## Moonshine Voice (compiled into `PSUExSpeech\PSUExSpeech.exe`; English models shipped as-is)
+
+Copyright (c) Moonshine AI (Useful Sensors). MIT License (code and English streaming models).
+Source: https://github.com/moonshine-ai/moonshine
+
+## ONNX Runtime (`PSUExSpeech\onnxruntime.dll`, shipped as-is)
+
+Copyright (c) Microsoft Corporation. MIT License.
+Source: https://github.com/microsoft/onnxruntime
+
+## MIT License (applies to Detours, Dear ImGui, JSON for Modern C++, Moonshine and ONNX Runtime)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software
 and associated documentation files (the "Software"), to deal in the Software without

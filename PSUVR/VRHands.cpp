@@ -62,6 +62,9 @@ namespace PSUVR
 		bool s_calibPending = false;
 		int s_calibBuzz = 0;
 		constexpr DWORD kCalibDelayMs = 5000;
+		// The request whose capture ran and how many hands it stored.
+		int s_calibCapturedRequest = 0;
+		int s_calibCapturedHands = 0;
 
 		// Automatic hand angle (no calibration), per hand, for the skeleton it was made from.
 		D3DXMATRIX s_autoK[ 2 ];
@@ -531,6 +534,36 @@ namespace PSUVR
 			return s_headHiddenTick != 0 && GetTickCount() - s_headHiddenTick < 300;
 		}
 
+		CalibStatus CalibrationStatus()
+		{
+			CalibStatus status;
+			const int request = Config::Get().vr.m_handCalibRequest;
+			if( request == 0 )
+			{
+				return status;
+			}
+			if( request != s_seenCalibRequest )
+			{
+				status.phase = CalibStatus::Waiting;
+			}
+			else if( s_calibPending )
+			{
+				status.phase = CalibStatus::Counting;
+				const DWORD elapsed = GetTickCount() - s_calibStart;
+				status.secondsLeft = elapsed < kCalibDelayMs ? ( kCalibDelayMs - elapsed ) / 1000.0f : 0.0f;
+			}
+			else if( s_calibCapturedRequest == request )
+			{
+				status.hands = s_calibCapturedHands;
+				status.phase = s_calibCapturedHands > 0 ? CalibStatus::Done : CalibStatus::Missed;
+			}
+			else
+			{
+				status.phase = CalibStatus::Waiting;
+			}
+			return status;
+		}
+
 		void Apply( void *model, float *out, const uint8_t *skeleton )
 		{
 			// Also runs inside the world query's pose rebuild, so the second eye keeps the arms.
@@ -652,6 +685,8 @@ namespace PSUVR
 					{
 						captureNow = true;
 						s_calibPending = false;
+						s_calibCapturedRequest = s_seenCalibRequest;
+						s_calibCapturedHands = 0;
 					}
 					else if( second >= s_calibBuzz )
 					{
@@ -817,6 +852,7 @@ namespace PSUVR
 						D3DXQuaternionRotationMatrix( &q, &k );
 						StoreCalib( hand, q );
 						vr.m_handCalibrated = true;
+						++s_calibCapturedHands;
 						VRControllers::Haptic( hand, 0.8f, 0.15f );
 						PSU_LOG( "VRHands: calibrated %s hand (%.3f %.3f %.3f %.3f)\n", hand == 0 ? "left" : "right", q.x, q.y, q.z, q.w );
 						if( hand == 1 || !pads[ 1 ]->gripValid )
