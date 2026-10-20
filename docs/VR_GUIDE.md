@@ -1,8 +1,8 @@
 # PSUEx VR: player guide
 
-Play Phantasy Star Universe (Clementine) in VR with a gamepad: stereo 3D in the game world, first or third person, and the HUD and menus on a panel in front of you.
+Play Phantasy Star Universe (Clementine) in VR with motion controllers or a gamepad: stereo 3D in the game world, first or third person, and the HUD and menus on a panel in front of you.
 
-> **Preview release.** Expect rough edges. Motion controllers aren't supported yet; use a gamepad.
+> **Preview release.** Expect rough edges. Tested on PS VR2 Sense controllers through SteamVR.
 
 ---
 
@@ -11,13 +11,13 @@ Play Phantasy Star Universe (Clementine) in VR with a gamepad: stereo 3D in the 
 - **Windows 10 or 11** and a working **Clementine** install (the game starts and you can log in normally).
 - A **PC VR headset with SteamVR**. SteamVR is the tested setup. Meta Quest (Link / Air Link) and Windows Mixed Reality should work through their OpenXR runtimes but are untested.
   - **PS VR2:** install the **PlayStation VR2 App** from Steam and start it before playing. It brings up SteamVR.
-- An **Xbox-compatible gamepad** (XInput) for the VR turning and shortcuts. The game itself reads most pads; other pads (e.g. PlayStation) need an XInput wrapper such as DS4Windows for the VR stick turning and Back chords.
+- **Motion controllers** (the default; PS VR2 Sense is tested, Touch / Index should work), **or** an **Xbox-compatible gamepad** (XInput) for the VR turning and shortcuts. The game itself reads most pads; other pads (e.g. PlayStation) need an XInput wrapper such as DS4Windows for the VR stick turning and Back chords.
 
 ---
 
 ## 2. Install
 
-1. **Download** `PSUEx-VR-v0.1.0.zip` from the [Releases page](https://github.com/hasanzainul10/PSUEx-VR/releases).
+1. **Download** the latest `PSUEx-VR-v….zip` from the [Releases page](https://github.com/hasanzainul10/PSUEx-VR/releases).
 2. **Find your game folder**: the folder with `PSUC.exe` and `online.exe` (for example `C:\Games\PSU Clementine`).
 3. **Extract everything from the zip into that folder**:
 
@@ -27,7 +27,8 @@ Play Phantasy Star Universe (Clementine) in VR with a gamepad: stereo 3D in the 
    | `PSUExVR.dll` | The mod (VR build of PSUEx) |
    | `openxr_loader.dll` | Connects the game to SteamVR (OpenXR) |
    | `PSUExVRConfig.exe` | VR settings app, works without starting the game |
-   | `psuex_vr.json` | Your VR settings (VR on, first person) |
+   | `psuex_vr.json` | Your VR settings (VR on, first person, motion controllers) |
+   | `PSUExSpeech\` | Speech to text helper and its English model (only runs when you turn speech on) |
    | `VR_GUIDE.md`, `README.txt`, `LICENSE`, `THIRD_PARTY_NOTICES.md` | Docs and licenses |
 
    - If Windows asks to **overwrite `dinput8.dll`** or `psuex_vr.json`, say Yes if they came from an older PSUEx. If `dinput8.dll` belongs to another mod, back it up first: only one `dinput8.dll` can be in the folder.
@@ -129,7 +130,7 @@ Your own head is cut away so you don't see inside it; your hands, body and legs 
 
 ### Motion controllers (PS VR2 Sense, Touch, Index...)
 
-Turn on **Play with motion controllers** in the VR settings. The controllers act as a gamepad, and in first person your character's arms follow them.
+**Play with motion controllers** is on by default (turn it off in the VR settings to use a gamepad). The controllers act as a gamepad, and in first person your character's arms follow them.
 
 | Control | Left hand | Right hand |
 |---|---|---|
